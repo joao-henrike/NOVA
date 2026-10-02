@@ -1,0 +1,290 @@
+name: Terraform CI
+
+on:
+  pull_request:
+    paths:
+      - "**/*.tf"
+      - "**/*.tfvars.example"
+      - "**/*.hcl"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".github/**"
+      - ".terraform-docs.yml"
+      - ".tflint.hcl"
+      - "trivy.yaml"
+      - "README.md"
+      - "docs/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.tf"
+      - "**/*.tfvars.example"
+      - "**/*.hcl"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".github/**"
+      - ".terraform-docs.yml"
+      - ".tflint.hcl"
+      - "trivy.yaml"
+      - "README.md"
+      - "docs/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VERSION: "1.16.4"
+  TFLINT_VERSION: "0.64.0"
+  TERRAFORM_DOCS_VERSION: "0.24.0"
+
+jobs:
+  terraform-static:
+    name: Terraform Static Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive -diff
+
+      - name: Terraform Init - Root
+        run: terraform init -backend=false -input=false -no-color
+
+      - name: Terraform Validate - Root
+        run: terraform validate -no-color
+
+      - name: Terraform Init - Bootstrap
+        working-directory: bootstrap
+        run: terraform init -backend=false -input=false -no-color
+
+      - name: Terraform Validate - Bootstrap
+        working-directory: bootstrap
+        run: terraform validate -no-color
+
+      - name: Install TFLint
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/tflint.zip \
+            "https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/tflint_linux_amd64.zip"
+          echo "cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537  /tmp/tflint.zip" | sha256sum -c -
+          unzip -q /tmp/tflint.zip -d /tmp/tflint
+          install -m 0755 /tmp/tflint/tflint /usr/local/bin/tflint
+          tflint --version
+
+      - name: Initialize TFLint plugins
+        run: tflint --init --config .tflint.hcl
+
+      - name: TFLint - Recursive
+        run: tflint --config .tflint.hcl --recursive --format compact
+
+      - name: Install terraform-docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/terraform-docs.tar.gz \
+            "https://github.com/terraform-docs/terraform-docs/releases/download/v${TERRAFORM_DOCS_VERSION}/terraform-docs-v${TERRAFORM_DOCS_VERSION}-linux-amd64.tar.gz"
+          echo "9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3  /tmp/terraform-docs.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/terraform-docs
+          tar -xzf /tmp/terraform-docs.tar.gz -C /tmp/terraform-docs
+          install -m 0755 /tmp/terraform-docs/terraform-docs /usr/local/bin/terraform-docs
+          terraform-docs version
+
+      - name: Terraform Docs Generation Check
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform-docs markdown table \
+            --output-file /tmp/cloudstart-terraform-docs.md \
+            --output-mode inject \
+            .
+
+          grep -q '^## Inputs' /tmp/cloudstart-terraform-docs.md
+          grep -q '^## Outputs' /tmp/cloudstart-terraform-docs.md
+          grep -q 'project_name' /tmp/cloudstart-terraform-docs.md
+          grep -q 'rds_master_user_secret_arn' /tmp/cloudstart-terraform-docs.md
+          grep -q '<!-- BEGIN_TF_DOCS -->' /tmp/cloudstart-terraform-docs.md
+          grep -q '<!-- END_TF_DOCS -->' /tmp/cloudstart-terraform-docs.md
+
+  iac-security:
+    name: IaC Security and Policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Checkov
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-warn-script-location \
+            "checkov==3.3.8"
+          checkov --version
+
+      - name: Checkov - Terraform Policy Scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkov -d . \
+            --framework terraform \
+            --quiet \
+            --compact \
+            --soft-fail-on LOW,MEDIUM \
+            --hard-fail-on HIGH,CRITICAL
+
+      - name: Trivy - Terraform Misconfiguration Scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          trivy-config: trivy.yaml
+
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  terraform-plan:
+    name: Terraform Plan
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.fork == false &&
+      vars.AWS_TERRAFORM_PLAN_ROLE_ARN != '' &&
+      vars.TF_STATE_BUCKET != '' &&
+      vars.TF_STATE_DYNAMODB_TABLE != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ vars.TERRAFORM_AWS_REGION || 'us-east-1' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          role-session-name: cloudstart-tf-plan-${{ github.run_id }}
+
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init with Remote State
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_STATE_DYNAMODB_TABLE }}" \
+            -reconfigure \
+            -input=false \
+            -no-color
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -refresh=true -lock=true -input=false -out=tfplan -no-color
+
+      - name: Build Sanitized Plan Summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform show -json tfplan > tfplan.json
+          jq -r '
+            .resource_changes
+            | map(select(.change.actions != ["no-op"]))
+            | group_by(.change.actions | join(","))
+            | map({action: (.[0].change.actions | join(",")), count: length})
+            | sort_by(.action)
+            | .[]
+            | "- \(.action): \(.count)"
+          ' tfplan.json > /tmp/plan-actions.txt
+
+          {
+            echo "<!-- cloudstart-terraform-plan -->"
+            echo "## Terraform Plan"
+            echo
+            echo "Commit: \\`${GITHUB_SHA:0:12}\\`"
+            echo
+            if [ -s /tmp/plan-actions.txt ]; then
+              echo "### Planned resource actions"
+              cat /tmp/plan-actions.txt
+            else
+              echo "No resource changes detected."
+            fi
+            echo
+            echo "Full plan values are intentionally not posted to the PR because Terraform plans can contain sensitive infrastructure data."
+          } > /tmp/plan-comment.md
+
+      - name: Destructive Change Guard
+        shell: bash
+        env:
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          set -euo pipefail
+
+          destroy_count="$(jq '[.resource_changes[]? | select(any(.change.actions[]; . == "delete"))] | length' tfplan.json)"
+
+          if [ "$destroy_count" -gt 0 ] && [[ ",${PR_LABELS}," != *",infra-allow-destroy,"* ]]; then
+            echo "Terraform plan contains $destroy_count resource change(s) with a delete action." >&2
+            echo "Add the 'infra-allow-destroy' PR label only after a human reviewer has explicitly approved the destructive change." >&2
+            exit 1
+          fi
+
+      - name: Comment Plan Summary on PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          gh pr comment "$PR_NUMBER" --body-file /tmp/plan-comment.md
