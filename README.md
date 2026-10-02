@@ -67,31 +67,7 @@ The ECS services use AZ-spread placement, so the intended running state distribu
 
 ## 3. Architecture at a glance
 
-```mermaid
-flowchart LR
-    C[Client / Internet]
-    ALB[Application Load Balancer\nHTTP :80]
-    FE[Frontend ECS / Fargate\nport 80]
-    BE[Backend ECS / Fargate\nport 8000]
-    DB[(Application RDS PostgreSQL\nMulti-AZ / private)]
-    MDB[(Monitoring RDS PostgreSQL\nMulti-AZ / private)]
-    MON[Monitoring ECS task\nZabbix Server + Zabbix Web + Grafana]
-    ECRF[Amazon ECR\nfrontend repository]
-    ECRB[Amazon ECR\nbackend repository]
-    SM[AWS Secrets Manager\nRDS + Grafana secrets]
-
-    C -->|HTTP :80| ALB
-    ALB -->|/ and /*| FE
-    ALB -->|/api and /api/*| BE
-    ALB -->|/grafana/*| MON
-    BE -->|TCP :5432| DB
-    MON -->|TCP :5432| MDB
-    MON -.->|HTTP health checks| ALB
-    ECRF -.->|image pull| FE
-    ECRB -.->|image pull| BE
-    SM -.->|secret injection| BE
-    SM -.->|secret injection| MON
-```
+![CloudStart MVP Architecture](./CloudStart_MVP_Arquitetura_Atual.svg)
 
 The production-side application path is **HTTP on port 80**. There is no ACM certificate or HTTPS listener in the current Terraform implementation.
 
