@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CloudStart</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f5f7fa; color: #172033; }
+    main { max-width: 760px; margin: 10vh auto; padding: 2rem; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.08); }
+    code { background: #eef1f5; padding: .2rem .4rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>CloudStart</h1>
+    <p>Frontend container is running.</p>
+    <p id="backend">Checking backend...</p>
+  </main>
+  <script>
+    fetch('/api/health')
+      .then(response => response.json())
+      .then(data => { document.querySelector('#backend').textContent = `Backend: ${data.status}`; })
+      .catch(() => { document.querySelector('#backend').textContent = 'Backend: unavailable'; });
+  </script>
+</body>
+</html>

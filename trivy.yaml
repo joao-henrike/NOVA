@@ -1,0 +1,14 @@
+scan:
+  scanners:
+    - misconfig
+
+misconfiguration:
+  scanners:
+    - terraform
+
+severity:
+  - HIGH
+  - CRITICAL
+
+exit-code: 1
+format: table
