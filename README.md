@@ -67,7 +67,7 @@ The ECS services use AZ-spread placement, so the intended running state distribu
 
 ## 3. Architecture at a glance
 
-![CloudStart MVP Architecture](./CloudStart_MVP_Arquitetura_Atual.png)
+![CloudStart MVP Architecture](./CloudStart_MVP_Arquitetura_Atual.drawio.png)
 
 The production-side application path is **HTTP on port 80**. There is no ACM certificate or HTTPS listener in the current Terraform implementation.
 
