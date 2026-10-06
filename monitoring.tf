@@ -90,7 +90,7 @@ resource "aws_db_instance" "monitoring" {
   storage_type          = "gp3"
   storage_encrypted     = true
 
-  multi_az               = true
+  multi_az               = false
   publicly_accessible    = false
   db_subnet_group_name   = aws_db_subnet_group.monitoring.name
   vpc_security_group_ids = [aws_security_group.monitoring_db.id]
@@ -398,10 +398,6 @@ resource "aws_ecs_service" "monitoring" {
     container_port   = var.grafana_container_port
   }
 
-  ordered_placement_strategy {
-    type  = "spread"
-    field = "attribute:ecs.availability-zone"
-  }
 
   depends_on = [
     aws_lb_listener_rule.grafana,

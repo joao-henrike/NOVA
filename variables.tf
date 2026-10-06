@@ -450,13 +450,13 @@ variable "monitoring_task_memory" {
 variable "zabbix_server_image" {
   description = "Zabbix server PostgreSQL container image."
   type        = string
-  default     = "zabbix/zabbix-server-pgsql:alpine-8.0-latest"
+  default     = "zabbix/zabbix-server-pgsql:alpine-7.4-latest"
 }
 
 variable "zabbix_web_image" {
   description = "Zabbix web interface PostgreSQL/Nginx container image."
   type        = string
-  default     = "zabbix/zabbix-web-nginx-pgsql:alpine-8.0-latest"
+  default     = "zabbix/zabbix-web-nginx-pgsql:alpine-7.4-latest"
 }
 
 variable "grafana_image" {

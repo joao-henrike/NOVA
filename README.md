@@ -1000,8 +1000,8 @@ The planning documents for later proposals do not override this repository state
 | `monitoring_task_cpu` | Fargate CPU units for the combined Zabbix/Grafana monitoring task. | `number` | `1024` | no |
 | `monitoring_task_memory` | Fargate memory in MiB for the combined Zabbix/Grafana monitoring task. | `number` | `2048` | no |
 | `monitoring_timezone` | PHP timezone used by the Zabbix web interface. | `string` | `"America/Sao_Paulo"` | no |
-| `zabbix_server_image` | Zabbix server PostgreSQL container image. | `string` | `"zabbix/zabbix-server-pgsql:alpine-8.0-latest"` | no |
-| `zabbix_web_image` | Zabbix web interface PostgreSQL/Nginx container image. | `string` | `"zabbix/zabbix-web-nginx-pgsql:alpine-8.0-latest"` | no |
+| `zabbix_server_image` | Zabbix server PostgreSQL container image. | `string` | `"zabbix/zabbix-server-pgsql:alpine-7.4-latest"` | no |
+| `zabbix_web_image` | Zabbix web interface PostgreSQL/Nginx container image. | `string` | `"zabbix/zabbix-web-nginx-pgsql:alpine-7.4-latest"` | no |
 | `owner` | Owner tag value. | `string` | `"cloudstart"` | no |
 | `project_name` | Short project identifier used in resource names and tags. | `string` | `"cloudstart"` | no |
 | `rds_deletion_protection` | Enable RDS deletion protection. Recommended for production. | `bool` | `false` | no |

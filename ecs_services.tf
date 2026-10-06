@@ -156,10 +156,6 @@ resource "aws_ecs_service" "frontend" {
     container_port   = 80
   }
 
-  ordered_placement_strategy {
-    type  = "spread"
-    field = "attribute:ecs.availability-zone"
-  }
 
   lifecycle {
     ignore_changes = [desired_count]
@@ -204,10 +200,6 @@ resource "aws_ecs_service" "backend" {
     container_port   = var.backend_container_port
   }
 
-  ordered_placement_strategy {
-    type  = "spread"
-    field = "attribute:ecs.availability-zone"
-  }
 
   lifecycle {
     ignore_changes = [desired_count]

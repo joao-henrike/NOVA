@@ -61,3 +61,19 @@ node_modules/
 *.p12
 *.pfx
 secrets/
+
+# Terraform generated files
+.terraform/
+*.tfplan
+*.tfplan.*
+terraform.tfstate
+terraform.tfstate.*
+crash.log
+crash.*.log
+
+# Audit generated reports
+nova-audit-*/
+
+# Local environment/secrets
+.env
+.env.*

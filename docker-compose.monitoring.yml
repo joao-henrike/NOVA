@@ -14,7 +14,7 @@ services:
       retries: 12
 
   zabbix-server:
-    image: zabbix/zabbix-server-pgsql:alpine-8.0-latest
+    image: zabbix/zabbix-server-pgsql:alpine-7.4-latest
     environment:
       DB_SERVER_HOST: zabbix-db
       DB_SERVER_PORT: "5432"
@@ -29,7 +29,7 @@ services:
         condition: service_healthy
 
   zabbix-web:
-    image: zabbix/zabbix-web-nginx-pgsql:alpine-8.0-latest
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-7.4-latest
     environment:
       ZBX_SERVER_HOST: zabbix-server
       DB_SERVER_HOST: zabbix-db
