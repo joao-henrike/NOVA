@@ -151,8 +151,8 @@ A Terraform resource proves that the repository declares that resource. It does 
 | gp3 | ✅ |
 | 20 GiB default | ✅ |
 | 100 GiB max default | ✅ |
-| DB schema/migrations | ❌ |
-| Application domain tables | ❌ |
+| DB schema/migrations | ✅ |
+| Application domain tables | 🟡 Technical `items` table; final domain not defined |
 | Read replica | ❌ |
 | Cross-region database | ❌ |
 
@@ -171,7 +171,7 @@ A Terraform resource proves that the repository declares that resource. It does 
 | Secrets Manager read permission | ✅ |
 | RDS-managed master secret | ✅ |
 | Application password in source | ❌ |
-| Human identity system | ❌ |
+| Human identity system | ✅ Google + Apple + local user/session model |
 | MFA | ❌ |
 | OIDC CI plan job definition | ✅ |
 | OIDC production deployment | ❌ |
@@ -239,7 +239,7 @@ The frontend is a demonstration web page. It verifies that the backend is reacha
 
 ### Backend
 
-The backend is an API skeleton with four endpoints. It does not implement authentication, authorization, business operations, payments, financial calculations, or application CRUD.
+The backend exposes the existing health endpoints, implements Google/Apple authentication with CloudStart sessions, and includes a protected technical Item CRUD. It does not yet implement authorization/RBAC, payments, financial calculations, or the final business domain.
 
 ### Database
 
@@ -332,7 +332,6 @@ SQS
 SNS
 EventBridge
 Mobile
-Authentication system
 Financial core
 PSP/payment integration
 Audit Fabric
