@@ -216,18 +216,28 @@ These must not be described as current protections.
 
 ## 13. Application security limitations
 
-The current backend does not implement:
+The current backend implements:
 
 ```text
-User authentication
+Google authentication
+Apple authentication
+OAuth state validation
+OIDC nonce validation
+CloudStart access tokens
+Refresh-token rotation
+Session revocation
+```
+
+The current backend still does not implement:
+
+```text
 Authorization/RBAC
 MFA
-Session management
-Account security workflows
 Rate limiting
 Payment security controls
 Financial transaction controls
 Business-level audit logging
+Interactive account-linking workflow
 ```
 
 The current endpoints are infrastructure/application health and information endpoints rather than a complete user-facing business API.
