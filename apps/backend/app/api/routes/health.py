@@ -6,7 +6,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import settings
 from app.db.session import get_engine
 
-
 router = APIRouter(tags=["health"])
 
 
