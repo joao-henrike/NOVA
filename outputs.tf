@@ -5,7 +5,7 @@ output "aws_account_id" {
 
 output "aws_region" {
   description = "AWS region used for the deployment."
-  value       = data.aws_region.current.name
+  value       = data.aws_region.current.region
 }
 
 output "vpc_id" {
