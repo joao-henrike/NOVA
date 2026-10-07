@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.api.dependencies import CurrentUser
 from app.db.session import get_db
 from app.models.item import ItemStatus
 from app.schemas.item import ItemCreate, ItemRead, ItemUpdate
@@ -15,6 +16,7 @@ service = ItemService()
 
 @router.get("", response_model=list[ItemRead])
 def list_items(
+    current_user: CurrentUser,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
     item_status: ItemStatus | None = Query(default=None, alias="status"),
@@ -29,12 +31,20 @@ def list_items(
 
 
 @router.post("", response_model=ItemRead, status_code=status.HTTP_201_CREATED)
-def create_item(data: ItemCreate, db: Session = Depends(get_db)) -> ItemRead:
+def create_item(
+    data: ItemCreate,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> ItemRead:
     return service.create(db, data)
 
 
 @router.get("/{item_id}", response_model=ItemRead)
-def get_item(item_id: UUID, db: Session = Depends(get_db)) -> ItemRead:
+def get_item(
+    item_id: UUID,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> ItemRead:
     try:
         return service.get(db, item_id)
     except ItemNotFoundError as exc:
@@ -45,6 +55,7 @@ def get_item(item_id: UUID, db: Session = Depends(get_db)) -> ItemRead:
 def update_item(
     item_id: UUID,
     data: ItemUpdate,
+    current_user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> ItemRead:
     if not data.model_dump(exclude_unset=True):
@@ -57,7 +68,11 @@ def update_item(
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_item(item_id: UUID, db: Session = Depends(get_db)) -> None:
+def delete_item(
+    item_id: UUID,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> None:
     try:
         service.delete(db, item_id)
     except ItemNotFoundError as exc:
