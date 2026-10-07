@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import jwt
@@ -28,7 +28,7 @@ def hash_refresh_token(token: str) -> str:
 
 def create_access_token(user_id: UUID) -> tuple[str, int]:
     secret = settings.require_auth_signing_key()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_in = settings.auth_access_token_ttl_minutes * 60
 
     payload = {
