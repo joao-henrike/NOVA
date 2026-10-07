@@ -282,7 +282,7 @@ variable "backend_cpu_target_utilization" {
 variable "backend_memory_target_utilization" {
   description = "Target memory utilization for backend service scaling."
   type        = number
-  default     = 10
+  default     = 70
 
   validation {
     condition     = var.backend_memory_target_utilization >= 20 && var.backend_memory_target_utilization <= 90
