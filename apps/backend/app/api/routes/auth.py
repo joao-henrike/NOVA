@@ -37,7 +37,6 @@ from app.services.providers import (
     verify_google_id_token,
 )
 
-
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 service = AuthService()
 
