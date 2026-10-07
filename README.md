@@ -2699,7 +2699,7 @@ Enterprise WAF
 HTTPS/TLS
 Complete SIEM
 Complete audit fabric
-Full application authentication
+Full application authorization/RBAC and MFA
 Full authorization model
 Financial transaction processing
 Mobile application
