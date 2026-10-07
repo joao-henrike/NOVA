@@ -8,6 +8,12 @@ from app.models.auth import AuthIdentity, AuthProvider, OAuthState, RefreshToken
 from app.models.user import User
 
 
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 class AuthRepository:
     def get_identity(
         self,
@@ -106,7 +112,7 @@ class AuthRepository:
             return None
 
         now = datetime.now(UTC)
-        if record.expires_at <= now:
+        if _as_utc(record.expires_at) <= now:
             session.delete(record)
             session.commit()
             return None
