@@ -62,7 +62,7 @@ jobs:
           context: apps/backend
           load: true
           push: false
-          tags: cloudstart/dev-backend:$GITHUB_SHA
+          tags: cloudstart/dev-backend:${{ github.sha }}
 
       - name: Build frontend
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
@@ -70,7 +70,7 @@ jobs:
           context: apps/frontend
           load: true
           push: false
-          tags: cloudstart/dev-frontend:$GITHUB_SHA
+          tags: cloudstart/dev-frontend:${{ github.sha }}
 
       - name: Scan images
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
@@ -130,12 +130,12 @@ jobs:
 
       - name: Terraform plan
         env:
-          TF_VAR_project_name: $PROJECT_NAME
-          TF_VAR_environment: $DEPLOY_ENVIRONMENT
-          TF_VAR_aws_region: $AWS_REGION
+          TF_VAR_project_name: ${{ env.PROJECT_NAME }}
+          TF_VAR_environment: ${{ env.DEPLOY_ENVIRONMENT }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
           TF_VAR_deploy_application: "true"
-          TF_VAR_frontend_image_tag: $GITHUB_SHA
-          TF_VAR_backend_image_tag: $GITHUB_SHA
+          TF_VAR_frontend_image_tag: ${{ github.sha }}
+          TF_VAR_backend_image_tag: ${{ github.sha }}
           TF_VAR_grafana_admin_password: ${${ secrets.GRAFANA_ADMIN_PASSWORD §}}
         run: terraform plan -refresh=true -lock=true -input=false -out=cd.tfplan -no-color
 
