@@ -8,4 +8,3 @@ httpx==0.28.1
 PyJWT[crypto]==2.15.1
 google-auth==2.60.0
 python-multipart==0.0.32
-pytest==9.1.1
