@@ -102,7 +102,7 @@ A Terraform resource proves that the repository declares that resource. It does 
 | Rollback | ✅ |
 | CPU target tracking | ✅ |
 | Memory target tracking | ✅ |
-| Automatic application deployment | ❌ |
+| Automatic development application deployment | ✅ (`Joao` → `development`) |
 | EC2 capacity provider | ❌ |
 | Spot capacity | ❌ |
 
@@ -283,8 +283,8 @@ Multi-AZ runtime architecture
 ### Does not exist
 
 ```text
-Automatic image publication
-Automatic application deployment
+Automatic development image publication
+Automatic development application deployment
 Formal incident-management system
 Alarm notification routing
 Restore drill automation
@@ -305,7 +305,7 @@ Terraform defines a resilient target of two tasks when deployment is enabled, bu
 
 ### CI vs CD
 
-The repository contains strong validation CI but does not currently publish images to ECR or automatically deploy ECS workloads.
+The repository contains CI plus a guarded development CD path that publishes immutable application images to ECR and updates only the application ECS resources.
 
 ### Local vs AWS PostgreSQL
 
@@ -370,7 +370,7 @@ The repository currently implements a **Terraform-defined AWS foundation plus a 
 
 It is not yet a complete production business application.
 
-It is not yet a complete continuous-delivery system.
+It is not a production-grade continuous-delivery system; production deployment remains intentionally gated.
 
 It is not yet the P2 financial/mobile/security platform.
 
