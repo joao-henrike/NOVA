@@ -2,8 +2,8 @@
 
 [![Terraform](https://img.shields.io/badge/Terraform-1.16.4-7B42BC?logo=terraform)](https://developer.hashicorp.com/terraform)
 [![AWS](https://img.shields.io/badge/AWS-ECS%20%7C%20RDS%20%7C%20VPC-FF9900?logo=amazonaws)](https://aws.amazon.com/)
-[![Terraform CI](https://github.com/joao-henrike/NOVA/actions/workflows/terraform-lint.yml/badge.svg)](https://github.com/joao-henrike/NOVA/actions/workflows/terraform-lint.yml)
-[![Container CI](https://github.com/joao-henrike/NOVA/actions/workflows/container-ci.yml/badge.svg)](https://github.com/joao-henrike/NOVA/actions/workflows/container-ci.yml)
+[![NOVA CI](https://github.com/joao-henrike/NOVA/actions/workflows/ci.yml/badge.svg)](https://github.com/joao-henrike/NOVA/actions/workflows/ci.yml)
+[![NOVA CD - Development](https://github.com/joao-henrike/NOVA/actions/workflows/deploy-dev.yml/badge.svg)](https://github.com/joao-henrike/NOVA/actions/workflows/deploy-dev.yml)
 
 > **Current-state documentation:** this README describes the implementation contained in the `NOVA` repository and the current intended deployment behavior of the `Joao` branch. Planned P2/P3 capabilities are intentionally not presented as implemented architecture.
 >
@@ -143,12 +143,12 @@ Security reviewed
 
 ## 4. Current `Joao` branch deployment defaults
 
-The `Joao` branch was updated so the application is enabled by default once its images have been published.
+The repository keeps the application disabled by default so infrastructure validation and bootstrap do not implicitly start ECS workloads. The development CD workflow enables application deployment explicitly and replaces the image tags with the current immutable Git SHA.
 
-Current intended values:
+Repository defaults:
 
 ```hcl
-deploy_application = true
+deploy_application = false
 frontend_image_tag = "v0.1.1"
 backend_image_tag  = "v0.1.0"
 ```
@@ -2259,7 +2259,7 @@ The audit script itself therefore requires maintenance.
 ### Configured in the `Joao` IaC
 
 ```text
-[CONFIGURED] deploy_application = true
+[CONFIGURED] deploy_application = false (repository default; CD sets true explicitly for development)
 [CONFIGURED] frontend_image_tag = v0.1.1
 [CONFIGURED] backend_image_tag = v0.1.0
 [CONFIGURED] frontend/backend memory targets = 70
