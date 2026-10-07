@@ -36,7 +36,7 @@ frontend_max_count        = 6
 backend_max_count         = 6
 db_engine_version          = 16
 db_instance_class          = db.t4g.micro
-db_backup_retention        = 7 days
+db_backup_retention        = 1 day
 ```
 
 The effective ECS desired/minimum count follows the configured desired/minimum values while `deploy_application = true`.
@@ -258,7 +258,7 @@ Get the ALB DNS output:
 terraform output -raw alb_dns_name
 ```
 
-The current public listener is HTTP:
+The current public listener is HTTP (development MVP only):
 
 ```bash
 ALB_DNS="$(terraform output -raw alb_dns_name)"
