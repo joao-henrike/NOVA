@@ -4,7 +4,6 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.health import router as health_router
 from app.api.routes.items import router as items_router
 
-
 app = FastAPI(
     title="CloudStart Backend",
     version="0.2.0",
