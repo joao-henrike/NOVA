@@ -102,7 +102,7 @@ A Terraform resource proves that the repository declares that resource. It does 
 | Rollback | ✅ |
 | CPU target tracking | ✅ |
 | Memory target tracking | ✅ |
-| Automatic development application deployment | ✅ (`Joao` → `development`) |
+| Guarded development application deployment | ✅ (`Joao` → `development`, subject to GitHub OIDC/environment variables) |
 | EC2 capacity provider | ❌ |
 | Spot capacity | ❌ |
 
@@ -146,7 +146,7 @@ A Terraform resource proves that the repository declares that resource. It does 
 | Public accessibility disabled | ✅ |
 | Storage encryption | ✅ |
 | Automated backups | ✅ |
-| 7-day retention default | ✅ |
+| 1-day retention default | ✅ |
 | Storage autoscaling | ✅ |
 | gp3 | ✅ |
 | 20 GiB default | ✅ |
@@ -188,7 +188,7 @@ A Terraform resource proves that the repository declares that resource. It does 
 | Grafana through ALB | ✅ | `/grafana/*` listener rule |
 | CloudWatch monitoring resources | ❌ | Removed by design; replaced by Zabbix/Grafana |
 | CloudWatch log groups | ❌ | Removed by design |
-| ECS Container Insights | ❌ | Not enabled; Zabbix/Grafana monitoring task is used instead |
+| ECS Container Insights | ✅ | `ecs.tf`; enabled at cluster level in addition to the Zabbix/Grafana monitoring plane |
 | Centralized application log archive | ❌ | Not provided by Zabbix/Grafana alone |
 | Kubernetes monitoring | ❌ | Kubernetes is not in the current MVP |
 
@@ -208,7 +208,7 @@ A Terraform resource proves that the repository declares that resource. It does 
 | S3 remote backend | ✅ |
 | S3 lockfile | ✅ |
 | Bootstrap DynamoDB table | ✅ |
-| Root `.terraform.lock.hcl` committed in archive | ❌ |
+| Root `.terraform.lock.hcl` committed | ✅ |
 | Automated apply | ❌ |
 
 ### 3.11 CI/CD
@@ -227,9 +227,9 @@ A Terraform resource proves that the repository declares that resource. It does 
 | Container Trivy scan | ✅ |
 | Compose validation | ✅ |
 | Terraform Plan via optional OIDC job | ✅ |
-| ECR image push | ❌ |
-| ECS deployment | ❌ |
-| Deployment rollback pipeline | ❌ |
+| ECR image push | ✅ | `deploy-dev.yml`, gated development CD |
+| ECS deployment | ✅ | `deploy-dev.yml`, development only |
+| Deployment rollback pipeline | 🟡 | ECS deployment circuit breaker is enabled; workflow-level rollback automation is not separate |
 
 ## 4. Current application behavior
 
@@ -283,8 +283,8 @@ Multi-AZ runtime architecture
 ### Does not exist
 
 ```text
-Automatic development image publication
-Automatic development application deployment
+Automatic production deployment
+Production deployment approval gate
 Formal incident-management system
 Alarm notification routing
 Restore drill automation
@@ -366,11 +366,11 @@ Corporate AD/LDAP integration
 
 ## 10. Final current-state statement
 
-The repository currently implements a **Terraform-defined AWS foundation plus a minimal two-service web application baseline**.
+The repository currently implements a **Terraform-defined AWS foundation plus a minimal two-service web application baseline with guarded development continuous delivery**.
 
 It is not yet a complete production business application.
 
-It is not a production-grade continuous-delivery system; production deployment remains intentionally gated.
+It is not a production-grade continuous-delivery system; the automated path is intentionally limited to the development environment, while production deployment remains absent.
 
 It is not yet the P2 financial/mobile/security platform.
 
