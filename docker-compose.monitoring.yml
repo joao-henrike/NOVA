@@ -1,6 +1,6 @@
 services:
   zabbix-db:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine
     environment:
       POSTGRES_DB: zabbix
       POSTGRES_USER: zabbix
