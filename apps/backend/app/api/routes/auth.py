@@ -26,7 +26,7 @@ from app.core.security import (
 from app.db.session import get_db
 from app.models.auth import AuthProvider
 from app.schemas.auth import RefreshRequest, TokenResponse, UserRead
-from app.services.auth import AuthService, AuthenticationError
+from app.services.auth import AuthenticationError, AuthService
 from app.services.providers import (
     ProviderAuthenticationError,
     apple_authorization_url,

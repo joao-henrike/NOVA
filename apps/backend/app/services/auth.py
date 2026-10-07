@@ -19,6 +19,7 @@ from app.services.providers import claims_to_identity
 class AuthenticationError(Exception):
     pass
 
+
 class AuthService:
     def __init__(self, repository: AuthRepository | None = None) -> None:
         self.repository = repository or AuthRepository()

@@ -172,16 +172,18 @@ jobs:
       - name: Bootstrap validate
         working-directory: bootstrap
         run: terraform validate -no-color
-      - name: Install TFLint
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL -o /tmp/tflint.zip "https://github.com/terraform-linters/tflint/releases/download/v0.64.0/tflint_linux_amd64.zip"
-          echo "cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537  /tmp/tflint.zip" | sha256sum -c -
-          unzip -q /tmp/tflint.zip -d /tmp/tflint
-          install -m 0755 /tmp/tflint/tflint /usr/local/bin/tflint
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a
+        with:
+          tflint_version: "0.64.0"
+          checksums: "cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537"
+          cache: true
+      - name: Install TFLint plugins
+        run: tflint --init --config .tflint.hcl
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: TFLint
-        run: tflint --init --config .tflint.hcl && tflint --config .tflint.hcl --recursive --format compact
+        run: tflint --config .tflint.hcl --recursive --format compact
 
   security:
     name: Security Scans

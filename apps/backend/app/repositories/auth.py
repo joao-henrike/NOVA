@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.auth import AuthIdentity, AuthProvider, OAuthState, RefreshToken
 from app.models.user import User
+
 
 class AuthRepository:
     def get_identity(
