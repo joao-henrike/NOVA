@@ -1,6 +1,11 @@
 resource "aws_ecs_cluster" "this" {
   name = "${local.name}-cluster"
 
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
+
 
   tags = merge(local.global_tags, {
     Name = "${local.name}-cluster"
@@ -10,6 +15,7 @@ resource "aws_ecs_cluster" "this" {
 resource "aws_lb" "this" {
   name                       = substr("${local.name}-alb", 0, 32)
   internal                   = false
+  drop_invalid_header_fields = true
   load_balancer_type         = "application"
   security_groups            = [aws_security_group.alb.id]
   subnets                    = [for subnet in aws_subnet.public : subnet.id]
