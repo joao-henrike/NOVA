@@ -260,7 +260,7 @@ variable "frontend_cpu_target_utilization" {
 variable "frontend_memory_target_utilization" {
   description = "Target memory utilization for frontend service scaling."
   type        = number
-  default     = 10
+  default     = 70
 
   validation {
     condition     = var.frontend_memory_target_utilization >= 20 && var.frontend_memory_target_utilization <= 90

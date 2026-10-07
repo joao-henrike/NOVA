@@ -188,7 +188,7 @@ Migrations are executed as a one-off Fargate task using the newly deployed backe
 alembic upgrade head
 ```
 
-TThe migration task uses the private application subnets and backend security group.
+The migration task uses the private application subnets and backend security group.
 
 ## Post-deployment acceptance
 
@@ -233,3 +233,22 @@ Python
 backend Docker
 frontend Docker
 ```
+
+## Security baseline policy
+
+Checkov is configured by `.checkov.yaml` with explicit, reviewable exceptions for known MVP constraints. These are not a blanket disablement: any check not listed there remains subject to the configured gate.
+
+The current exceptions cover controls tied to:
+
+```text
+HTTP-only MVP ALB while ACM/HTTPS is pending
+WAF, ALB access logging and deletion protection not yet enabled
+RDS Multi-AZ/IAM auth/performance/enhanced monitoring/deletion protection pending
+RDS/Secrets Manager KMS CMK and secret rotation pending
+S3 logging/replication/KMS/notification controls for the Terraform state MVP
+ECR customer-managed KMS encryption pending
+VPC Flow Logs pending
+development-only public ALB HTTP ingress
+```
+
+These exceptions are technical debt and must be removed as the corresponding controls are implemented.

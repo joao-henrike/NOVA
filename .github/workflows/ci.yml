@@ -195,7 +195,7 @@ jobs:
       - name: Checkov
         run: python3 -m pip install --disable-pip-version-check --no-warn-script-location checkov==3.3.8
       - name: Checkov scan
-        run: checkov -d . --framework terraform --compact --quiet --soft-fail-on LOW,MEDIUM --hard-fail-on HIGH,CRITICAL
+        run: checkov -d . --config-file .checkov.yaml
       - name: Trivy Terraform scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:

@@ -3,7 +3,7 @@ terraform {
     key          = "cloudstart/terraform.tfstate"
     encrypt      = true
     use_lockfile = true
-    # bucket and dynamodb_table are intentionally supplied during `terraform init`
-    # because Terraform backend blocks cannot reference input variables.
+    # bucket and region are supplied during `terraform init` because Terraform
+    # backend blocks cannot reference input variables.
   }
 }

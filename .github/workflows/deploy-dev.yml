@@ -5,6 +5,7 @@ on:
     branches: [Joao]
     paths:
       - "apps/**"
+      - "docker-compose.yml"
       - ".github/workflows/deploy-dev.yml"
   workflow_dispatch:
 
@@ -16,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AWS_REGION: ${${ vars.TERRAFORM_AWS_REGION || 'us-east-1' §}}
+  AWS_REGION: ${{ vars.TERRAFORM_AWS_REGION || 'us-east-1' }}
   PROJECT_NAME: cloudstart
   DEPLOY_ENVIRONMENT: dev
   EXPECTED_AWS_ACCOUNT_ID: "760396521507"
@@ -30,6 +31,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
 
     steps:
       - name: Checkout
@@ -37,13 +39,41 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Wait for successful CI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            run_id="$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json databaseId,status,conclusion --jq '.[0].databaseId // empty')"
+            if [ -z "$run_id" ]; then
+              sleep 5
+              continue
+            fi
+            result="$(gh run view "$run_id" --json status,conclusion --jq '.status + "|" + (.conclusion // "")')"
+            case "$result" in
+              completed\|success)
+                exit 0
+                ;;
+              completed\|*)
+                echo "NOVA CI failed for $GITHUB_SHA: $result" >&2
+                gh run view "$run_id" --log-failed || true
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+          echo "Timed out waiting for NOVA CI." >&2
+          exit 1
+
       - name: Configure AWS OIDC
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
-          aws-region: ${${ env.AWS_REGION §}}
-          role-to-assume: ${${ vars.AWS_CD_ROLE_ARN §}}
-          role-session-name: nova-cd-${${ github.run_id §}}
-          allowed-account-ids: ${${ env.EXPECTED_AWS_ACCOUNT_ID §}}
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_CD_ROLE_ARN }}
+          role-session-name: nova-cd-${{ github.run_id }}
+          allowed-account-ids: ${{ env.EXPECTED_AWS_ACCOUNT_ID }}
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
@@ -72,10 +102,10 @@ jobs:
           push: false
           tags: cloudstart/dev-frontend:${{ github.sha }}
 
-      - name: Scan images
+      - name: Scan backend image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
-          image-ref: cloudstart/dev-backend:$GITHUB_SHA
+          image-ref: cloudstart/dev-backend:${{ github.sha }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
@@ -83,7 +113,7 @@ jobs:
       - name: Scan frontend image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
-          image-ref: cloudstart/dev-frontend:$GITHUB_SHA
+          image-ref: cloudstart/dev-frontend:${{ github.sha }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
@@ -91,8 +121,8 @@ jobs:
       - name: Runtime smoke
         run: |
           set -euo pipefail
-          docker run --rm cloudstart/dev-frontend:$GITHUB_SHA nginx -t
-          docker run -d --name nova-cd-backend -p 18000:8000 cloudstart/dev-backend:$GITHUB_SHA
+          docker run --rm cloudstart/dev-frontend:${GITHUB_SHA} nginx -t
+          docker run -d --name nova-cd-backend -p 18000:8000 cloudstart/dev-backend:${GITHUB_SHA}
           for _ in $(seq 1 20); do
             if curl --fail --silent http://127.0.0.1:18000/health >/dev/null; then
               docker rm -f nova-cd-backend >/dev/null 2>&1 || true
@@ -104,16 +134,6 @@ jobs:
           docker rm -f nova-cd-backend >/dev/null 2>&1 || true
           exit 1
 
-      - name: Push immutable application images
-        run: |
-          set -euo pipefail
-          account_id="$(aws sts get-caller-identity --query Account --output text)"
-          registry="$account_id.dkr.ecr.$AWS_REGION.amazonaws.com"
-          docker tag cloudstart/dev-frontend:$GITHUB_SHA "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend:$GITHUB_SHA"
-          docker tag cloudstart/dev-backend:$GITHUB_SHA "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend:$GITHUB_SHA"
-          docker push "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend:$GITHUB_SHA"
-          docker push "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend:$GITHUB_SHA"
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
         with:
@@ -121,11 +141,11 @@ jobs:
           terraform_wrapper: false
 
       - name: Terraform init
-        run: terraform init -backend-config="bucket=${${ vars.TF_STATE_BUCKET §}}" -backend-config="region=$AWS_REGION" -reconfigure -input=false -no-color
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="region=${{ env.AWS_REGION }}" -reconfigure -input=false -no-color
 
       - name: Require Grafana secret
         env:
-          GRAFANA_ADMIN_PASSWORD: ${${ secrets.GRAFANA_ADMIN_PASSWORD §}}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: test -n "$GRAFANA_ADMIN_PASSWORD"
 
       - name: Terraform plan
@@ -136,7 +156,7 @@ jobs:
           TF_VAR_deploy_application: "true"
           TF_VAR_frontend_image_tag: ${{ github.sha }}
           TF_VAR_backend_image_tag: ${{ github.sha }}
-          TF_VAR_grafana_admin_password: ${${ secrets.GRAFANA_ADMIN_PASSWORD §}}
+          TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: terraform plan -refresh=true -lock=true -input=false -out=cd.tfplan -no-color
 
       - name: Guard application-only plan
@@ -146,8 +166,21 @@ jobs:
           allowed='["aws_ecs_task_definition.frontend","aws_ecs_task_definition.backend","aws_ecs_service.frontend","aws_ecs_service.backend"]'
           unexpected="$(jq -r --argjson allowed "$allowed" '[.resource_changes[]? | select(.change.actions != ["no-op"]) | select((.address as $a | ($allowed | index($a))) == null) | .address] | .[]' cd.tfplan.json)"
           deletes="$(jq '[.resource_changes[]? | select(any(.change.actions[]; . == "delete"))] | length' cd.tfplan.json)"
-          test -z "$unexpected"
+          if [ -n "$unexpected" ]; then
+            printf '%s\n' "$unexpected" >&2
+            exit 1
+          fi
           test "$deletes" -eq 0
+
+      - name: Push immutable application images
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          registry="$account_id.dkr.ecr.$AWS_REGION.amazonaws.com"
+          docker tag cloudstart/dev-frontend:${GITHUB_SHA} "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend:${GITHUB_SHA}"
+          docker tag cloudstart/dev-backend:${GITHUB_SHA} "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend:${GITHUB_SHA}"
+          docker push "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend:${GITHUB_SHA}"
+          docker push "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend:${GITHUB_SHA}"
 
       - name: Apply exact plan
         run: terraform apply -input=false -auto-approve cd.tfplan
@@ -164,10 +197,10 @@ jobs:
           subnets="$(terraform output -json private_app_subnet_ids | jq -c '[.[]]')"
           network_config="$(jq -nc --argjson subnets "$subnets" --arg sg "$backend_sg" '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"DISABLED"}}')"
           overrides="$(jq -nc '{containerOverrides:[{name:"backend",command:["alembic","upgrade","head"]}]}')"
-          task_arn="$(aws ecs run-task --cluster "$cluster" --task-definition "$task_definition" --launch-type FARGATE --network-configuration "$network_config" --overrides "$overrides" --query "tasks[0].taskArn" --output text)"
+          task_arn="$(aws ecs run-task --cluster "$cluster" --task-definition "$task_definition" --launch-type FARGATE --network-configuration "$network_config" --overrides "$overrides" --query 'tasks[0].taskArn' --output text)"
           test -n "$task_arn" && test "$task_arn" != "None"
           aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task_arn"
-          exit_code="$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" --query "tasks[0].containers[?name=='backend'].exitCode | [0]" --output text)"
+          exit_code="$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" --query 'tasks[0].containers[?name==`backend`].exitCode | [0]' --output text)"
           test "$exit_code" = "0"
 
       - name: Development smoke tests
@@ -180,4 +213,7 @@ jobs:
           curl --fail --silent --show-error --retry 10 --retry-delay 5 "$base_url/api/info" >/dev/null
           curl --fail --silent --show-error --retry 10 --retry-delay 5 "$base_url/api/health/db" >/dev/null
           status="$(curl --silent --output /tmp/items.json --write-out "%{http_code}" "$base_url/api/items")"
-          test "$status" = "401"
+          if [ "$status" != "401" ]; then
+            cat /tmp/items.json
+            exit 1
+          fi
