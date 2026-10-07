@@ -1,11 +1,11 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from uuid import uuid4
 
 import jwt
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
@@ -24,7 +24,6 @@ from app.services.providers import (
     generate_apple_client_secret,
     google_authorization_url,
 )
-
 
 class ApplicationApiTest(unittest.TestCase):
     @classmethod
@@ -136,7 +135,6 @@ class ApplicationApiTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
-
 class OAuthProtocolTest(unittest.TestCase):
     def setUp(self) -> None:
         self.original = {
@@ -236,7 +234,7 @@ class OAuthProtocolTest(unittest.TestCase):
             self.assertEqual(claims["sub"], "com.example.cloudstart.web")
             self.assertGreater(
                 claims["exp"],
-                int(datetime.now(timezone.utc).timestamp()),
+                int(datetime.now(UTC).timestamp()),
             )
         except ModuleNotFoundError as exc:
             self.fail(f"cryptography dependency missing: {exc}")
