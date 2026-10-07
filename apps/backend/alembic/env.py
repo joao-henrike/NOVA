@@ -9,9 +9,9 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.core.config import settings
-from app.db.base import Base
-from app.models import AuthIdentity, AuthProvider, Item, OAuthState, RefreshToken, User  # noqa: F401
+from app.core.config import settings  # noqa: E402
+from app.db.base import Base  # noqa: E402
+from app.models import AuthIdentity, AuthProvider, Item, OAuthState, RefreshToken, User  # noqa: E402,F401
 
 
 config = context.config
