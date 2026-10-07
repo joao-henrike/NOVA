@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -17,6 +18,7 @@ from app.core.security import (
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.models.auth import AuthIdentity, OAuthState, RefreshToken
 from app.models.user import User
 from app.services.providers import (
     apple_authorization_url,
@@ -71,6 +73,9 @@ class ApplicationApiTest(unittest.TestCase):
     def tearDown(self) -> None:
         settings.auth_jwt_secret_key = self.original_secret
         with self.session_factory() as session:
+            session.query(RefreshToken).delete(synchronize_session=False)
+            session.query(OAuthState).delete(synchronize_session=False)
+            session.query(AuthIdentity).delete(synchronize_session=False)
             session.query(User).filter(User.id != self.user_id).delete(
                 synchronize_session=False,
             )
@@ -135,6 +140,122 @@ class ApplicationApiTest(unittest.TestCase):
             headers={"Authorization": f"Bearer {token}"},
         )
         self.assertEqual(response.status_code, 401)
+
+    def test_google_oauth_callback_creates_session(self) -> None:
+        original = {
+            "google_client_id": settings.google_client_id,
+            "google_client_secret": settings.google_client_secret,
+            "google_redirect_uri": settings.google_redirect_uri,
+            "auth_cookie_secure": settings.auth_cookie_secure,
+        }
+        settings.google_client_id = "google-client-id"
+        settings.google_client_secret = "google-client-secret"
+        settings.google_redirect_uri = (
+            "https://cloudstart.example.com/api/auth/google/callback"
+        )
+        settings.auth_cookie_secure = False
+
+        try:
+            start = self.client.get(
+                "/api/auth/google/login",
+                follow_redirects=False,
+            )
+            self.assertEqual(start.status_code, 302)
+            state = start.headers["location"].split("state=", 1)[1].split("&", 1)[0]
+
+            with (
+                patch(
+                    "app.api.routes.auth.exchange_google_code",
+                    return_value={"id_token": "provider-id-token"},
+                ),
+                patch(
+                    "app.api.routes.auth.verify_google_id_token",
+                    return_value={
+                        "sub": "google-subject",
+                        "email": "google@example.com",
+                        "email_verified": True,
+                        "name": "Google User",
+                    },
+                ),
+            ):
+                callback = self.client.get(
+                    f"/api/auth/google/callback?code=oauth-code&state={state}",
+                    follow_redirects=False,
+                )
+
+            self.assertEqual(callback.status_code, 200)
+            payload = callback.json()
+            self.assertIn("access_token", payload)
+            self.assertEqual(payload["token_type"], "bearer")
+            self.assertEqual(
+                self.client.get(
+                    "/api/auth/me",
+                    headers={"Authorization": f"Bearer {payload['access_token']}"},
+                ).status_code,
+                200,
+            )
+            self.assertIn("nova_refresh_token=", callback.headers.get("set-cookie", ""))
+        finally:
+            for name, value in original.items():
+                setattr(settings, name, value)
+
+    def test_apple_oauth_callback_creates_session(self) -> None:
+        original = {
+            "apple_client_id": settings.apple_client_id,
+            "apple_team_id": settings.apple_team_id,
+            "apple_key_id": settings.apple_key_id,
+            "apple_private_key": settings.apple_private_key,
+            "apple_redirect_uri": settings.apple_redirect_uri,
+            "auth_cookie_secure": settings.auth_cookie_secure,
+        }
+        settings.apple_client_id = "com.example.cloudstart.web"
+        settings.apple_team_id = "TEAM123456"
+        settings.apple_key_id = "KEY1234567"
+        settings.apple_redirect_uri = (
+            "https://cloudstart.example.com/api/auth/apple/callback"
+        )
+        settings.auth_cookie_secure = False
+
+        try:
+            start = self.client.get(
+                "/api/auth/apple/login",
+                follow_redirects=False,
+            )
+            self.assertEqual(start.status_code, 302)
+            state = start.headers["location"].split("state=", 1)[1].split("&", 1)[0]
+
+            with (
+                patch(
+                    "app.api.routes.auth.exchange_apple_code",
+                    return_value={"id_token": "provider-id-token"},
+                ),
+                patch(
+                    "app.api.routes.auth.verify_apple_id_token",
+                    return_value={
+                        "sub": "apple-subject",
+                        "email": "apple@example.com",
+                        "email_verified": True,
+                    },
+                ),
+            ):
+                callback = self.client.post(
+                    "/api/auth/apple/callback",
+                    data={"code": "oauth-code", "state": state},
+                )
+
+            self.assertEqual(callback.status_code, 200)
+            payload = callback.json()
+            self.assertIn("access_token", payload)
+            self.assertEqual(
+                self.client.get(
+                    "/api/auth/me",
+                    headers={"Authorization": f"Bearer {payload['access_token']}"},
+                ).status_code,
+                200,
+            )
+        finally:
+            for name, value in original.items():
+                setattr(settings, name, value)
 
 
 class OAuthProtocolTest(unittest.TestCase):
