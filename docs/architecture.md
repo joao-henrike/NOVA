@@ -297,7 +297,7 @@ lifecycle = keep 10 most recent images
 
 The current ECS task definitions reference the repository URL plus the configured tag.
 
-No ECR publication workflow exists in the current Container CI.
+Development CD publishes immutable SHA-tagged application images to ECR.
 
 ## 14. Monitoring and observability
 
@@ -560,10 +560,10 @@ Distributed tracing
 | IaC | Terraform |
 | Remote state | S3 + S3 lockfile + bootstrap DynamoDB |
 | CI | GitHub Actions |
-| Automatic image publish | No |
-| Automatic ECS deployment | No |
+| Automatic development image publish | Yes |
+| Automatic development ECS deployment | Yes |
 | HTTPS | No |
-| Application auth | No |
+| Application auth | Google + Apple |
 | Business database schema | No |
 | Financial engine | No |
 | Audit Fabric | No |
