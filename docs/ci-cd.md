@@ -235,9 +235,9 @@ Dependabot is configured for:
 GitHub Actions
 Terraform
 bootstrap Terraform
-Python
-backend Docker
-frontend Docker
+Python / pip
+Docker (backend)
+Docker (frontend)
 ```
 
 ## Security baseline policy
