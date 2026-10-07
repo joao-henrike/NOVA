@@ -196,7 +196,7 @@ Gitleaks
 
 The optional Terraform Plan path uses GitHub OIDC instead of long-lived AWS credentials stored in the workflow.
 
-There is no corresponding automated production-deployment OIDC path in the current workflows.
+The current OIDC deployment path is restricted to the development environment. There is intentionally no automated production-deployment OIDC path.
 
 ## 12. Current public security limitations
 
