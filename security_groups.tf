@@ -77,6 +77,7 @@ resource "aws_vpc_security_group_ingress_rule" "frontend_from_alb" {
 }
 
 #trivy:ignore:AWS-0104
+#trivy:ignore:AWS-0104
 resource "aws_vpc_security_group_egress_rule" "frontend_https" {
   security_group_id = aws_security_group.frontend.id
   cidr_ipv4         = "0.0.0.0/0"
@@ -95,6 +96,7 @@ resource "aws_vpc_security_group_ingress_rule" "backend_from_alb" {
   description                  = "Backend traffic from ALB only"
 }
 
+#trivy:ignore:AWS-0104
 #trivy:ignore:AWS-0104
 resource "aws_vpc_security_group_egress_rule" "backend_https" {
   security_group_id = aws_security_group.backend.id
@@ -123,6 +125,7 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_backend" {
   description                  = "PostgreSQL from backend only"
 }
 
+#trivy:ignore:AWS-0104
 #trivy:ignore:AWS-0104
 resource "aws_vpc_security_group_egress_rule" "rds_all" {
   security_group_id = aws_security_group.rds.id
