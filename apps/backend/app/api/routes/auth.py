@@ -1,6 +1,6 @@
 import json
 import secrets
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 from fastapi import (
@@ -69,6 +69,8 @@ def _start_login(
     if provider is AuthProvider.GOOGLE:
         settings.require_google_config()
         redirect_uri = settings.google_redirect_uri
+        if not redirect_uri:
+            raise RuntimeError("Google authentication redirect URI is missing.")
         _validate_redirect_uri(redirect_uri)
         verifier = create_pkce_verifier()
         challenge = create_pkce_challenge(verifier)
@@ -77,10 +79,12 @@ def _start_login(
             nonce,
             challenge,
         )
-        samesite = "lax"
+        samesite: Literal["lax", "none"] = "lax"
     else:
         settings.require_apple_config()
         redirect_uri = settings.apple_redirect_uri
+        if not redirect_uri:
+            raise RuntimeError("Apple authentication redirect URI is missing.")
         _validate_redirect_uri(redirect_uri, apple=True)
         verifier = None
         authorization_url = apple_authorization_url(state, nonce)
