@@ -10,6 +10,7 @@ on:
   push:
     branches:
       - main
+      - Joao
     paths:
       - "apps/**"
       - "docker-compose.yml"
@@ -52,6 +53,9 @@ jobs:
           load: true
           tags: cloudstart/backend:ci-${{ github.sha }}
           push: false
+
+      - name: Run backend unit tests
+        run: docker run --rm cloudstart/backend:ci-${{ github.sha }} python -m unittest discover -s /app/tests -v
 
       - name: Scan frontend image
         uses: aquasecurity/trivy-action@v0.36.0
