@@ -1,6 +1,8 @@
 # NOVA — Accepted security exceptions
 
-This file documents the current Checkov exceptions in `.checkov.yaml`.
+This file documents the current infrastructure security exceptions for **Checkov** and **Trivy**.
+
+Checkov exceptions are maintained centrally in `.checkov.yaml`. Trivy exceptions are kept at the **resource level** with inline `#trivy:ignore:<ID>` directives so they remain scoped to the exact development resource that intentionally requires the exception.
 
 These are explicit MVP decisions, not a blanket suppression. A newly introduced Checkov control that is not listed remains blocking in CI.
 
@@ -19,3 +21,13 @@ These are explicit MVP decisions, not a blanket suppression. A newly introduced 
 | CKV2_AWS_11 | VPC Flow Logs deferred | Centralize flow logs |
 | CKV2_AWS_57 | Automatic secret rotation deferred | Add rotation mechanism |
 | CKV_AWS_260 / CKV_AWS_130 | Public internet-facing ALB/subnets are intentional | Retain edge exposure but harden with HTTPS/WAF |
+| Trivy AWS-0132 | Terraform state bucket uses SSE-S3 for the low-cost MVP | Move Terraform state to SSE-KMS with a customer-managed key |
+| Trivy AWS-0053 / AWS-0054 | Development ALB is intentionally public and HTTP-only | Introduce ACM + HTTPS and then remove the exception |
+| Trivy AWS-0104 | Development components require controlled outbound internet access through NAT for current dependencies | Replace broad egress with explicit destinations/endpoints where practical |
+
+
+## Trivy CI policy
+
+The CI workflow does not trust a repository-controlled Trivy configuration or ignore file when enforcing its blocking Terraform scan. It creates a minimal trusted configuration inside the GitHub runner and points Trivy at an empty temporary ignore file. Accepted exceptions are therefore visible only where the affected Terraform resource carries the corresponding inline directive.
+
+This prevents a future repository change from silently weakening the global CI policy by modifying a local `trivy.yaml` or ignore file.
