@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any
 from urllib.parse import urlencode
@@ -11,7 +11,6 @@ from jwt import PyJWKClient
 from jwt.exceptions import InvalidTokenError, PyJWKClientError
 
 from app.core.config import settings
-
 
 class ProviderAuthenticationError(Exception):
     pass
@@ -135,7 +134,7 @@ def verify_google_id_token(
 
 def generate_apple_client_secret() -> str:
     settings.require_apple_config()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     max_ttl = 15_552_000
     ttl = min(settings.apple_client_secret_ttl_seconds, max_ttl)
 
