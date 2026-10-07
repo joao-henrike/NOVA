@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.models.auth import AuthIdentity, AuthProvider, OAuthState, RefreshToken
 from app.models.user import User
-
 
 class AuthRepository:
     def get_identity(
@@ -105,7 +104,7 @@ class AuthRepository:
             session.rollback()
             return None
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if record.expires_at <= now:
             session.delete(record)
             session.commit()
@@ -153,7 +152,7 @@ class AuthRepository:
         *,
         replaced_by_hash: str | None = None,
     ) -> None:
-        record.revoked_at = datetime.now(timezone.utc)
+        record.revoked_at = datetime.now(UTC)
         record.replaced_by_hash = replaced_by_hash
 
     def revoke_family(self, session: Session, family_id: UUID) -> None:
@@ -163,6 +162,6 @@ class AuthRepository:
                 RefreshToken.family_id == family_id,
                 RefreshToken.revoked_at.is_(None),
             )
-            .values(revoked_at=datetime.now(timezone.utc))
+            .values(revoked_at=datetime.now(UTC))
         )
         session.commit()
