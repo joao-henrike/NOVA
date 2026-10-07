@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone
-from uuid import UUID, uuid4
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from fastapi import Response
 from sqlalchemy.exc import IntegrityError
@@ -16,10 +16,8 @@ from app.models.user import User
 from app.repositories.auth import AuthRepository
 from app.services.providers import claims_to_identity
 
-
 class AuthenticationError(Exception):
     pass
-
 
 class AuthService:
     def __init__(self, repository: AuthRepository | None = None) -> None:
@@ -42,7 +40,7 @@ class AuthService:
             nonce=nonce,
             code_verifier=code_verifier,
             redirect_uri=redirect_uri,
-            expires_at=datetime.now(timezone.utc)
+            expires_at=datetime.now(UTC)
             + timedelta(seconds=settings.auth_state_ttl_seconds),
         )
 
@@ -137,7 +135,7 @@ class AuthService:
             user_id=user.id,
             family_id=uuid4(),
             token_hash=hash_refresh_token(refresh_token),
-            expires_at=datetime.now(timezone.utc)
+            expires_at=datetime.now(UTC)
             + timedelta(days=settings.auth_refresh_token_ttl_days),
         )
         session.commit()
@@ -172,7 +170,7 @@ class AuthService:
         if record is None:
             raise AuthenticationError("Invalid refresh token.")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         if record.revoked_at is not None:
             self.repository.revoke_family(session, record.family_id)
