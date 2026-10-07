@@ -39,7 +39,6 @@ resource "aws_vpc_security_group_egress_rule" "monitoring_to_db" {
 }
 
 #trivy:ignore:AWS-0104
-#trivy:ignore:AWS-0104
 resource "aws_vpc_security_group_egress_rule" "monitoring_https" {
   security_group_id = aws_security_group.monitoring.id
   cidr_ipv4         = "0.0.0.0/0"
@@ -58,7 +57,6 @@ resource "aws_vpc_security_group_ingress_rule" "monitoring_db_from_monitoring" {
   description                  = "PostgreSQL access from the monitoring task only"
 }
 
-#trivy:ignore:AWS-0104
 #trivy:ignore:AWS-0104
 resource "aws_vpc_security_group_egress_rule" "monitoring_db_all" {
   security_group_id = aws_security_group.monitoring_db.id
