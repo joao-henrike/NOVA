@@ -1,6 +1,6 @@
 # CloudStart — Deployment and Operations Guide
 
-> This procedure describes only the deployment paths that the current repository actually supports. There is no automatic ECR publication or ECS deployment workflow in the current implementation.
+> This procedure describes only the deployment paths that the current repository actually supports. The repository now has automated development CD from `Joao` through GitHub Actions. Production deployment remains intentionally manual/gated.
 
 ## 1. Prerequisites
 
@@ -25,8 +25,8 @@ environment               = dev
 aws_region                = us-east-1
 availability_zone_count   = 2
 vpc_cidr                  = 10.20.0.0/16
-deploy_application        = false
-frontend_image_tag        = v0.1.0
+deploy_application        = true
+frontend_image_tag        = v0.1.1
 backend_image_tag         = v0.1.0
 frontend_desired_count    = 2
 backend_desired_count     = 2
@@ -39,7 +39,7 @@ db_instance_class          = db.t4g.micro
 db_backup_retention        = 7 days
 ```
 
-The effective ECS desired/minimum count is zero while `deploy_application = false`.
+The effective ECS desired/minimum count follows the configured desired/minimum values while `deploy_application = true`.
 
 ## 3. Local application validation
 
@@ -131,7 +131,6 @@ After the bootstrap succeeds:
 terraform init \
   -backend-config="bucket=$(terraform -chdir=bootstrap output -raw state_bucket_name)" \
   -backend-config="region=$(terraform -chdir=bootstrap output -raw region)" \
-  -backend-config="dynamodb_table=$(terraform -chdir=bootstrap output -raw lock_table_name)" \
   -reconfigure
 ```
 
@@ -197,7 +196,7 @@ docker build -t cloudstart/frontend:v0.1.0 apps/frontend
 docker build -t cloudstart/backend:v0.1.0 apps/backend
 ```
 
-The repository does not contain an image-publication script. Publishing is a manual/operator step in the current MVP.
+The development CD workflow builds, scans, and publishes application images automatically. The manual commands below remain useful for local/operator recovery.
 
 ## 10. Authenticate Docker to ECR
 
@@ -322,9 +321,8 @@ monitoring PostgreSQL availability
 The following operations are not automatically performed:
 
 ```text
-Build and push application images to ECR
-Update ECS service task definitions from a Git push
-Deploy automatically to ECS
+Production image publication
+Production ECS deployment
 Notify alarm recipients
 Create a WAF configuration
 Create TLS certificates
@@ -376,19 +374,16 @@ Developer
    |
    +--> GitHub PR / push
    |       |
-   |       +--> Terraform CI
-   |       +--> Container CI
+   |       +--> NOVA CI
    |
-   +--> Local docker build
-   |
-   +--> Manual ECR push
-   |
-   +--> Set deploy_application=true
-   |
-   +--> terraform plan/apply
-   |
-   v
-ECS services run application tasks
+   +--> Development CD on Joao
+           |
+           +--> Build/scan
+           +--> ECR
+           +--> Terraform application plan/apply
+           +--> ECS
+           +--> migrations
+           +--> smoke tests
 ```
 
 This is the deployment model supported by the current repository. It is intentionally more conservative than a fully automated production CD pipeline.
@@ -445,3 +440,18 @@ GET /api/health/db
 ```
 
 This gives end-to-end coverage of the load balancer, frontend, backend and database path without requiring Kubernetes or host-level agent assumptions.
+
+
+## 19. Automated development CD
+
+Pushes to the `Joao` branch that change application code trigger `.github/workflows/deploy-dev.yml`.
+
+Before enabling the deployment job, configure `AWS_CD_ROLE_ARN` and `TF_STATE_BUCKET` as repository variables and configure the `GRAFANA_ADMIN_PASSWORD` secret in the `development` GitHub Environment.
+
+AWS authentication uses GitHub OIDC. The CD workflow rejects an AWS account other than `760396521507`.
+
+The workflow applies only a previously generated Terraform plan whose non-no-op resources are limited to the frontend/backend ECS task definitions and services. Any unrelated resource change or destructive action stops the release.
+
+The pipeline runs Alembic migrations as a one-off private Fargate task and performs ALB smoke tests after the ECS services stabilize.
+
+No production deployment is implied by this development workflow.
