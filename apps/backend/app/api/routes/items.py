@@ -9,7 +9,6 @@ from app.models.item import ItemStatus
 from app.schemas.item import ItemCreate, ItemRead, ItemUpdate
 from app.services.items import ItemNotFoundError, ItemService
 
-
 router = APIRouter(prefix="/api/items", tags=["items"])
 service = ItemService()
 
