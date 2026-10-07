@@ -1,6 +1,4 @@
-# CloudStart Frontend V2
-
-Frontend puro em HTML + CSS + JavaScript.
+# CloudStart Frontend V1
 
 ## Incluído
 
