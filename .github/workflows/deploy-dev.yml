@@ -163,7 +163,7 @@ jobs:
         run: |
           set -euo pipefail
           terraform show -json cd.tfplan > cd.tfplan.json
-          allowed='["aws_ecs_task_definition.frontend","aws_ecs_task_definition.backend","aws_ecs_service.frontend","aws_ecs_service.backend"]'
+          allowed='["aws_ecs_task_definition.frontend","aws_ecs_task_definition.backend","aws_ecs_service.frontend","aws_ecs_service.backend","aws_appautoscaling_target.frontend","aws_appautoscaling_target.backend"]'
           unexpected="$(jq -r --argjson allowed "$allowed" '[.resource_changes[]? | select(.change.actions != ["no-op"]) | select((.address as $a | ($allowed | index($a))) == null) | .address] | .[]' cd.tfplan.json)"
           deletes="$(jq '[.resource_changes[]? | select(any(.change.actions[]; . == "delete"))] | length' cd.tfplan.json)"
           if [ -n "$unexpected" ]; then
