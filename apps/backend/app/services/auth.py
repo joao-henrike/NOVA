@@ -178,7 +178,13 @@ class AuthService:
             self.repository.revoke_family(session, record.family_id)
             raise AuthenticationError("Refresh token reuse detected.")
 
-        if record.expires_at <= now:
+        expires_at = record.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        else:
+            expires_at = expires_at.astimezone(UTC)
+
+        if expires_at <= now:
             self.repository.revoke_refresh_token(record)
             session.commit()
             raise AuthenticationError("Refresh token expired.")
