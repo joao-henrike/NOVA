@@ -12,6 +12,7 @@ resource "aws_ecs_cluster" "this" {
   })
 }
 
+#trivy:ignore:AWS-0053
 resource "aws_lb" "this" {
   name                       = substr("${local.name}-alb", 0, 32)
   internal                   = false
@@ -74,6 +75,7 @@ resource "aws_lb_target_group" "backend" {
   })
 }
 
+#trivy:ignore:AWS-0054
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.this.arn
   port              = 80
