@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import jwt
@@ -13,10 +13,10 @@ from app.core.security import (
     create_access_token,
     create_pkce_challenge,
     create_pkce_verifier,
-)from app.db.base import Base
+)
+from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.item import ItemStatus
 from app.models.user import User
 from app.services.providers import (
     apple_authorization_url,
