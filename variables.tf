@@ -56,13 +56,13 @@ variable "vpc_cidr" {
 variable "deploy_application" {
   description = "Whether ECS services should run application tasks. Set true after the frontend/backend images have been pushed to ECR."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "frontend_image_tag" {
   description = "Immutable tag of the frontend image in the CloudStart ECR repository."
   type        = string
-  default     = "v0.1.0"
+  default     = "v0.1.1"
 
   validation {
     condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$", var.frontend_image_tag))
@@ -260,7 +260,7 @@ variable "frontend_cpu_target_utilization" {
 variable "frontend_memory_target_utilization" {
   description = "Target memory utilization for frontend service scaling."
   type        = number
-  default     = 70
+  default     = 10
 
   validation {
     condition     = var.frontend_memory_target_utilization >= 20 && var.frontend_memory_target_utilization <= 90
@@ -282,7 +282,7 @@ variable "backend_cpu_target_utilization" {
 variable "backend_memory_target_utilization" {
   description = "Target memory utilization for backend service scaling."
   type        = number
-  default     = 70
+  default     = 10
 
   validation {
     condition     = var.backend_memory_target_utilization >= 20 && var.backend_memory_target_utilization <= 90
@@ -359,7 +359,7 @@ variable "db_max_allocated_storage" {
 variable "db_backup_retention_period" {
   description = "Number of days to retain automated RDS backups."
   type        = number
-  default     = 7
+  default     = 1
 
   validation {
     condition     = var.db_backup_retention_period >= 1 && var.db_backup_retention_period <= 35
@@ -559,7 +559,7 @@ variable "monitoring_db_max_allocated_storage" {
 variable "monitoring_db_backup_retention_period" {
   description = "Number of days to retain automated backups for the monitoring database."
   type        = number
-  default     = 7
+  default     = 1
 
   validation {
     condition     = var.monitoring_db_backup_retention_period >= 1 && var.monitoring_db_backup_retention_period <= 35
