@@ -1,0 +1,232 @@
+name: NOVA CI
+
+on:
+  push:
+    branches: [main, Joao]
+  pull_request:
+    branches: [main, Joao]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nova-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  TERRAFORM_VERSION: "1.16.4"
+
+jobs:
+  backend:
+    name: Backend Quality and Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cloudstart
+          POSTGRES_USER: cloudstart_admin
+          POSTGRES_PASSWORD: postgres-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cloudstart_admin -d cloudstart"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: apps/backend
+    env:
+      DATABASE_URL: postgresql+psycopg://cloudstart_admin:postgres-ci-only@127.0.0.1:5432/cloudstart
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: cloudstart
+      DB_USER: cloudstart_admin
+      DB_PASSWORD: postgres-ci-only
+      AUTH_JWT_SECRET_KEY: ci-only-signing-secret-with-more-than-32-characters
+      AUTH_COOKIE_SECURE: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            apps/backend/requirements.txt
+            apps/backend/requirements-dev.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt -r requirements-dev.txt
+      - name: Dependency consistency
+        run: pip check
+      - name: Compile Python
+        run: python -m compileall -q app tests
+      - name: Ruff
+        run: ruff check app tests
+      - name: Mypy
+        run: mypy app
+      - name: Bandit
+        run: bandit -r app -lll -iii
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Migration rollback test
+        run: alembic downgrade -1 && alembic upgrade head
+      - name: Pytest
+        run: pytest -q
+
+  containers:
+    name: Container Build and Runtime Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+      - name: Build frontend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: apps/frontend
+          load: true
+          push: false
+          tags: cloudstart/frontend:ci-${{ github.sha }}
+      - name: Build backend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: apps/backend
+          load: true
+          push: false
+          tags: cloudstart/backend:ci-${{ github.sha }}
+      - name: Validate frontend Nginx
+        run: docker run --rm cloudstart/frontend:ci-${{ github.sha }} nginx -t
+      - name: Validate backend runtime
+        run: |
+          set -euo pipefail
+          docker run -d --name nova-backend-ci -p 18000:8000 cloudstart/backend:ci-${GITHUB_SHA}
+          for _ in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:18000/health >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          docker logs nova-backend-ci
+          exit 1
+      - name: Cleanup backend container
+        if: always()
+        run: docker rm -f nova-backend-ci >/dev/null 2>&1 || true
+      - name: Trivy backend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: cloudstart/backend:ci-${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Trivy frontend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: cloudstart/frontend:ci-${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  compose:
+    name: Compose Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+      - name: Validate application Compose
+        run: docker compose -f docker-compose.yml config --quiet
+      - name: Validate monitoring Compose
+        run: docker compose -f docker-compose.monitoring.yml config --quiet
+
+  terraform:
+    name: Terraform Static Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - name: Terraform format
+        run: terraform fmt -check -recursive -diff
+      - name: Root init without backend
+        run: terraform init -backend=false -input=false -no-color
+      - name: Root validate
+        run: terraform validate -no-color
+      - name: Bootstrap init without backend
+        working-directory: bootstrap
+        run: terraform init -backend=false -input=false -no-color
+      - name: Bootstrap validate
+        working-directory: bootstrap
+        run: terraform validate -no-color
+      - name: Install TFLint
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/tflint.zip "https://github.com/terraform-linters/tflint/releases/download/v0.64.0/tflint_linux_amd64.zip"
+          echo "cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537  /tmp/tflint.zip" | sha256sum -c -
+          unzip -q /tmp/tflint.zip -d /tmp/tflint
+          install -m 0755 /tmp/tflint/tflint /usr/local/bin/tflint
+      - name: TFLint
+        run: tflint --init --config .tflint.hcl && tflint --config .tflint.hcl --recursive --format compact
+
+  security:
+    name: Security Scans
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkov
+        run: python3 -m pip install --disable-pip-version-check --no-warn-script-location checkov==3.3.8
+      - name: Checkov scan
+        run: checkov -d . --framework terraform --compact --quiet --soft-fail-on LOW,MEDIUM --hard-fail-on HIGH,CRITICAL
+      - name: Trivy Terraform scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: config
+          scan-ref: .
+          trivy-config: trivy.yaml
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: ShellCheck
+        run: shellcheck --severity=error -x ./*.sh
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@439137e1b50c27ba9e2f9befc93e43091b449c34
+        with:
+          languages: python
+      - name: Analyze
+        uses: github/codeql-action/analyze@439137e1b50c27ba9e2f9befc93e43091b449c34
+        with:
+          category: /language:python
