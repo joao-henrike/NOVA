@@ -150,3 +150,15 @@ resource "aws_route_table_association" "private_db" {
   route_table_id = aws_route_table.private_db[each.key].id
   subnet_id      = each.value.id
 }
+
+
+resource "aws_default_security_group" "this" {
+  vpc_id = aws_vpc.this.id
+
+  ingress = []
+  egress  = []
+
+  tags = merge(local.global_tags, {
+    Name = "${local.name}-default-sg"
+  })
+}
