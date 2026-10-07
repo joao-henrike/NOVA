@@ -357,4 +357,4 @@ def logout(
 
 @router.get("/me", response_model=UserRead)
 def me(current_user: CurrentUser) -> UserRead:
-    return current_user
+    return UserRead.model_validate(current_user)
