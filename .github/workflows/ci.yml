@@ -182,8 +182,11 @@ jobs:
         run: tflint --init --config .tflint.hcl
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - name: TFLint
-        run: tflint --config .tflint.hcl --recursive --format compact
+      - name: TFLint root
+        run: tflint --config .tflint.hcl --format compact
+      - name: TFLint bootstrap
+        working-directory: bootstrap
+        run: tflint --config ../.tflint.hcl --format compact
 
   security:
     name: Security Scans

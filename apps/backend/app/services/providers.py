@@ -12,6 +12,7 @@ from jwt.exceptions import InvalidTokenError, PyJWKClientError
 
 from app.core.config import settings
 
+
 class ProviderAuthenticationError(Exception):
     pass
 

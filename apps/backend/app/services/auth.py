@@ -16,6 +16,7 @@ from app.models.user import User
 from app.repositories.auth import AuthRepository
 from app.services.providers import claims_to_identity
 
+
 class AuthenticationError(Exception):
     pass
 
