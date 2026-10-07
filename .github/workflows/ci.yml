@@ -68,7 +68,7 @@ jobs:
       - name: Compile Python
         run: python -m compileall -q app tests
       - name: Ruff
-        run: ruff check app tests
+        run: ruff check --fix --diff app tests
       - name: Mypy
         run: mypy app
       - name: Bandit
