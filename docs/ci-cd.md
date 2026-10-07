@@ -1,261 +1,235 @@
-# CloudStart — CI/CD Current State
+# CloudStart — CI/CD
 
-> This document describes the workflows that actually exist in `.github/workflows/`. The repository has automated **continuous integration** and an optional credentialed Terraform Plan, but it does not currently implement continuous deployment.
+This document describes the CI and CD workflows currently committed in `.github/workflows/`.
 
-## 1. Workflow inventory
-
-```text
-.github/workflows/terraform-lint.yml
-.github/workflows/container-ci.yml
-```
-
-## 2. Terraform CI workflow
-
-### Trigger
-
-The workflow runs on:
+## Workflow inventory
 
 ```text
-pull_request
-push to main
+.github/workflows/ci.yml
+.github/workflows/deploy-dev.yml
 ```
 
-The path filters cover Terraform/configuration, GitHub workflow/configuration, and documentation changes.
+Legacy `container-ci.yml` and `terraform-lint.yml` workflows were removed so there is a single source of truth for validation.
 
-### Global environment
+## CI
+
+`ci.yml` runs on pushes to `main` and `Joao`, pull requests targeting either branch, and manual dispatch.
+
+All third-party GitHub Actions used by the pipeline are pinned to full commit SHAs.
+
+### Backend quality gate
+
+The backend job starts PostgreSQL 16 as an isolated GitHub Actions service and executes:
 
 ```text
-Terraform      1.16.4
-TFLint         0.64.0
-terraform-docs 0.24.0
+pip check
+python -m compileall
+Ruff
+Mypy
+Bandit
+Alembic upgrade
+Alembic downgrade/upgrade
+Pytest
 ```
 
-## 3. Terraform Static Validation job
+The migration test validates that the current migration chain can advance and roll back.
 
-### Step 1 — Checkout
+### Container gate
 
-The repository is checked out with persisted Git credentials disabled.
+The pipeline builds both application images without publishing them.
 
-### Step 2 — Terraform setup
-
-The workflow installs Terraform 1.16.4.
-
-### Step 3 — Format check
-
-```bash
-terraform fmt -check -recursive -diff
-```
-
-This does not modify the repository.
-
-### Step 4 — Root initialization
-
-```bash
-terraform init -backend=false -input=false -no-color
-```
-
-The remote backend is intentionally not contacted for this validation step.
-
-### Step 5 — Root validation
-
-```bash
-terraform validate -no-color
-```
-
-### Step 6 — Bootstrap initialization
-
-The bootstrap stack is initialized independently with its backend disabled.
-
-### Step 7 — Bootstrap validation
-
-```bash
-terraform validate -no-color
-```
-
-### Step 8 — TFLint
-
-The repository installs a pinned TFLint release and the AWS ruleset, then runs:
-
-```bash
-tflint --config .tflint.hcl --recursive --format compact
-```
-
-### Step 9 — terraform-docs
-
-The workflow generates Terraform input/output documentation into a temporary file and checks that the generated content contains the expected inputs, outputs, and markers.
-
-It does not replace the committed README as part of the CI run.
-
-## 4. IaC Security and Policy job
-
-### Checkov
-
-The workflow runs Checkov against the root Terraform code.
-
-Configured behavior:
+It validates:
 
 ```text
-HIGH/CRITICAL -> hard fail
-LOW/MEDIUM    -> soft fail
+frontend nginx configuration
+backend /health runtime
+Trivy HIGH/CRITICAL image vulnerabilities
 ```
 
-### Trivy
+### Compose gate
 
-The workflow runs Trivy in configuration/misconfiguration mode using `trivy.yaml`.
+Both Compose files are parsed with Docker Compose.
 
-The configured scan focuses on HIGH and CRITICAL findings and fails on them.
+### Terraform gate
 
-## 5. Secret-scanning job
-
-Gitleaks checks the repository history.
-
-This is intended to detect accidentally committed secrets and does not provide application authentication or runtime secret management.
-
-## 6. Optional Terraform Plan job
-
-A fourth job exists but is conditional.
-
-The job only runs when:
+The root and bootstrap stacks are checked with:
 
 ```text
-Pull request
-AND not a fork
-AND AWS_TERRAFORM_PLAN_ROLE_ARN is set
-AND TF_STATE_BUCKET is set
-AND TF_STATE_DYNAMODB_TABLE is set
+terraform fmt -check
+terraform init -backend=false
+terraform validate
+TFLint
+```
+
+### Security gate
+
+The repository is scanned with:
+
+```text
+Checkov
+Trivy configuration scan
+Gitleaks
+ShellCheck
+CodeQL
+```
+
+HIGH/CRITICAL infrastructure and image findings are configured as blocking gates.
+
+## CD — Development
+
+`deploy-dev.yml` is restricted to the `Joao` branch and the GitHub `development` environment.
+
+The sequence is:
+
+```text
+Git push to Joao
+      |
+      v
+AWS OIDC authentication
+      |
+      v
+Build frontend/backend images
+      |
+      v
+Trivy scan
+      |
+      v
+Container runtime smoke test
+      |
+      v
+Push immutable SHA-tagged images to ECR
+      |
+      v
+terraform init against remote S3 state
+      |
+      v
+terraform plan
+      |
+      v
+Terraform plan scope guard
+      |
+      v
+terraform apply exact saved plan
+      |
+      v
+wait for ECS services
+      |
+      v
+run Alembic migration task
+      |
+      v
+ALB smoke tests
 ```
 
 ### AWS authentication
 
-It uses GitHub OIDC to assume the configured AWS IAM role.
+The workflow uses GitHub OIDC with `id-token: write` instead of long-lived AWS access keys.
 
-### Terraform initialization
+The workflow also requires the AWS account to be exactly:
 
-It configures the remote state using repository variables.
+```text
+760396521507
+```
 
-### Plan
+Required repository variables:
+
+```text
+AWS_CD_ROLE_ARN
+TF_STATE_BUCKET
+```
+
+Optional repository variable:
+
+```text
+TERRAFORM_AWS_REGION
+```
+
+Required GitHub Environment secret:
+
+```text
+GRAFANA_ADMIN_PASSWORD
+```
+
+## Application deployment safety
+
+The development CD pipeline does not blindly apply every Terraform difference.
+
+It creates a saved plan and allows only these resources:
+
+```text
+aws_ecs_task_definition.frontend
+aws_ecs_task_definition.backend
+aws_ecs_service.frontend
+aws_ecs_service.backend
+```
+
+Any other resource change or any delete action stops the deployment.
+
+Infrastructure drift or unrelated infrastructure changes must be resolved through the infrastructure workflow rather than hidden inside an application release.
+
+The root Terraform backend uses S3 state with the S3 lockfile mechanism. The CD workflow therefore does not pass a legacy DynamoDB backend-lock argument.
+
+## Application image identity
+
+Images are tagged with the complete Git commit SHA.
+
+```text
+cloudstart-dev-frontend:<commit-sha>
+cloudstart-dev-backend:<commit-sha>
+```
+
+The ECR repositories are configured with immutable tags.
+
+## Database migrations
+
+Migrations are executed as a one-off Fargate task using the newly deployed backend task definition:
 
 ```bash
-terraform plan -refresh=true -lock=true -input=false -out=tfplan
+alembic upgrade head
 ```
 
-### Sanitized PR summary
+TThe migration task uses the private application subnets and backend security group.
 
-The workflow does not post raw plan contents to the PR. It computes a summary of changed resource actions.
+## Post-deployment acceptance
 
-### Destructive-change guard
-
-Any resource action containing a delete causes the job to fail unless the PR has the label:
+The development CD pipeline checks:
 
 ```text
-infra-allow-destroy
+/
+/api/health
+/api/info
+/api/health/db
 ```
 
-That label is therefore an explicit human-review gate for destructive changes in this optional path.
+It also verifies that `GET /api/items` returns `401 Unauthorized`.
 
-## 7. Container CI workflow
+## Production
 
-### Trigger
+There is intentionally no automatic production deployment in this implementation.
 
-Runs for changes under:
+A future production pipeline should add:
 
 ```text
-apps/**
-docker-compose.yml
-.github/workflows/container-ci.yml
+production GitHub Environment
+required reviewers
+separate AWS role
+separate state/account boundary
+approval before apply
+production smoke tests
+rollback procedure
 ```
 
-on PRs and pushes to `main`.
+The development pipeline must not be reused as an implicit production authorization mechanism.
 
-### Frontend build
+## Dependency maintenance
 
-The workflow builds the frontend image from:
+Dependabot is configured for:
 
 ```text
-apps/frontend
+GitHub Actions
+Terraform
+bootstrap Terraform
+Python
+backend Docker
+frontend Docker
 ```
-
-with a CI tag based on the Git commit SHA.
-
-### Backend build
-
-The workflow builds the backend image from:
-
-```text
-apps/backend
-```
-
-with a CI tag based on the Git commit SHA.
-
-### Push behavior
-
-The workflow explicitly sets:
-
-```text
-push: false
-```
-
-Therefore CI does not publish these images to ECR.
-
-### Image scans
-
-Each built image is scanned with Trivy for:
-
-```text
-HIGH
-CRITICAL
-```
-
-Unfixed vulnerabilities are ignored by the configured action invocation.
-
-### Compose validation
-
-The workflow runs:
-
-```bash
-docker compose config --quiet
-```
-
-This validates the Compose configuration syntax.
-
-## 8. What the workflows accomplish today
-
-```text
-Source change
-   |
-   +--> IaC syntax/format validation
-   +--> Terraform validation
-   +--> Terraform lint
-   +--> IaC security scans
-   +--> secret scan
-   +--> container build
-   +--> container vulnerability scan
-   +--> Compose validation
-   +--> optional AWS-backed Terraform plan
-```
-
-This provides a strong validation pipeline for the current MVP repository.
-
-## 9. What the workflows do not accomplish today
-
-```text
-ECR push
-ECS deployment
-Production approval gate for deployment
-Automatic rollback driven by deployment pipeline
-Database migration execution
-Post-deployment smoke test
-Automatic alarm notification
-```
-
-ECS itself has deployment circuit-breaker/rollback behavior, but the GitHub workflows do not orchestrate the deployment.
-
-## 10. CI/CD terminology for this repository
-
-The repository should be described as:
-
-> **CI + optional credentialed Terraform Plan**
-
-not as a fully automated CD platform.
-
-The current architecture intentionally separates validation from AWS write operations.
