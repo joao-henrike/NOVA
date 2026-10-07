@@ -34,7 +34,7 @@ def database_health() -> JSONResponse:
     try:
         with get_engine().connect() as connection:
             connection.execute(text("SELECT 1"))
-    except SQLAlchemyError:
+    except (RuntimeError, SQLAlchemyError):
         return JSONResponse(status_code=503, content={"status": "degraded"})
 
     return JSONResponse(content={"status": "ok", "database": "reachable"})
