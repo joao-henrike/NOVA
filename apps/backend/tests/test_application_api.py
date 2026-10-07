@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
-from app.core.security import create_access_token
-from app.db.base import Base
+from app.core.security import (
+    create_access_token,
+    create_pkce_challenge,
+    create_pkce_verifier,
+)from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.item import ItemStatus
@@ -18,8 +21,6 @@ from app.models.user import User
 from app.services.providers import (
     apple_authorization_url,
     claims_to_identity,
-    create_pkce_challenge,
-    create_pkce_verifier,
     generate_apple_client_secret,
     google_authorization_url,
 )
