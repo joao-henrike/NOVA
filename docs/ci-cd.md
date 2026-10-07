@@ -27,12 +27,15 @@ python -m compileall
 Ruff
 Mypy
 Bandit
-Alembic upgrade
-Alembic downgrade/upgrade
+pip-audit
+Alembic upgrade head
+alembic check
+Alembic downgrade base/upgrade head
+alembic check
 Pytest
 ```
 
-The migration test validates that the current migration chain can advance and roll back.
+The migration gate applies the full chain, checks model/migration drift, rolls the database to `base`, reapplies `head`, and checks drift again.
 
 ### Container gate
 
@@ -67,17 +70,18 @@ The repository is scanned with:
 
 ```text
 Checkov
-Trivy configuration scan
+Trivy Terraform misconfiguration scan
+Trivy container image scan
 Gitleaks
 ShellCheck
 CodeQL
 ```
 
-HIGH/CRITICAL infrastructure and image findings are configured as blocking gates.
+HIGH/CRITICAL infrastructure and image findings are blocking. The CI Terraform Trivy scan uses a runner-generated trusted configuration and a temporary empty ignore file; repository-level Trivy policy is not trusted by this blocking gate.
 
 ## CD — Development
 
-`deploy-dev.yml` is restricted to the `Joao` branch and the GitHub `development` environment.
+`deploy-dev.yml` is restricted to the `Joao` branch and the GitHub `development` environment. The job is additionally guarded by the presence of `AWS_CD_ROLE_ARN` and `TF_STATE_BUCKET`; when those repository variables are absent, the CD job is skipped.
 
 The sequence is:
 
@@ -161,9 +165,11 @@ aws_ecs_task_definition.frontend
 aws_ecs_task_definition.backend
 aws_ecs_service.frontend
 aws_ecs_service.backend
+aws_appautoscaling_target.frontend
+aws_appautoscaling_target.backend
 ```
 
-Any other resource change or any delete action stops the deployment.
+Any other resource change or any delete action stops the deployment. This preserves a hard boundary between application release changes and unrelated infrastructure changes.
 
 Infrastructure drift or unrelated infrastructure changes must be resolved through the infrastructure workflow rather than hidden inside an application release.
 
