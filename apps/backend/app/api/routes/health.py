@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.core.config import settings
-from app.db.session import engine
+from app.db.session import get_engine
 
 
 router = APIRouter(tags=["health"])
@@ -31,7 +31,7 @@ def info() -> dict[str, str]:
 @router.get("/api/health/db")
 def database_health() -> JSONResponse:
     try:
-        with engine.connect() as connection:
+        with get_engine().connect() as connection:
             connection.execute(text("SELECT 1"))
         return JSONResponse(content={"status": "ok", "database": "reachable"})
     except Exception:
