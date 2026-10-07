@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.db.session import get_engine
@@ -33,6 +34,7 @@ def database_health() -> JSONResponse:
     try:
         with get_engine().connect() as connection:
             connection.execute(text("SELECT 1"))
-        return JSONResponse(content={"status": "ok", "database": "reachable"})
-    except Exception:
+    except SQLAlchemyError:
         return JSONResponse(status_code=503, content={"status": "degraded"})
+
+    return JSONResponse(content={"status": "ok", "database": "reachable"})
