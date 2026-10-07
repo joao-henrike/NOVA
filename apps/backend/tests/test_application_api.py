@@ -1,6 +1,6 @@
 import unittest
-from unittest.mock import patch
 from datetime import UTC, datetime
+from unittest.mock import patch
 from uuid import uuid4
 
 import jwt
