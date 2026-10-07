@@ -1,5 +1,5 @@
 import unittest
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import jwt
@@ -24,6 +24,7 @@ from app.services.providers import (
     generate_apple_client_secret,
     google_authorization_url,
 )
+
 
 class ApplicationApiTest(unittest.TestCase):
     @classmethod
@@ -134,6 +135,7 @@ class ApplicationApiTest(unittest.TestCase):
             headers={"Authorization": f"Bearer {token}"},
         )
         self.assertEqual(response.status_code, 401)
+
 
 class OAuthProtocolTest(unittest.TestCase):
     def setUp(self) -> None:
