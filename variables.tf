@@ -56,7 +56,7 @@ variable "vpc_cidr" {
 variable "deploy_application" {
   description = "Whether ECS services should run application tasks. Set true after the frontend/backend images have been pushed to ECR."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "frontend_image_tag" {
