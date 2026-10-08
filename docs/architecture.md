@@ -439,7 +439,7 @@ Bootstrap stack
       v
 Root Terraform backend
       |
-      +--> key = cloudstart/terraform.tfstate
+      +--> key = cloudstart/dev/terraform.tfstate
       +--> use_lockfile = true
 ```
 
