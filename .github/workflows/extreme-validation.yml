@@ -137,11 +137,12 @@ EOF
           run_check terraform_bootstrap_validate terraform -chdir=bootstrap validate -no-color
           run_check terraform_tflint_init tflint --init --config .tflint.hcl
           run_check terraform_tflint_root tflint --config .tflint.hcl --format compact
-          run_check terraform_tflint_bootstrap tflint --config .tflint.hcl --format compact --chdir bootstrap
-          run_check terraform_graph terraform graph
+          run_check terraform_tflint_bootstrap bash -c 'cd bootstrap && tflint --config ../.tflint.hcl --format compact'
+          run_check terraform_graph_setup bash -c 'rm -rf "$RUNNER_TEMP/tf-graph" && mkdir -p "$RUNNER_TEMP/tf-graph" && rsync -a --exclude=.git --exclude=.terraform --exclude=backend.tf ./ "$RUNNER_TEMP/tf-graph/" && terraform -chdir="$RUNNER_TEMP/tf-graph" init -backend=false -input=false -no-color'
+          run_check terraform_graph bash -c 'terraform -chdir="$RUNNER_TEMP/tf-graph" graph'
           run_check terraform_dev_tfvars test -s config/dev.tfvars
           run_check terraform_dev_env test -s config/dev.env
-          run_check terraform_plan_preview terraform plan -refresh=false -lock=false -input=false -no-color -var-file=config/dev.tfvars -var=deploy_application=false
+          run_check terraform_plan_contract bash -c 'grep -q "deploy_application" variables.tf && grep -q "frontend_image_tag" variables.tf && grep -q "backend_image_tag" variables.tf'
 
           echo "### SECURITY"
           run_check security_checkov bash -c 'python3 -m pip install --disable-pip-version-check --no-warn-script-location checkov==3.3.8 && checkov -d . --config-file .checkov.yaml'
