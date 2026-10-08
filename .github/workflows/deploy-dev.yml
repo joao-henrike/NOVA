@@ -121,8 +121,8 @@ jobs:
       - name: Runtime smoke
         run: |
           set -euo pipefail
-          docker run --rm cloudstart/dev-frontend:${GITHUB_SHA} nginx -t
-          docker run -d --name nova-cd-backend -p 18000:8000 cloudstart/dev-backend:${GITHUB_SHA}
+          docker run --rm "cloudstart/dev-frontend:${GITHUB_SHA}" nginx -t
+          docker run -d --name nova-cd-backend -p 18000:8000 "cloudstart/dev-backend:${GITHUB_SHA}"
           for _ in $(seq 1 20); do
             if curl --fail --silent http://127.0.0.1:18000/health >/dev/null; then
               docker rm -f nova-cd-backend >/dev/null 2>&1 || true
