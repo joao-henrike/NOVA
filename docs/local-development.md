@@ -44,7 +44,7 @@ The bootstrap script:
 - installs AWS CLI v2 locally when the host does not already provide it;
 - creates `.venv`;
 - installs backend runtime and development Python dependencies;
-- validates root and bootstrap Terraform configurations;
+- runs provider-free Terraform formatting validation; full `terraform validate` is a separate infrastructure check because it downloads provider binaries;
 - compiles the backend Python source and tests.
 
 The bootstrap does **not** authenticate to AWS, authenticate to GitHub, create credentials, or create AWS resources.
@@ -136,10 +136,16 @@ make migrate
 
 ## 6. Validate the infrastructure code
 
-Static Terraform validation:
+Local application validation:
 
 ```bash
 make validate
+```
+
+Full Terraform/provider validation (downloads the AWS provider):
+
+```bash
+make tf-validate
 ```
 
 Terraform linting:
