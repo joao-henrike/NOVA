@@ -112,12 +112,7 @@ jobs:
           run_check frontend_nginx_contract bash -c 'grep -q "location = /health" apps/frontend/nginx.conf && grep -q "try_files" apps/frontend/nginx.conf'
 
           echo "### COMPOSE"
-          cat > "$RUNNER_TEMP/compose-ci-override.yml" <<'EOF'
-services:
-  postgres:
-    ports:
-      - "15432:5432"
-EOF
+          printf '%s\n' 'services:' '  postgres:' '    ports:' '      - "15432:5432"' > "$RUNNER_TEMP/compose-ci-override.yml"
           run_check app_compose_config docker compose -p nova-extreme-app -f docker-compose.yml config --quiet
           run_check monitoring_compose_config docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml config --quiet
           run_check app_compose_build docker compose -p nova-extreme-app -f docker-compose.yml build --pull
