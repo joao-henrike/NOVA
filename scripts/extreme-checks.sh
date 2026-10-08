@@ -3,6 +3,7 @@ set -u
 
 : "${LOG_DIR:=$RUNNER_TEMP/nova-extreme-logs}"
 : "${RESULTS_FILE:=$RUNNER_TEMP/nova-extreme-results.tsv}"
+: "${CHECK_TIMEOUT_SECONDS:=300}"
 
 init_checks() {
   mkdir -p "$LOG_DIR"
@@ -17,7 +18,7 @@ run_check() {
   echo "========== CHECK: $name =========="
   echo "COMMAND: $*"
   set +e
-  "$@" 2>&1 | tee "$log_file"
+  timeout --kill-after=15s "${CHECK_TIMEOUT_SECONDS}s" "$@" 2>&1 | tee "$log_file"
   local rc=${PIPESTATUS[0]}
   set -e
   printf '%s	%s
