@@ -115,7 +115,8 @@ resource "aws_db_instance" "monitoring" {
 }
 
 resource "aws_secretsmanager_secret" "grafana_admin" {
-  name = "${local.name}/monitoring/grafana-admin"
+  name                    = "${local.name}/monitoring/grafana-admin"
+  recovery_window_in_days = 0
 
   tags = merge(local.global_tags, {
     Name      = "${local.name}/monitoring/grafana-admin"
