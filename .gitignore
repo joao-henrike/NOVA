@@ -50,6 +50,10 @@ Thumbs.db
 tfdoc/
 .tmp/
 
+# Local bootstrap environment and downloaded CLI tools
+.tools/
+.venv/
+
 # Python / Node artifacts if auxiliary tooling is added later
 __pycache__/
 *.py[cod]
@@ -62,18 +66,5 @@ node_modules/
 *.pfx
 secrets/
 
-# Terraform generated files
-.terraform/
-*.tfplan
-*.tfplan.*
-terraform.tfstate
-terraform.tfstate.*
-crash.log
-crash.*.log
-
 # Audit generated reports
 nova-audit-*/
-
-# Local environment/secrets
-.env
-.env.*
