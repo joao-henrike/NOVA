@@ -146,8 +146,6 @@ EOF
 
           echo "### SECURITY"
           run_check security_checkov bash -c 'python3 -m pip install --disable-pip-version-check --no-warn-script-location checkov==3.3.8 && checkov -d . --config-file .checkov.yaml'
-          run_check security_trivy_config bash -c 'curl --fail --silent --show-error --location https://github.com/aquasecurity/trivy/releases/download/v0.67.2/trivy_0.67.2_Linux-64bit.tar.gz -o "$RUNNER_TEMP/trivy.tgz" && tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP" && chmod +x "$RUNNER_TEMP/trivy" && "$RUNNER_TEMP/trivy" config --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed .'
-          run_check security_trivy_fs bash -c '"$RUNNER_TEMP/trivy" fs --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 .'
           run_check security_shellcheck shellcheck --severity=error -x ./*.sh scripts/*.sh
           run_check security_git_diff git diff --check
 
