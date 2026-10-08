@@ -14,6 +14,7 @@ crash.*.log
 *.tfvars.json
 !terraform.tfvars.example
 !bootstrap/terraform.tfvars.example
+!config/dev.tfvars
 
 # Terraform override files
 override.tf
@@ -51,6 +52,7 @@ tfdoc/
 .tmp/
 
 # Local bootstrap environment and downloaded CLI tools
+.deploy/
 .tools/
 .venv/
 .tflint.d/
