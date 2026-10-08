@@ -236,18 +236,8 @@ jobs:
           TRIVY_IGNOREFILE: ${{ runner.temp }}/empty.trivyignore
       - name: Gitleaks
         shell: bash
-        run: |
-          set -euo pipefail
-          version="8.29.1"
-          archive="$RUNNER_TEMP/gitleaks_${version}_linux_x64.tar.gz"
-          curl --fail --silent --show-error --location \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
-            -o "$archive"
-          printf '%s  %s\n' \
-            "e4eb209d04e20339d77122a3bdf9cd41351255cfb27ebcb75e85325e04f88924" \
-            "$archive" | sha256sum -c -
-          tar -xzf "$archive" -C "$RUNNER_TEMP"
-          "$RUNNER_TEMP/gitleaks" git --no-banner --redact --verbose .
+        run: ./scripts/run-gitleaks.sh
+
       - name: ShellCheck
         run: shellcheck --severity=error -x ./*.sh scripts/*.sh
 
