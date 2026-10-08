@@ -116,7 +116,7 @@ terraform -chdir=bootstrap init -backend=false -input=false
 terraform -chdir=bootstrap validate
 ```
 
-The GitHub Actions workflow performs these validation steps automatically for matching changes.
+The standard CI workflow performs these static validation steps automatically for matching changes. The separate `extreme-validation.yml` workflow performs a broader full-system validation with independent checks and preserved evidence.
 
 ## 5. Bootstrap the remote state
 
@@ -157,10 +157,10 @@ terraform init \
   -reconfigure
 ```
 
-The root backend uses the state key:
+The root backend uses the canonical development state key:
 
 ```text
-cloudstart/terraform.tfstate
+cloudstart/dev/terraform.tfstate
 ```
 
 It enables:
