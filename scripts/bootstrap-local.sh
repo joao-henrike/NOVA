@@ -11,6 +11,7 @@ DOCKER_CLI_PLUGINS_DIR="$DOCKER_CONFIG_DIR/cli-plugins"
 TERRAFORM_VERSION="1.16.4"
 TFLINT_VERSION="0.64.0"
 COMPOSE_VERSION="5.6.0"
+BUILDX_VERSION="0.17.0"
 
 mkdir -p "$BIN_DIR" "$DOCKER_CLI_PLUGINS_DIR"
 
@@ -55,6 +56,32 @@ install_tflint() {
   unzip -qo "$archive" -d "$BIN_DIR"
   rm -f "$archive"
   "$BIN_DIR/tflint" --version
+}
+
+install_buildx() {
+  if docker buildx version >/dev/null 2>&1; then
+    local current
+    current="$(docker buildx version | sed -n 's/.*v\([0-9.]*\).*/\1/p' | head -n 1)"
+    if [ -n "$current" ] && [ "$(printf '%s\n' "$BUILDX_VERSION" "$current" | sort -V | head -n 1)" = "$BUILDX_VERSION" ]; then
+      docker buildx version
+      return
+    fi
+  fi
+
+  local arch
+  case "$(uname -m)" in
+    x86_64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *) fail "Unsupported CPU architecture for Docker Buildx: $(uname -m)" ;;
+  esac
+
+  local plugin="$DOCKER_CLI_PLUGINS_DIR/docker-buildx"
+  local url="https://github.com/docker/buildx/releases/download/v$BUILDX_VERSION/buildx-v$BUILDX_VERSION.linux-$arch"
+
+  say "Downloading Docker Buildx $BUILDX_VERSION"
+  curl -fsSL "$url" -o "$plugin"
+  chmod +x "$plugin"
+  docker buildx version
 }
 
 install_compose() {
@@ -163,6 +190,7 @@ main() {
   check_docker
   install_terraform
   install_tflint
+  install_buildx
   install_compose
   install_aws_cli
   setup_python
