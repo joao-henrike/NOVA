@@ -465,7 +465,65 @@ GET /api/health/db
 This gives end-to-end coverage of the load balancer, frontend, backend and database path without requiring Kubernetes or host-level agent assumptions.
 
 
-## 19. Automated development CD
+## 19. Rebuild development directly from GitHub
+
+For a complete development rebuild, use the dedicated GitHub Actions workflow:
+
+```text
+Actions
+  -> NOVA - Rebuild Development From Scratch
+  -> Run workflow
+  -> confirmation = REBUILD
+```
+
+The workflow runs only through `workflow_dispatch` and is intentionally destructive. A normal push to `Joao` cannot trigger it.
+
+The workflow uses GitHub OIDC for AWS authentication and does not require AWS access keys in the repository.
+
+The rebuild performs:
+
+```text
+Checkout Joao
+     ↓
+Verify AWS account
+     ↓
+Destroy canonical dev state
+     ↓
+Destroy legacy state:
+  cloudstart/redeploy-2026-10-08/terraform.tfstate
+  cloudstart/terraform.tfstate
+     ↓
+Verify old CloudStart named resources are absent
+     ↓
+Initialize clean canonical state
+     ↓
+Terraform create-only plan
+     ↓
+Apply complete infrastructure baseline
+     ↓
+Build + push frontend/backend images
+     ↓
+Activate ECS application
+     ↓
+Wait for ECS stability
+     ↓
+Run Alembic migrations
+     ↓
+ALB/API/DB/Grafana smoke tests
+```
+
+The state bucket itself is intentionally retained because it is the Terraform state infrastructure, not part of the ephemeral CloudStart application environment.
+
+Required GitHub configuration:
+
+```text
+development environment
+AWS_CD_ROLE_ARN variable
+```
+
+The workflow generates a temporary Grafana administrator password during the rebuild and passes it to Terraform as a sensitive variable. The generated value is stored by the application stack in AWS Secrets Manager and is not printed into the workflow logs.
+
+## 20. Automated development CD
 
 Pushes to the `Joao` branch that change application code trigger `.github/workflows/deploy-dev.yml`.
 
