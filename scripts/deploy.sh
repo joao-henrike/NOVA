@@ -88,33 +88,59 @@ terraform init \
   -input=false \
   -no-color
 
-BASELINE_PLAN="/tmp/nova-baseline-$IMAGE_TAG.tfplan"
-BASELINE_JSON="/tmp/nova-baseline-$IMAGE_TAG.json"
 APPLICATION_PLAN="/tmp/nova-application-$IMAGE_TAG.tfplan"
 APPLICATION_JSON="/tmp/nova-application-$IMAGE_TAG.json"
+cleanup() {
+  rm -f "$state_file" "$state_error" "$APPLICATION_PLAN" "$APPLICATION_JSON" /tmp/nova-baseline-$IMAGE_TAG.tfplan /tmp/nova-baseline-$IMAGE_TAG.json
+  if [ "${KEEP_LOCAL_IMAGES:-0}" != "1" ]; then
+    [ -n "${frontend_repo:-}" ] && docker image rm "$frontend_repo:$IMAGE_TAG" >/dev/null 2>&1 || true
+    [ -n "${backend_repo:-}" ] && docker image rm "$backend_repo:$IMAGE_TAG" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
 
-log "Planning fresh infrastructure baseline"
-terraform plan \
-  -refresh=false \
-  -lock=true \
-  -input=false \
-  -no-color \
-  -var-file="$TFVARS_FILE" \
-  -var='deploy_application=false' \
-  -var="frontend_image_tag=$IMAGE_TAG" \
-  -var="backend_image_tag=$IMAGE_TAG" \
-  -out="$BASELINE_PLAN"
+state_file="/tmp/nova-state-$IMAGE_TAG.txt"
+state_error="/tmp/nova-state-$IMAGE_TAG.err"
+rm -f "$state_file" "$state_error"
 
-terraform show -json "$BASELINE_PLAN" > "$BASELINE_JSON"
+if terraform state list >"$state_file" 2>"$state_error"; then
+  if [ -s "$state_file" ]; then
+    log "Existing Terraform state detected; skipping fresh infrastructure baseline"
+    FRESH_DEPLOYMENT=false
+  else
+    fatal "Terraform state command succeeded but returned no resources."
+  fi
+else
+  if grep -q "No state file was found" "$state_error"; then
+    FRESH_DEPLOYMENT=true
+    log "No Terraform resources found; creating a fresh infrastructure baseline"
 
-BASELINE_DELETES="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(any(.change.actions[]?; . == "delete"))] | length' "$BASELINE_JSON")"
-BASELINE_NONCREATE="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(.change.actions != ["create"]) | .address] | length' "$BASELINE_JSON")"
+    BASELINE_PLAN="/tmp/nova-baseline-$IMAGE_TAG.tfplan"
+    BASELINE_JSON="/tmp/nova-baseline-$IMAGE_TAG.json"
 
-[ "$BASELINE_DELETES" -eq 0 ] || fatal "Fresh baseline plan contains deletions."
-[ "$BASELINE_NONCREATE" -eq 0 ] || fatal "Fresh baseline plan contains non-create resource actions."
+    terraform plan \
+      -refresh=false \
+      -lock=true \
+      -input=false \
+      -no-color \
+      -var-file="$TFVARS_FILE" \
+      -var='deploy_application=false' \
+      -var="frontend_image_tag=$IMAGE_TAG" \
+      -var="backend_image_tag=$IMAGE_TAG" \
+      -out="$BASELINE_PLAN"
 
-log "Applying infrastructure baseline"
-terraform apply -input=false -auto-approve "$BASELINE_PLAN"
+    terraform show -json "$BASELINE_PLAN" > "$BASELINE_JSON"
+
+    BASELINE_DELETES="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(any(.change.actions[]?; . == "delete"))] | length' "$BASELINE_JSON")"
+    [ "$BASELINE_DELETES" -eq 0 ] || fatal "Fresh baseline plan contains deletions."
+
+    log "Applying infrastructure baseline"
+    terraform apply -input=false -auto-approve "$BASELINE_PLAN"
+  else
+    cat "$state_error" >&2
+    fatal "Terraform state inspection failed."
+  fi
+fi
 
 frontend_repo="$(terraform output -raw frontend_ecr_repository_url)"
 backend_repo="$(terraform output -raw backend_ecr_repository_url)"
