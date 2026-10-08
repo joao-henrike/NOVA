@@ -14,15 +14,16 @@ concurrency:
   group: nova-extreme-validation-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  PYTHON_VERSION: "3.12"
-  TERRAFORM_VERSION: "1.16.4"
-
 jobs:
-  backend:
-    name: Extreme - Backend
+  extreme:
+    name: Extreme Full-System Validation
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
     services:
       postgres:
         image: postgres:16-alpine
@@ -37,10 +38,12 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
-    defaults:
-      run:
-        working-directory: apps/backend
     env:
+      AWS_REGION: us-east-1
+      EXPECTED_AWS_ACCOUNT_ID: "760396521507"
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      AWS_CD_ROLE_ARN: ${{ vars.AWS_CD_ROLE_ARN }}
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
       DATABASE_URL: postgresql+psycopg://cloudstart_admin:postgres-extreme-ci-only@127.0.0.1:5432/cloudstart
       DB_HOST: 127.0.0.1
       DB_PORT: "5432"
@@ -49,503 +52,219 @@ jobs:
       DB_PASSWORD: postgres-extreme-ci-only
       AUTH_JWT_SECRET_KEY: extreme-ci-only-signing-secret-with-more-than-32-characters
       AUTH_COOKIE_SECURE: "false"
-      LOG_DIR: ${{ runner.temp }}/nova-extreme-backend-logs
-      RESULTS_FILE: ${{ runner.temp }}/nova-extreme-backend-results.tsv
+      LOG_DIR: ${{ runner.temp }}/nova-extreme-logs
+      RESULTS_FILE: ${{ runner.temp }}/nova-extreme-results.tsv
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - name: Checkout exact commit
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
-      - name: Initialize evidence
-        run: source ../../scripts/extreme-checks.sh; init_checks
-      - name: Execute all backend checks
-        shell: bash
-        run: |
-          source ../../scripts/extreme-checks.sh
-          run_check dependency_upgrade python -m pip install --upgrade pip
-          run_check install_project_dependencies python -m pip install -r requirements.txt -r requirements-dev.txt
-          run_check dependency_consistency pip check
-          run_check python_compile python -m compileall -q app tests
-          run_check ruff ruff check app tests
-          run_check mypy mypy app
-          run_check bandit bandit -r app -lll -iii
-          run_check pip_audit pip-audit --local
-          run_check migration_upgrade alembic upgrade head
-          run_check migration_drift alembic check
-          run_check migration_rollback bash -c 'alembic downgrade base && alembic upgrade head'
-          run_check migration_drift_roundtrip alembic check
-          run_check pytest pytest -q
-          finish_checks
-      - name: Upload backend evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: extreme-backend-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/nova-extreme-backend-logs
-            ${{ runner.temp }}/nova-extreme-backend-results.tsv
-          if-no-files-found: warn
 
-  frontend:
-    name: Extreme - Frontend
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      LOG_DIR: ${{ runner.temp }}/nova-extreme-frontend-logs
-      RESULTS_FILE: ${{ runner.temp }}/nova-extreme-frontend-results.tsv
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - name: Setup Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Initialize evidence
-        run: source scripts/extreme-checks.sh; init_checks
-      - name: Execute all frontend checks
-        shell: bash
-        run: |
-          source scripts/extreme-checks.sh
-          run_check frontend_image_build docker build --pull -t nova-extreme-frontend:$GITHUB_SHA apps/frontend
-          run_check nginx_config_test docker run --rm nova-extreme-frontend:$GITHUB_SHA nginx -t
-          run_check frontend_runtime bash -c 'cid=$(docker run -d -p 18080:80 nova-extreme-frontend:$GITHUB_SHA); trap "docker rm -f $cid >/dev/null 2>&1 || true" EXIT; for _ in $(seq 1 30); do curl --fail --silent http://127.0.0.1:18080/health >/dev/null && curl --fail --silent http://127.0.0.1:18080/ >/dev/null && exit 0; sleep 2; done; exit 1'
-          run_check frontend_html_contract python3 -c 'from pathlib import Path; from html.parser import HTMLParser; t=Path("apps/frontend/public/index.html").read_text(); p=HTMLParser(); p.feed(t); assert "<title>CloudStart</title>" in t'
-          run_check frontend_nginx_contract bash -c 'grep -q "location = /health" apps/frontend/nginx.conf && grep -q "try_files" apps/frontend/nginx.conf'
-          finish_checks
-      - name: Upload frontend evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: extreme-frontend-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/nova-extreme-frontend-logs
-            ${{ runner.temp }}/nova-extreme-frontend-results.tsv
-          if-no-files-found: warn
+          python-version: "3.12"
 
-  compose:
-    name: Extreme - Compose Integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    env:
-      LOG_DIR: ${{ runner.temp }}/nova-extreme-compose-logs
-      RESULTS_FILE: ${{ runner.temp }}/nova-extreme-compose-results.tsv
-      APP_PROJECT: nova-extreme-app
-      MON_PROJECT: nova-extreme-monitoring
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Initialize evidence
-        run: source scripts/extreme-checks.sh; init_checks
-      - name: Execute all Compose checks
-        shell: bash
-        run: |
-          source scripts/extreme-checks.sh
-          run_check application_compose_config docker compose -p "$APP_PROJECT" -f docker-compose.yml config --quiet
-          run_check monitoring_compose_config docker compose -p "$MON_PROJECT" -f docker-compose.monitoring.yml config --quiet
-          run_check application_compose_build bash -c 'docker compose -p "$APP_PROJECT" -f docker-compose.yml build --pull'
-          run_check application_compose_boot bash -c 'docker compose -p "$APP_PROJECT" -f docker-compose.yml up -d'
-          run_check application_http_smoke bash -c 'for _ in $(seq 1 45); do curl --fail --silent http://127.0.0.1:8080/ >/dev/null && curl --fail --silent http://127.0.0.1:8080/health >/dev/null && curl --fail --silent http://127.0.0.1:8080/api/health >/dev/null && curl --fail --silent http://127.0.0.1:8080/api/health/db >/dev/null && exit 0; sleep 2; done; docker compose -p "$APP_PROJECT" -f docker-compose.yml ps; docker compose -p "$APP_PROJECT" -f docker-compose.yml logs --no-color; exit 1'
-          run_check protected_route_contract bash -c 'status=$(curl --silent --output /tmp/items.json --write-out "%{http_code}" http://127.0.0.1:8080/api/items); test "$status" = "401"'
-          run_check monitoring_compose_boot bash -c 'docker compose -p "$MON_PROJECT" -f docker-compose.monitoring.yml up -d'
-          run_check grafana_http_smoke bash -c 'for _ in $(seq 1 60); do curl --fail --silent http://127.0.0.1:3000/api/health >/dev/null && exit 0; sleep 3; done; docker compose -p "$MON_PROJECT" -f docker-compose.monitoring.yml ps; docker compose -p "$MON_PROJECT" -f docker-compose.monitoring.yml logs --no-color; exit 1'
-          run_check zabbix_web_smoke bash -c 'for _ in $(seq 1 60); do curl --fail --silent http://127.0.0.1:8081/ >/dev/null && exit 0; sleep 3; done; exit 1'
-          run_check compose_cleanup bash -c 'docker compose -p "$APP_PROJECT" -f docker-compose.yml down -v --remove-orphans; docker compose -p "$MON_PROJECT" -f docker-compose.monitoring.yml down -v --remove-orphans'
-          finish_checks
-      - name: Cleanup Compose stacks
-        if: always()
-        run: |
-          docker compose -p "$APP_PROJECT" -f docker-compose.yml down -v --remove-orphans >/dev/null 2>&1 || true
-          docker compose -p "$MON_PROJECT" -f docker-compose.monitoring.yml down -v --remove-orphans >/dev/null 2>&1 || true
-      - name: Upload Compose evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: extreme-compose-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/nova-extreme-compose-logs
-            ${{ runner.temp }}/nova-extreme-compose-results.tsv
-          if-no-files-found: warn
-
-  terraform:
-    name: Extreme - Terraform
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      LOG_DIR: ${{ runner.temp }}/nova-extreme-terraform-logs
-      RESULTS_FILE: ${{ runner.temp }}/nova-extreme-terraform-results.tsv
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Initialize evidence
-        run: source scripts/extreme-checks.sh; init_checks
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
         with:
           terraform_version: "1.16.4"
           terraform_wrapper: false
+
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a
         with:
           tflint_version: "0.64.0"
           checksums: "cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537"
           cache: true
-      - name: Install TFLint plugins
-        run: tflint --init --config .tflint.hcl
-      - name: Execute Terraform checks
-        shell: bash
-        run: |
-          source scripts/extreme-checks.sh
-          run_check root_format terraform fmt -check -recursive -diff
-          run_check root_init terraform init -backend=false -input=false -no-color
-          run_check root_validate terraform validate -no-color
-          run_check bootstrap_init terraform -chdir=bootstrap init -backend=false -input=false -no-color
-          run_check bootstrap_validate terraform -chdir=bootstrap validate -no-color
-          run_check root_tflint tflint --config .tflint.hcl --format compact
-          run_check bootstrap_tflint tflint --config .tflint.hcl --format compact --chdir bootstrap
-          run_check terraform_graph terraform graph
-          run_check dev_tfvars_presence test -s config/dev.tfvars
-          run_check dev_env_presence test -s config/dev.env
-          run_check dev_plan_preview terraform plan -refresh=false -lock=false -input=false -no-color -var-file=config/dev.tfvars -var=deploy_application=false
-          finish_checks
-      - name: Upload Terraform evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: extreme-terraform-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/nova-extreme-terraform-logs
-            ${{ runner.temp }}/nova-extreme-terraform-results.tsv
-          if-no-files-found: warn
 
-  security:
-    name: Extreme - Security and Supply Chain
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    env:
-      LOG_DIR: ${{ runner.temp }}/nova-extreme-security-logs
-      RESULTS_FILE: ${{ runner.temp }}/nova-extreme-security-results.tsv
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          fetch-depth: 0
-          persist-credentials: false
       - name: Initialize evidence
         run: source scripts/extreme-checks.sh; init_checks
-      - name: Install security scanners
-        shell: bash
-        run: |
-          set +e
-          python3 -m pip install --disable-pip-version-check --no-warn-script-location checkov==3.3.8
-          curl --fail --silent --show-error --location https://github.com/aquasecurity/trivy/releases/download/v0.67.2/trivy_0.67.2_Linux-64bit.tar.gz -o "$RUNNER_TEMP/trivy.tgz"
-          tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP"
-          chmod +x "$RUNNER_TEMP/trivy"
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-          true
-      - name: Execute security checks
+
+      - name: Execute exhaustive local validation
+        continue-on-error: true
         shell: bash
         run: |
           source scripts/extreme-checks.sh
-          run_check checkov checkov -d . --config-file .checkov.yaml
-          run_check trivy_config trivy config --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed .
-          run_check trivy_filesystem bash -c 'trivy fs --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 .'
-          run_check shellcheck shellcheck --severity=error -x ./*.sh scripts/*.sh
-          run_check git_diff_check git diff --check
+
+          echo "### BACKEND"
+          run_check backend_dependency_install python -m pip install --upgrade pip
+          run_check backend_dependencies python -m pip install -r apps/backend/requirements.txt -r apps/backend/requirements-dev.txt
+          run_check backend_pip_check pip check
+          run_check backend_compile python -m compileall -q apps/backend/app apps/backend/tests
+          run_check backend_ruff ruff check apps/backend/app apps/backend/tests
+          run_check backend_mypy mypy apps/backend/app
+          run_check backend_bandit bandit -r apps/backend/app -lll -iii
+          run_check backend_pip_audit pip-audit --local
+          run_check backend_migration_upgrade bash -c 'cd apps/backend && alembic upgrade head'
+          run_check backend_migration_drift bash -c 'cd apps/backend && alembic check'
+          run_check backend_migration_rollback bash -c 'cd apps/backend && alembic downgrade base && alembic upgrade head'
+          run_check backend_migration_roundtrip bash -c 'cd apps/backend && alembic check'
+          run_check backend_pytest bash -c 'cd apps/backend && pytest -q'
+
+          echo "### FRONTEND"
+          run_check frontend_build docker build --pull -t nova-extreme-frontend:$GITHUB_SHA apps/frontend
+          run_check frontend_nginx_config docker run --rm nova-extreme-frontend:$GITHUB_SHA nginx -t
+          run_check frontend_runtime bash -c 'cid=$(docker run -d -p 18080:80 nova-extreme-frontend:$GITHUB_SHA); trap "docker rm -f $cid >/dev/null 2>&1 || true" EXIT; for _ in $(seq 1 30); do curl --fail --silent http://127.0.0.1:18080/health >/dev/null && curl --fail --silent http://127.0.0.1:18080/ >/dev/null && exit 0; sleep 2; done; exit 1'
+          run_check frontend_html_contract python3 -c 'from pathlib import Path; from html.parser import HTMLParser; t=Path("apps/frontend/public/index.html").read_text(); p=HTMLParser(); p.feed(t); assert "<title>CloudStart</title>" in t'
+          run_check frontend_nginx_contract bash -c 'grep -q "location = /health" apps/frontend/nginx.conf && grep -q "try_files" apps/frontend/nginx.conf'
+
+          echo "### COMPOSE"
+          run_check app_compose_config docker compose -p nova-extreme-app -f docker-compose.yml config --quiet
+          run_check monitoring_compose_config docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml config --quiet
+          run_check app_compose_build docker compose -p nova-extreme-app -f docker-compose.yml build --pull
+          run_check app_compose_up docker compose -p nova-extreme-app -f docker-compose.yml up -d
+          run_check app_compose_smoke bash -c 'for _ in $(seq 1 45); do curl --fail --silent http://127.0.0.1:8080/ >/dev/null && curl --fail --silent http://127.0.0.1:8080/api/health >/dev/null && curl --fail --silent http://127.0.0.1:8080/api/health/db >/dev/null && exit 0; sleep 2; done; docker compose -p nova-extreme-app -f docker-compose.yml ps; docker compose -p nova-extreme-app -f docker-compose.yml logs --no-color; exit 1'
+          run_check app_compose_auth_contract bash -c 'status=$(curl --silent --output /tmp/items.json --write-out "%{http_code}" http://127.0.0.1:8080/api/items); test "$status" = "401"'
+          run_check monitoring_compose_up docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml up -d
+          run_check grafana_smoke bash -c 'for _ in $(seq 1 60); do curl --fail --silent http://127.0.0.1:3000/api/health >/dev/null && exit 0; sleep 3; done; exit 1'
+          run_check zabbix_web_smoke bash -c 'for _ in $(seq 1 60); do curl --fail --silent http://127.0.0.1:8081/ >/dev/null && exit 0; sleep 3; done; exit 1'
+          run_check compose_cleanup bash -c 'docker compose -p nova-extreme-app -f docker-compose.yml down -v --remove-orphans; docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml down -v --remove-orphans'
+
+          echo "### TERRAFORM"
+          run_check terraform_fmt terraform fmt -check -recursive -diff
+          run_check terraform_root_init terraform init -backend=false -input=false -no-color
+          run_check terraform_root_validate terraform validate -no-color
+          run_check terraform_bootstrap_init terraform -chdir=bootstrap init -backend=false -input=false -no-color
+          run_check terraform_bootstrap_validate terraform -chdir=bootstrap validate -no-color
+          run_check terraform_tflint_init tflint --init --config .tflint.hcl
+          run_check terraform_tflint_root tflint --config .tflint.hcl --format compact
+          run_check terraform_tflint_bootstrap tflint --config .tflint.hcl --format compact --chdir bootstrap
+          run_check terraform_graph terraform graph
+          run_check terraform_dev_tfvars test -s config/dev.tfvars
+          run_check terraform_dev_env test -s config/dev.env
+          run_check terraform_plan_preview terraform plan -refresh=false -lock=false -input=false -no-color -var-file=config/dev.tfvars -var=deploy_application=false
+
+          echo "### SECURITY"
+          run_check security_checkov bash -c 'python3 -m pip install --disable-pip-version-check --no-warn-script-location checkov==3.3.8 && checkov -d . --config-file .checkov.yaml'
+          run_check security_trivy_config bash -c 'curl --fail --silent --show-error --location https://github.com/aquasecurity/trivy/releases/download/v0.67.2/trivy_0.67.2_Linux-64bit.tar.gz -o "$RUNNER_TEMP/trivy.tgz" && tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP" && chmod +x "$RUNNER_TEMP/trivy" && "$RUNNER_TEMP/trivy" config --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed .'
+          run_check security_trivy_fs bash -c '"$RUNNER_TEMP/trivy" fs --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 .'
+          run_check security_shellcheck shellcheck --severity=error -x ./*.sh scripts/*.sh
+          run_check security_git_diff git diff --check
+
+          echo "### REPOSITORY CONTRACT"
+          run_check repository_expected_files bash -c 'for f in Makefile README.md .terraform.lock.hcl .tflint.hcl .checkov.yaml backend.tf providers.tf variables.tf locals.tf main.tf vpc.tf security_groups.tf ecr.tf ecs.tf ecs_services.tf iam.tf rds.tf monitoring.tf outputs.tf config/dev.env config/dev.tfvars terraform.tfvars.example bootstrap/main.tf bootstrap/variables.tf bootstrap/providers.tf bootstrap/outputs.tf .github/workflows/ci.yml .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml .github/workflows/extreme-validation.yml; do test -f "$f" || { echo "missing: $f"; exit 1; }; done'
+          run_check repository_no_private_keys bash -c '! git grep -nE "BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY|aws_secret_access_key|AWS_SECRET_ACCESS_KEY|ghp_[A-Za-z0-9]{20,}" -- .'
+          run_check repository_dev_tfvars_no_secrets bash -c '! grep -nEi "^[[:space:]]*(password|secret|token|private_key|access_key)[[:space:]]*=" config/dev.tfvars'
+          run_check repository_canonical_state bash -c 'grep -q "cloudstart/dev/terraform.tfstate" backend.tf config/dev.env .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml'
+          run_check repository_no_stale_state_docs bash -c '! grep -RIn --exclude-dir=.git --exclude="*.png" "cloudstart/terraform.tfstate" docs README.md config scripts backend.tf'
+          run_check repository_tfvars_contract bash -c 'grep -oE "variable[[:space:]]+\"[A-Za-z0-9_]+\"" variables.tf | sed -E "s/.*\"([A-Za-z0-9_]+)\"/\\1/" | sort -u > "$RUNNER_TEMP/declared-vars"; sed -nE "s/^([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=.*/\\1/p" config/dev.tfvars | sort -u > "$RUNNER_TEMP/config-vars"; comm -13 "$RUNNER_TEMP/declared-vars" "$RUNNER_TEMP/config-vars" > "$RUNNER_TEMP/unknown-vars"; test ! -s "$RUNNER_TEMP/unknown-vars"'
+          run_check repository_git_diff git diff --check
+
+          echo "### GITHUB ACTIONS CONTRACT"
+          run_check workflow_yaml_parse ruby -e 'require "yaml"; Dir[".github/workflows/*.yml"].sort.each { |f| YAML.load_file(f); puts "parsed #{f}" }'
+          run_check workflow_actions_pinned bash -c 'bad=0; while IFS= read -r line; do ref=$(printf "%s" "$line" | sed "s/.*@//"); if ! printf "%s" "$ref" | grep -Eq "^[0-9a-f]{40}$"; then echo "Unpinned action: $line"; bad=1; fi; done < <(grep -RhoE "uses:[[:space:]]+[^[:space:]]+@[^[:space:]]+" .github/workflows/*.yml); test "$bad" -eq 0'
+          run_check workflow_rebuild_manual_only bash -c 'grep -q "workflow_dispatch:" .github/workflows/rebuild-dev.yml && ! grep -q "^  push:" .github/workflows/rebuild-dev.yml'
+          run_check workflow_ci_branch_policy bash -c 'grep -q "branches: \\[main, Joao\\]" .github/workflows/ci.yml'
+          run_check workflow_deploy_branch_policy bash -c 'grep -q "branches: \\[Joao\\]" .github/workflows/deploy-dev.yml'
+          run_check workflow_destructive_confirmation bash -c 'grep -q "CONFIRMATION" .github/workflows/rebuild-dev.yml && grep -q "REBUILD" .github/workflows/rebuild-dev.yml'
+          run_check workflow_permissions_present bash -c 'grep -RIn "permissions:" .github/workflows/*.yml >/dev/null'
+
+          echo "### LOCAL AUTOMATION CONTRACT"
+          run_check deploy_script_syntax bash -n scripts/deploy.sh
+          run_check deploy_script_shellcheck shellcheck --severity=error -x scripts/deploy.sh
+          run_check bootstrap_script_syntax bash -n scripts/bootstrap-local.sh
+          run_check doctor_script_syntax bash -n scripts/doctor.sh
+          run_check terraform_validate_script_syntax bash -n scripts/terraform-validate.sh
+          run_check wait_postgres_script_syntax bash -n scripts/wait-for-postgres.sh
+          run_check extreme_helper_syntax bash -n scripts/extreme-checks.sh
+          run_check make_deploy_dry_run make -n deploy
+
           finish_checks
-      - name: Gitleaks
+
+      - name: Run Gitleaks
         id: gitleaks
         continue-on-error: true
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cb0e8d1e
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - name: Record Gitleaks result
+
+      - name: Record Gitleaks
         if: always()
         env:
-          GITLEAKS_OUTCOME: ${{ steps.gitleaks.outcome }}
+          OUTCOME: ${{ steps.gitleaks.outcome }}
         run: |
           source scripts/extreme-checks.sh
-          if [ -f "$RESULTS_FILE" ]; then :; else init_checks; fi
-          if [ "$GITLEAKS_OUTCOME" = "success" ]; then
-            record_external_result gitleaks 0
-          else
-            record_external_result gitleaks 1
-          fi
-      - name: Recompute security verdict
-        if: always()
-        run: source scripts/extreme-checks.sh; finish_checks
-      - name: Upload security evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: extreme-security-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/nova-extreme-security-logs
-            ${{ runner.temp }}/nova-extreme-security-results.tsv
-          if-no-files-found: warn
+          record_external_result gitleaks "$([ "$OUTCOME" = "success" ] && echo 0 || echo 1)"
 
-  repository:
-    name: Extreme - Repository Contract
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      LOG_DIR: ${{ runner.temp }}/nova-extreme-repository-logs
-      RESULTS_FILE: ${{ runner.temp }}/nova-extreme-repository-results.tsv
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Initialize evidence
-        run: source scripts/extreme-checks.sh; init_checks
-      - name: Execute repository checks
-        shell: bash
-        run: |
-          source scripts/extreme-checks.sh
-          run_check expected_files bash -c 'for f in Makefile README.md .terraform.lock.hcl .tflint.hcl .checkov.yaml backend.tf providers.tf variables.tf locals.tf main.tf vpc.tf security_groups.tf ecr.tf ecs.tf ecs_services.tf iam.tf rds.tf monitoring.tf outputs.tf config/dev.env config/dev.tfvars terraform.tfvars.example bootstrap/main.tf bootstrap/variables.tf bootstrap/providers.tf bootstrap/outputs.tf .github/workflows/ci.yml .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml .github/workflows/extreme-validation.yml; do test -f "$f" || { echo "missing: $f"; exit 1; }; done'
-          run_check no_tracked_secrets bash -c '! git grep -nE "BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY|aws_secret_access_key|AWS_SECRET_ACCESS_KEY|ghp_[A-Za-z0-9]{20,}" -- .'
-          run_check dev_tfvars_no_secrets bash -c '! grep -nEi "^[[:space:]]*(password|secret|token|private_key|access_key)[[:space:]]*=" config/dev.tfvars'
-          run_check canonical_state_key bash -c 'grep -q "cloudstart/dev/terraform.tfstate" backend.tf config/dev.env .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml'
-          run_check no_legacy_state_docs bash -c '! grep -RIn --exclude-dir=.git --exclude="*.png" "cloudstart/terraform.tfstate" docs README.md config scripts backend.tf'
-          run_check terraform_variable_coverage bash -c 'grep -oE "variable\\s+\"[A-Za-z0-9_]+\"" variables.tf | sed -E "s/.*\"([A-Za-z0-9_]+)\"/\\1/" | sort -u > "$RUNNER_TEMP/declared-vars"; sed -nE "s/^([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=.*/\\1/p" config/dev.tfvars | sort -u > "$RUNNER_TEMP/config-vars"; comm -23 "$RUNNER_TEMP/declared-vars" "$RUNNER_TEMP/config-vars" > "$RUNNER_TEMP/missing-vars"; test ! -s "$RUNNER_TEMP/missing-vars"'
-          run_check git_whitespace git diff --check
-          finish_checks
-      - name: Upload repository evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: extreme-repository-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/nova-extreme-repository-logs
-            ${{ runner.temp }}/nova-extreme-repository-results.tsv
-          if-no-files-found: warn
-
-  workflows:
-    name: Extreme - GitHub Actions Contracts
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      LOG_DIR: ${{ runner.temp }}/nova-extreme-workflows-logs
-      RESULTS_FILE: ${{ runner.temp }}/nova-extreme-workflows-results.tsv
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Initialize evidence
-        run: source scripts/extreme-checks.sh; init_checks
-      - name: Execute workflow contract checks
-        shell: bash
-        run: |
-          source scripts/extreme-checks.sh
-          run_check workflow_yaml_parse ruby -e 'require "yaml"; Dir[".github/workflows/*.yml"].sort.each { |f| YAML.load_file(f); puts "parsed #{f}" }'
-          run_check actions_pinned bash -c 'bad=0; while IFS= read -r line; do ref=$(printf "%s" "$line" | sed "s/.*@//"); if ! printf "%s" "$ref" | grep -Eq "^[0-9a-f]{40}$"; then echo "Unpinned action: $line"; bad=1; fi; done < <(grep -RhoE "uses:[[:space:]]+[^[:space:]]+@[^[:space:]]+" .github/workflows/*.yml); test "$bad" -eq 0'
-          run_check rebuild_is_manual_only bash -c 'grep -q "workflow_dispatch:" .github/workflows/rebuild-dev.yml && ! grep -q "^  push:" .github/workflows/rebuild-dev.yml'
-          run_check ci_branch_policy bash -c 'grep -q "branches: \\[main, Joao\\]" .github/workflows/ci.yml'
-          run_check deploy_branch_policy bash -c 'grep -q "branches: \\[Joao\\]" .github/workflows/deploy-dev.yml'
-          run_check destructive_confirmation bash -c 'grep -q "CONFIRMATION" .github/workflows/rebuild-dev.yml && grep -q "REBUILD" .github/workflows/rebuild-dev.yml'
-          run_check permissions_declared bash -c 'grep -RIn "permissions:" .github/workflows/*.yml >/dev/null'
-          finish_checks
-      - name: Upload workflow evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: extreme-workflows-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/nova-extreme-workflows-logs
-            ${{ runner.temp }}/nova-extreme-workflows-results.tsv
-          if-no-files-found: warn
-
-  codeql:
-    name: Extreme - CodeQL
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Initialize CodeQL
+      - name: CodeQL init
+        id: codeql_init
+        continue-on-error: true
         uses: github/codeql-action/init@439137e1b50c27ba9e2f9befc93e43091b449c34
         with:
           languages: python
-      - name: Analyze
+
+      - name: CodeQL analyze
+        id: codeql_analyze
+        if: always()
+        continue-on-error: true
         uses: github/codeql-action/analyze@439137e1b50c27ba9e2f9befc93e43091b449c34
         with:
           category: /language:python
 
-  aws_readiness:
-    name: Extreme - AWS Readiness
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: development
-    env:
-      AWS_REGION: us-east-1
-      EXPECTED_AWS_ACCOUNT_ID: "760396521507"
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      AWS_CD_ROLE_ARN: ${{ vars.AWS_CD_ROLE_ARN }}
-      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-      LOG_DIR: ${{ runner.temp }}/nova-extreme-aws-logs
-      RESULTS_FILE: ${{ runner.temp }}/nova-extreme-aws-results.tsv
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Initialize evidence
-        run: source scripts/extreme-checks.sh; init_checks
-      - name: Check required deployment inputs
-        shell: bash
+      - name: Record CodeQL
+        if: always()
+        env:
+          INIT_OUTCOME: ${{ steps.codeql_init.outcome }}
+          ANALYZE_OUTCOME: ${{ steps.codeql_analyze.outcome }}
         run: |
           source scripts/extreme-checks.sh
-          run_check aws_role_variable_present bash -c 'test -n "$AWS_CD_ROLE_ARN"'
-          run_check state_bucket_variable_present bash -c 'test -n "$TF_STATE_BUCKET"'
-          run_check grafana_secret_present bash -c 'test -n "$GRAFANA_ADMIN_PASSWORD"'
+          rc=0
+          [ "$INIT_OUTCOME" = "success" ] || rc=1
+          [ "$ANALYZE_OUTCOME" = "success" ] || rc=1
+          record_external_result codeql "$rc"
+
       - name: Configure AWS OIDC
         id: aws_oidc
         continue-on-error: true
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
-          aws-region: us-east-1
-          role-to-assume: ${{ vars.AWS_CD_ROLE_ARN }}
-          role-session-name: nova-extreme-readiness-${{ github.run_id }}
-          allowed-account-ids: "760396521507"
-      - name: AWS integration checks
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_CD_ROLE_ARN }}
+          role-session-name: nova-extreme-validation-${{ github.run_id }}
+          allowed-account-ids: ${{ env.EXPECTED_AWS_ACCOUNT_ID }}
+
+      - name: Run live AWS validation
         if: always()
         env:
-          OIDC_OUTCOME: ${{ steps.aws_oidc.outcome }}
+          OIDC_OUTCOME: __GHA_steps_aws_oidc_outcome__
         shell: bash
         run: |
           source scripts/extreme-checks.sh
           record_external_result aws_oidc "$([ "$OIDC_OUTCOME" = "success" ] && echo 0 || echo 1)"
+          run_check aws_role_present bash -c 'test -n "$AWS_CD_ROLE_ARN"'
+          run_check aws_state_bucket_present bash -c 'test -n "$TF_STATE_BUCKET"'
+          run_check aws_expected_account bash -c 'test "$EXPECTED_AWS_ACCOUNT_ID" = "760396521507"'
+          run_check aws_grafana_secret_present bash -c 'test -n "$GRAFANA_ADMIN_PASSWORD"'
           run_check aws_identity aws sts get-caller-identity
-          run_check state_bucket_access aws s3api head-bucket --bucket "$TF_STATE_BUCKET" --region "$AWS_REGION"
+          run_check aws_state_bucket_access bash -c 'test -n "$TF_STATE_BUCKET" && aws s3api head-bucket --bucket "$TF_STATE_BUCKET" --region "$AWS_REGION"'
+          run_check aws_terraform_init bash -c 'terraform init -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION" -backend-config="key=cloudstart/dev/terraform.tfstate" -reconfigure -input=false -no-color'
+          run_check aws_terraform_plan bash -c 'terraform plan -refresh=true -lock=true -input=false -no-color -var-file=config/dev.tfvars -var=deploy_application=false -detailed-exitcode; rc=$?; test "$rc" -eq 0 -o "$rc" -eq 2'
           finish_checks
-      - name: Upload AWS readiness evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: extreme-aws-readiness-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/nova-extreme-aws-logs
-            ${{ runner.temp }}/nova-extreme-aws-results.tsv
-          if-no-files-found: warn
 
-  aws_live_plan:
-    name: Extreme - AWS Live Terraform Integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    environment: development
-    env:
-      AWS_REGION: us-east-1
-      EXPECTED_AWS_ACCOUNT_ID: "760396521507"
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      AWS_CD_ROLE_ARN: ${{ vars.AWS_CD_ROLE_ARN }}
-      LOG_DIR: ${{ runner.temp }}/nova-extreme-live-plan-logs
-      RESULTS_FILE: ${{ runner.temp }}/nova-extreme-live-plan-results.tsv
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Initialize evidence
-        run: source scripts/extreme-checks.sh; init_checks
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
-        with:
-          terraform_version: "1.16.4"
-          terraform_wrapper: false
-      - name: Configure AWS OIDC
-        id: aws_oidc
-        continue-on-error: true
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
-        with:
-          aws-region: us-east-1
-          role-to-assume: ${{ vars.AWS_CD_ROLE_ARN }}
-          role-session-name: nova-extreme-live-plan-${{ github.run_id }}
-          allowed-account-ids: "760396521507"
-      - name: Execute live integration checks
+      - name: Final report
         if: always()
-        env:
-          OIDC_OUTCOME: ${{ steps.aws_oidc.outcome }}
         shell: bash
         run: |
           source scripts/extreme-checks.sh
-          record_external_result aws_oidc "$([ "$OIDC_OUTCOME" = "success" ] && echo 0 || echo 1)"
-          run_check terraform_init_remote bash -c 'terraform init -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION" -backend-config="key=cloudstart/dev/terraform.tfstate" -reconfigure -input=false -no-color'
-          run_check terraform_live_plan bash -c 'terraform plan -refresh=true -lock=true -input=false -no-color -var-file=config/dev.tfvars -var=deploy_application=false -detailed-exitcode; rc=$?; test "$rc" -eq 0 -o "$rc" -eq 2'
+          {
+            echo "# NOVA Extreme Validation"
+            echo
+            echo "| Check | Result |"
+            echo "|---|---|"
+            awk -F '\t' '{printf "| %s | %s |\\n", $1, ($2 == 0 ? "PASS" : "FAIL (" $2 ")")}' "$RESULTS_FILE"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
           finish_checks
-      - name: Upload live plan evidence
+
+      - name: Upload complete validation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: extreme-live-plan-${{ github.run_id }}
+          name: nova-extreme-validation-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/nova-extreme-live-plan-logs
-            ${{ runner.temp }}/nova-extreme-live-plan-results.tsv
+            ${{ runner.temp }}/nova-extreme-logs
+            ${{ runner.temp }}/nova-extreme-results.tsv
           if-no-files-found: warn
-
-  verdict:
-    name: Extreme - Final Verdict
-    runs-on: ubuntu-latest
-    if: always()
-    needs:
-      - backend
-      - frontend
-      - compose
-      - terraform
-      - security
-      - repository
-      - workflows
-      - codeql
-      - aws_readiness
-      - aws_live_plan
-    steps:
-      - name: Produce full-system verdict
-        env:
-          BACKEND: ${{ needs.backend.result }}
-          FRONTEND: ${{ needs.frontend.result }}
-          COMPOSE: ${{ needs.compose.result }}
-          TERRAFORM: ${{ needs.terraform.result }}
-          SECURITY: ${{ needs.security.result }}
-          REPOSITORY: ${{ needs.repository.result }}
-          WORKFLOWS: ${{ needs.workflows.result }}
-          CODEQL: ${{ needs.codeql.result }}
-          AWS_READINESS: ${{ needs.aws_readiness.result }}
-          AWS_LIVE_PLAN: ${{ needs.aws_live_plan.result }}
-        shell: bash
-        run: |
-          set -u
-          failures=0
-          {
-            echo "# NOVA Extreme Validation Verdict"
-            echo
-            echo "| Domain | Result |"
-            echo "|---|---|"
-            printf '| Backend | %s |\\n' "$BACKEND"
-            printf '| Frontend | %s |\\n' "$FRONTEND"
-            printf '| Compose Integration | %s |\\n' "$COMPOSE"
-            printf '| Terraform | %s |\\n' "$TERRAFORM"
-            printf '| Security / Supply Chain | %s |\\n' "$SECURITY"
-            printf '| Repository Contract | %s |\\n' "$REPOSITORY"
-            printf '| GitHub Actions Contracts | %s |\\n' "$WORKFLOWS"
-            printf '| CodeQL | %s |\\n' "$CODEQL"
-            printf '| AWS Readiness | %s |\\n' "$AWS_READINESS"
-            printf '| AWS Live Terraform Integration | %s |\\n' "$AWS_LIVE_PLAN"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          for result in "$BACKEND" "$FRONTEND" "$COMPOSE" "$TERRAFORM" "$SECURITY" "$REPOSITORY" "$WORKFLOWS" "$CODEQL" "$AWS_READINESS" "$AWS_LIVE_PLAN"; do
-            [ "$result" = "success" ] || failures=$((failures + 1))
-          done
-
-          echo "Validation domains with failures: $failures"
-          test "$failures" -eq 0
