@@ -32,10 +32,7 @@ tflint:
 	$(TOOLS_BIN)/tflint --config .tflint.hcl --format compact --chdir bootstrap
 
 tf-validate:
-	$(TERRAFORM) init -backend=false -input=false -no-color
-	$(TERRAFORM) validate -no-color
-	$(TERRAFORM) -chdir=bootstrap init -backend=false -input=false -no-color
-	$(TERRAFORM) -chdir=bootstrap validate -no-color
+	bash scripts/terraform-validate.sh
 
 tf-init:
 	@test -n "$$TF_STATE_BUCKET" || (echo "Set TF_STATE_BUCKET first"; exit 1)
