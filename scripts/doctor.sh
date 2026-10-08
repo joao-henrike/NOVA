@@ -38,6 +38,7 @@ check "ruff" "$VENV_BIN/python" -m ruff --version
 check "mypy" "$VENV_BIN/python" -m mypy --version
 check "bandit" "$VENV_BIN/python" -m bandit --version
 check "docker" docker --version
+check "buildx" docker buildx version
 check "compose" docker compose version
 check "aws" aws --version
 check "curl" curl --version
