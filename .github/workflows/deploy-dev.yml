@@ -177,8 +177,8 @@ jobs:
           set -euo pipefail
           account_id="$(aws sts get-caller-identity --query Account --output text)"
           registry="$account_id.dkr.ecr.$AWS_REGION.amazonaws.com"
-          docker tag cloudstart/dev-frontend:${GITHUB_SHA} "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend:${GITHUB_SHA}"
-          docker tag cloudstart/dev-backend:${GITHUB_SHA} "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend:${GITHUB_SHA}"
+          docker tag "cloudstart/dev-frontend:${GITHUB_SHA}" "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend:${GITHUB_SHA}"
+          docker tag "cloudstart/dev-backend:${GITHUB_SHA}" "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend:${GITHUB_SHA}"
           docker push "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend:${GITHUB_SHA}"
           docker push "$registry/$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend:${GITHUB_SHA}"
 
