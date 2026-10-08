@@ -12,6 +12,12 @@ on:
         required: false
         type: string
         default: ""
+  push:
+    branches:
+      - Joao
+    paths:
+      - .github/workflows/rebuild-dev.trigger
+
 
 permissions:
   contents: read
@@ -45,12 +51,27 @@ jobs:
           persist-credentials: false
 
       - name: Require explicit confirmation
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
-          test "${{ inputs.confirmation }}" = "REBUILD" || {
-            echo "Refusing destructive rebuild. The workflow input must be exactly REBUILD." >&2
-            exit 1
-          }
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            test "$CONFIRMATION" = "REBUILD" || {
+              echo "Refusing destructive rebuild. The workflow input must be exactly REBUILD." >&2
+              exit 1
+            }
+          else
+            test -f .github/workflows/rebuild-dev.trigger || {
+              echo "Refusing destructive rebuild: trigger file is missing." >&2
+              exit 1
+            }
+            grep -qx "AUTHORIZED_REBUILD" .github/workflows/rebuild-dev.trigger || {
+              echo "Refusing destructive rebuild: trigger file authorization marker is invalid." >&2
+              exit 1
+            }
+          fi
 
       - name: Configure AWS OIDC
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
@@ -189,6 +210,26 @@ jobs:
           check_absent \
             "backend ECR" \
             aws ecr describe-repositories --region "$AWS_REGION" --repository-names "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend"
+
+          for tg in             "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend-tg"             "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend-tg"             "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-grafana-tg"; do
+            tg_arn="$(aws elbv2 describe-target-groups --region "$AWS_REGION" --names "$tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)"
+            if [ -n "$tg_arn" ] && [ "$tg_arn" != "None" ]; then
+              echo "FAIL: target group still exists: $tg"
+              failures=1
+            else
+              echo "OK: target group absent: $tg"
+            fi
+          done
+
+          for subnet_group in             "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-db-subnets"             "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-monitoring-db-subnets"; do
+            subnet_group_exists="$(aws rds describe-db-subnet-groups --region "$AWS_REGION" --db-subnet-group-name "$subnet_group" --query 'DBSubnetGroups[0].DBSubnetGroupName' --output text 2>/dev/null || true)"
+            if [ -n "$subnet_group_exists" ] && [ "$subnet_group_exists" != "None" ]; then
+              echo "FAIL: DB subnet group still exists: $subnet_group"
+              failures=1
+            else
+              echo "OK: DB subnet group absent: $subnet_group"
+            fi
+          done
 
           cluster_status="$(aws ecs describe-clusters --region "$AWS_REGION" --clusters "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-cluster" --query 'clusters[0].status' --output text 2>/dev/null || true)"
           if [ -n "$cluster_status" ] && [ "$cluster_status" != "None" ]; then
