@@ -36,7 +36,7 @@ tf-validate:
 
 tf-init:
 	@test -n "$$TF_STATE_BUCKET" || (echo "Set TF_STATE_BUCKET first"; exit 1)
-	$(TERRAFORM) init --backend-config="bucket=$TF_STATE_BUCKET" --backend-config="region=$(AWS_REGION)" --reconfigure --input=false
+	$(TERRAFORM) init --backend-config="bucket=$$TF_STATE_BUCKET" --backend-config="region=$(AWS_REGION)" --reconfigure --input=false
 
 tf-plan:
 	$(TERRAFORM) plan -refresh=true -lock=true -input=false -no-color
