@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TOOLS_BIN="$ROOT_DIR/.tools/bin"
 VENV_BIN="$ROOT_DIR/.venv/bin"
 
+export PATH="$TOOLS_BIN:$PATH"
+
 ok=0
 failures=0
 
@@ -26,8 +28,8 @@ printf '%s\n\n' "Branch: $(git -C "$ROOT_DIR" branch --show-current)"
 
 test "$(git -C "$ROOT_DIR" branch --show-current)" = "Joao"   && printf 'OK    %-18s Joao\n' "git-branch"   || { printf 'FAIL  %-18s expected Joao\n' "git-branch"; failures=$((failures + 1)); }
 
-check "terraform" "$TOOLS_BIN/terraform" version
-check "tflint" "$TOOLS_BIN/tflint" --version
+check "terraform" terraform version
+check "tflint" tflint --version
 check "python" "$VENV_BIN/python" --version
 check "pytest" "$VENV_BIN/python" -m pytest --version
 check "ruff" "$VENV_BIN/python" -m ruff --version
