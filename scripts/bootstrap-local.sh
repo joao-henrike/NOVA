@@ -134,16 +134,16 @@ setup_python() {
 }
 
 validate() {
-  say "Validating repository"
+  say "Validating local application workspace"
 
+  "$BIN_DIR/terraform" version
   "$BIN_DIR/terraform" fmt -check -recursive
-  "$BIN_DIR/terraform" init -backend=false -input=false -no-color
-  "$BIN_DIR/terraform" validate -no-color
 
-  "$BIN_DIR/terraform" -chdir="$ROOT_DIR/bootstrap" init -backend=false -input=false -no-color
-  "$BIN_DIR/terraform" -chdir="$ROOT_DIR/bootstrap" validate -no-color
+  "$VENV_DIR/bin/python" -m compileall -q \
+    "$ROOT_DIR/apps/backend/app" \
+    "$ROOT_DIR/apps/backend/tests"
 
-  "$VENV_DIR/bin/python" -m compileall -q     "$ROOT_DIR/apps/backend/app"     "$ROOT_DIR/apps/backend/tests"
+  say "Local workspace validation passed"
 }
 
 main() {
@@ -177,6 +177,9 @@ Run:
   source "$VENV_DIR/bin/activate"
   make doctor
   make up
+
+Infrastructure validation is separate and downloads Terraform providers:
+  make tf-validate
 EOF
 }
 
