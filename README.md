@@ -1231,7 +1231,7 @@ The root backend uses:
 ```hcl
 terraform {
   backend "s3" {
-    key          = "cloudstart/terraform.tfstate"
+    key          = "cloudstart/dev/terraform.tfstate"
     encrypt      = true
     use_lockfile = true
   }
