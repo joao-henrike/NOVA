@@ -112,16 +112,22 @@ jobs:
           run_check frontend_nginx_contract bash -c 'grep -q "location = /health" apps/frontend/nginx.conf && grep -q "try_files" apps/frontend/nginx.conf'
 
           echo "### COMPOSE"
+          cat > "$RUNNER_TEMP/compose-ci-override.yml" <<'EOF'
+services:
+  postgres:
+    ports:
+      - "15432:5432"
+EOF
           run_check app_compose_config docker compose -p nova-extreme-app -f docker-compose.yml config --quiet
           run_check monitoring_compose_config docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml config --quiet
           run_check app_compose_build docker compose -p nova-extreme-app -f docker-compose.yml build --pull
-          run_check app_compose_up docker compose -p nova-extreme-app -f docker-compose.yml up -d
-          run_check app_compose_smoke bash -c 'for _ in $(seq 1 45); do curl --fail --silent http://127.0.0.1:8080/ >/dev/null && curl --fail --silent http://127.0.0.1:8080/api/health >/dev/null && curl --fail --silent http://127.0.0.1:8080/api/health/db >/dev/null && exit 0; sleep 2; done; docker compose -p nova-extreme-app -f docker-compose.yml ps; docker compose -p nova-extreme-app -f docker-compose.yml logs --no-color; exit 1'
+          run_check app_compose_up docker compose -p nova-extreme-app -f docker-compose.yml -f "$RUNNER_TEMP/compose-ci-override.yml" up -d
+          run_check app_compose_smoke bash -c 'for _ in $(seq 1 45); do curl --fail --silent http://127.0.0.1:8080/ >/dev/null && curl --fail --silent http://127.0.0.1:8080/api/health >/dev/null && curl --fail --silent http://127.0.0.1:8080/api/health/db >/dev/null && exit 0; sleep 2; done; docker compose -p nova-extreme-app -f docker-compose.yml -f "$RUNNER_TEMP/compose-ci-override.yml" ps; docker compose -p nova-extreme-app -f docker-compose.yml -f "$RUNNER_TEMP/compose-ci-override.yml" logs --no-color; exit 1'
           run_check app_compose_auth_contract bash -c 'status=$(curl --silent --output /tmp/items.json --write-out "%{http_code}" http://127.0.0.1:8080/api/items); test "$status" = "401"'
           run_check monitoring_compose_up docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml up -d
           run_check grafana_smoke bash -c 'for _ in $(seq 1 60); do curl --fail --silent http://127.0.0.1:3000/api/health >/dev/null && exit 0; sleep 3; done; exit 1'
           run_check zabbix_web_smoke bash -c 'for _ in $(seq 1 60); do curl --fail --silent http://127.0.0.1:8081/ >/dev/null && exit 0; sleep 3; done; exit 1'
-          run_check compose_cleanup bash -c 'docker compose -p nova-extreme-app -f docker-compose.yml down -v --remove-orphans; docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml down -v --remove-orphans'
+          run_check compose_cleanup bash -c 'docker compose -p nova-extreme-app -f docker-compose.yml -f "$RUNNER_TEMP/compose-ci-override.yml" down -v --remove-orphans; docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml down -v --remove-orphans'
 
           echo "### TERRAFORM"
           run_check terraform_fmt terraform fmt -check -recursive -diff
