@@ -35,7 +35,7 @@ tf-validate:
 	bash scripts/terraform-validate.sh
 
 tf-init:
-	@test -n "$TF_STATE_BUCKET" || (echo "Set TF_STATE_BUCKET first"; exit 1)
+	@test -n "$$TF_STATE_BUCKET" || (echo "Set TF_STATE_BUCKET first"; exit 1)
 	$(TERRAFORM) init --backend-config="bucket=$TF_STATE_BUCKET" --backend-config="region=$(AWS_REGION)" --reconfigure --input=false
 
 tf-plan:
@@ -83,5 +83,5 @@ smoke:
 	curl --fail --silent --show-error http://127.0.0.1:8080/api/info >/dev/null
 	curl --fail --silent --show-error http://127.0.0.1:8080/api/health/db >/dev/null
 	@status=$(curl --silent --output /tmp/nova-items.json --write-out "%{http_code}" http://127.0.0.1:8080/api/items); \
-	test "$status" = "401"
+	test "$$status" = "401"
 	@echo "Local smoke tests passed."
