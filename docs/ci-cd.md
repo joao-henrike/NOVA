@@ -6,10 +6,14 @@ This document describes the CI and CD workflows currently committed in `.github/
 
 ```text
 .github/workflows/ci.yml
+.github/workflows/extreme-validation.yml
 .github/workflows/deploy-dev.yml
+.github/workflows/rebuild-dev.yml
 ```
 
-Legacy `container-ci.yml` and `terraform-lint.yml` workflows were removed so there is a single source of truth for validation.
+The standard CI is the fast blocking gate. `extreme-validation.yml` is the full-system evidence gate. `deploy-dev.yml` performs non-destructive application delivery, while `rebuild-dev.yml` is an explicitly confirmed destructive infrastructure rebuild.
+
+Legacy `container-ci.yml` and `terraform-lint.yml` workflows were removed so there is a single standard CI source of truth.
 
 ## CI
 
@@ -78,6 +82,44 @@ CodeQL
 ```
 
 HIGH/CRITICAL infrastructure and image findings are blocking. The CI Terraform Trivy scan uses a runner-generated trusted configuration and a temporary empty ignore file; repository-level Trivy policy is not trusted by this blocking gate.
+
+## Extreme Validation
+
+`extreme-validation.yml` is intentionally broader than the normal CI. It runs a single resilient validation runner so that an early failure does not suppress later diagnostics.
+
+Each check is executed independently and recorded as:
+
+```text
+CHECK_NAME    EXIT_CODE
+```
+
+The runner continues after failures across these domains:
+
+```text
+Backend quality
+Frontend image/runtime
+Application Compose integration
+Monitoring Compose integration
+Terraform root + bootstrap
+TFLint
+Terraform configuration plan preview
+Repository contract
+Secret-pattern checks
+GitHub Actions workflow contracts
+Shell script syntax
+Deployment automation dry-run
+Gitleaks
+CodeQL
+AWS OIDC readiness
+Remote Terraform backend access
+Live AWS Terraform plan
+```
+
+Every check writes its own log under the runner temporary directory. The workflow uploads the collected logs and result table as a GitHub Actions artifact even when the final verdict is failure.
+
+The final verdict is blocking: a single failed check makes the extreme validation workflow fail, but the workflow still attempts the remaining independent checks first.
+
+The extreme validation workflow does not destroy or apply AWS infrastructure. Destructive end-to-end reconstruction remains isolated to `rebuild-dev.yml` and requires explicit `REBUILD` confirmation.
 
 ## CD — Development
 
