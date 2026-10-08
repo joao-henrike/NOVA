@@ -44,7 +44,6 @@ The bootstrap script:
 - installs AWS CLI v2 locally when the host does not already provide it;
 - creates `.venv`;
 - installs backend runtime and development Python dependencies;
-- installs the CI-aligned Checkov and pip-audit versions;
 - validates root and bootstrap Terraform configurations;
 - compiles the backend Python source and tests.
 
@@ -65,7 +64,7 @@ Check everything:
 make doctor
 ```
 
-The doctor checks the branch, Terraform, TFLint, Python, pytest, Ruff, mypy, Bandit, Checkov, pip-audit, Docker, Compose, AWS CLI, and curl.
+The doctor checks the branch, Terraform, TFLint, Python, pytest, Ruff, mypy, Bandit, Docker, Compose, AWS CLI, and curl. CI-only tools such as Checkov and pip-audit are not installed by the default local bootstrap.
 
 ## 4. Run the application locally
 
