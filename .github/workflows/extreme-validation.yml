@@ -179,6 +179,44 @@ EOF
 
           finish_checks
 
+      - name: Trivy configuration scan
+        id: trivy_config
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Record Trivy configuration result
+        if: always()
+        env:
+          OUTCOME: ${{ steps.trivy_config.outcome }}
+        run: |
+          source scripts/extreme-checks.sh
+          record_external_result security_trivy_config "$([ "$OUTCOME" = "success" ] && echo 0 || echo 1)"
+
+      - name: Trivy filesystem scan
+        id: trivy_fs
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Record Trivy filesystem result
+        if: always()
+        env:
+          OUTCOME: ${{ steps.trivy_fs.outcome }}
+        run: |
+          source scripts/extreme-checks.sh
+          record_external_result security_trivy_fs "$([ "$OUTCOME" = "success" ] && echo 0 || echo 1)"
       - name: Run Gitleaks
         id: gitleaks
         continue-on-error: true
