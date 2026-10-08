@@ -1,0 +1,432 @@
+name: NOVA - Rebuild Development From Scratch
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type REBUILD to delete the existing CloudStart dev infrastructure and recreate it from Joao."
+        required: true
+        type: string
+      image_tag:
+        description: "Optional immutable ECR tag. Defaults to the current Joao commit SHA."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: nova-rebuild-development
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  EXPECTED_AWS_ACCOUNT_ID: "760396521507"
+  PROJECT_NAME: cloudstart
+  DEPLOY_ENVIRONMENT: dev
+  TF_STATE_BUCKET: cloudstart-nova-terraform-state-760396521507
+  TF_STATE_KEY: cloudstart/dev/terraform.tfstate
+  LEGACY_STATE_KEYS: "cloudstart/redeploy-2026-10-08/terraform.tfstate cloudstart/terraform.tfstate"
+  TERRAFORM_VERSION: "1.16.4"
+
+jobs:
+  rebuild:
+    name: Destroy legacy infrastructure and recreate from Joao
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
+      - name: Checkout Joao
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: Joao
+          persist-credentials: false
+
+      - name: Require explicit confirmation
+        run: |
+          set -euo pipefail
+          test "\${{ inputs.confirmation }}" = "REBUILD" || {
+            echo "Refusing destructive rebuild. The workflow input must be exactly REBUILD." >&2
+            exit 1
+          }
+
+      - name: Configure AWS OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          aws-region: \${{ env.AWS_REGION }}
+          role-to-assume: \${{ vars.AWS_CD_ROLE_ARN }}
+          role-session-name: nova-rebuild-\${{ github.run_id }}
+          allowed-account-ids: \${{ env.EXPECTED_AWS_ACCOUNT_ID }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+        with:
+          terraform_version: \${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Select immutable application tag
+        run: |
+          set -euo pipefail
+          tag="\${{ inputs.image_tag }}"
+          if [ -z "$tag" ]; then
+            tag="$GITHUB_SHA"
+          fi
+          echo "IMAGE_TAG=$tag" >> "$GITHUB_ENV"
+
+      - name: Generate deployment secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          password="$(python3 - <<'PY'
+          import secrets
+          print(secrets.token_urlsafe(32))
+          PY
+          )"
+          {
+            echo "TF_VAR_grafana_admin_password<<EOF"
+            echo "$password"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+          unset password
+
+      - name: Terraform static validation
+        run: |
+          set -euo pipefail
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false -no-color
+          terraform validate -no-color
+
+      - name: Destroy existing Terraform states
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          destroy_state() {
+            key="$1"
+            safe_key="$(echo "$key" | tr '/:' '__')"
+            data_dir="$RUNNER_TEMP/tf-destroy-$safe_key"
+            plugin_dir="$RUNNER_TEMP/tf-plugin-cache-$safe_key"
+            cli_config="$RUNNER_TEMP/terraformrc-$safe_key"
+
+            echo "=== State: $key ==="
+
+            if ! aws s3api head-object \
+              --bucket "$TF_STATE_BUCKET" \
+              --key "$key" \
+              >/dev/null 2>&1; then
+              echo "No state object; skipping."
+              return 0
+            fi
+
+            export TF_DATA_DIR="$data_dir"
+            export TF_PLUGIN_CACHE_DIR="$plugin_dir"
+            export TF_CLI_CONFIG_FILE="$cli_config"
+
+            mkdir -p "$TF_PLUGIN_CACHE_DIR"
+            printf 'plugin_cache_dir = "%s"\n' "$TF_PLUGIN_CACHE_DIR" > "$TF_CLI_CONFIG_FILE"
+
+            terraform init \
+              -backend-config="bucket=$TF_STATE_BUCKET" \
+              -backend-config="region=$AWS_REGION" \
+              -backend-config="key=$key" \
+              -reconfigure \
+              -input=false \
+              -no-color
+
+            state="$(terraform state list 2>/dev/null || true)"
+            if [ -z "$state" ]; then
+              echo "State is empty; skipping."
+              return 0
+            fi
+
+            terraform plan \
+              -destroy \
+              -refresh=true \
+              -lock=true \
+              -input=false \
+              -no-color \
+              -var-file=config/dev.tfvars \
+              -out="$RUNNER_TEMP/$safe_key-destroy.tfplan"
+
+            terraform apply \
+              -input=false \
+              -auto-approve \
+              "$RUNNER_TEMP/$safe_key-destroy.tfplan"
+          }
+
+          destroy_state "$TF_STATE_KEY"
+
+          for key in $LEGACY_STATE_KEYS; do
+            destroy_state "$key"
+          done
+
+      - name: Verify legacy CloudStart resources are gone
+        shell: bash
+        run: |
+          set -euo pipefail
+          failures=0
+
+          check_absent() {
+            name="$1"
+            shift
+            if "$@" >/dev/null 2>&1; then
+              echo "FAIL: $name still exists."
+              failures=1
+            else
+              echo "OK: $name absent."
+            fi
+          }
+
+          check_absent \
+            "frontend ECR" \
+            aws ecr describe-repositories --region "$AWS_REGION" --repository-names "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend"
+
+          check_absent \
+            "backend ECR" \
+            aws ecr describe-repositories --region "$AWS_REGION" --repository-names "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend"
+
+          cluster_status="$(aws ecs describe-clusters --region "$AWS_REGION" --clusters "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-cluster" --query 'clusters[0].status' --output text 2>/dev/null || true)"
+          if [ -n "$cluster_status" ] && [ "$cluster_status" != "None" ]; then
+            echo "FAIL: ECS cluster still exists: $cluster_status"
+            failures=1
+          else
+            echo "OK: ECS cluster absent."
+          fi
+
+          alb_arn="$(aws elbv2 describe-load-balancers --region "$AWS_REGION" --names "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-alb" --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null || true)"
+          if [ -n "$alb_arn" ] && [ "$alb_arn" != "None" ]; then
+            echo "FAIL: ALB still exists."
+            failures=1
+          else
+            echo "OK: ALB absent."
+          fi
+
+          rds_count="$(aws rds describe-db-instances --region "$AWS_REGION" --query '[.DBInstances[] | select(.DBInstanceIdentifier == \`cloudstart-dev-db\` or .DBInstanceIdentifier == \`cloudstart-dev-monitoring-db\`)] | length' --output text)"
+          if [ "$rds_count" != "0" ]; then
+            echo "FAIL: RDS instances still exist: $rds_count"
+            failures=1
+          else
+            echo "OK: RDS instances absent."
+          fi
+
+          secret_count="$(aws secretsmanager list-secrets --region "$AWS_REGION" --query '[.SecretList[] | select(.Name == \`cloudstart-dev/monitoring/grafana-admin\`)] | length' --output text)"
+          if [ "$secret_count" != "0" ]; then
+            echo "FAIL: Grafana secret still exists."
+            failures=1
+          else
+            echo "OK: Grafana secret absent."
+          fi
+
+          role_count="$(aws iam list-roles --query '[.Roles[] | select(.RoleName == \`cloudstart-dev-ecs-execution\` or .RoleName == \`cloudstart-dev-ecs-monitoring-execution\` or .RoleName == \`cloudstart-dev-ecs-frontend-task\` or .RoleName == \`cloudstart-dev-ecs-backend-task\` or .RoleName == \`cloudstart-dev-ecs-monitoring-task\`)] | length' --output text)"
+          if [ "$role_count" != "0" ]; then
+            echo "FAIL: CloudStart IAM roles still exist: $role_count"
+            failures=1
+          else
+            echo "OK: CloudStart IAM roles absent."
+          fi
+
+          test "$failures" -eq 0
+
+      - name: Initialize fresh deployment state
+        shell: bash
+        run: |
+          set -euo pipefail
+          export TF_DATA_DIR="$RUNNER_TEMP/tf-deploy"
+          export TF_PLUGIN_CACHE_DIR="$RUNNER_TEMP/tf-plugin-cache-deploy"
+          export TF_CLI_CONFIG_FILE="$RUNNER_TEMP/terraformrc-deploy"
+
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          printf 'plugin_cache_dir = "%s"\n' "$TF_PLUGIN_CACHE_DIR" > "$TF_CLI_CONFIG_FILE"
+
+          terraform init \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="key=$TF_STATE_KEY" \
+            -reconfigure \
+            -input=false \
+            -no-color
+
+      - name: Plan and apply fresh infrastructure baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          terraform plan \
+            -refresh=false \
+            -lock=true \
+            -input=false \
+            -no-color \
+            -var-file=config/dev.tfvars \
+            -var='deploy_application=false' \
+            -var="frontend_image_tag=$IMAGE_TAG" \
+            -var="backend_image_tag=$IMAGE_TAG" \
+            -out="$RUNNER_TEMP/baseline.tfplan"
+
+          terraform show -json "$RUNNER_TEMP/baseline.tfplan" > "$RUNNER_TEMP/baseline.json"
+
+          deletes="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(any(.change.actions[]?; . == "delete"))] | length' "$RUNNER_TEMP/baseline.json")"
+          noncreate="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(.change.actions != ["create"]) | .address] | length' "$RUNNER_TEMP/baseline.json")"
+
+          test "$deletes" -eq 0
+          test "$noncreate" -eq 0
+
+          terraform apply \
+            -input=false \
+            -auto-approve \
+            "$RUNNER_TEMP/baseline.tfplan"
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
+        with:
+          mask-password: true
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: apps/frontend
+          push: true
+          tags: |
+            \${{ env.EXPECTED_AWS_ACCOUNT_ID }}.dkr.ecr.\${{ env.AWS_REGION }}.amazonaws.com/\${{ env.PROJECT_NAME }}-\${{ env.DEPLOY_ENVIRONMENT }}-frontend:\${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push backend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: apps/backend
+          push: true
+          tags: |
+            \${{ env.EXPECTED_AWS_ACCOUNT_ID }}.dkr.ecr.\${{ env.AWS_REGION }}.amazonaws.com/\${{ env.PROJECT_NAME }}-\${{ env.DEPLOY_ENVIRONMENT }}-backend:\${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: \${{ env.EXPECTED_AWS_ACCOUNT_ID }}.dkr.ecr.\${{ env.AWS_REGION }}.amazonaws.com/\${{ env.PROJECT_NAME }}-\${{ env.DEPLOY_ENVIRONMENT }}-frontend:\${{ env.IMAGE_TAG }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: \${{ env.EXPECTED_AWS_ACCOUNT_ID }}.dkr.ecr.\${{ env.AWS_REGION }}.amazonaws.com/\${{ env.PROJECT_NAME }}-\${{ env.DEPLOY_ENVIRONMENT }}-backend:\${{ env.IMAGE_TAG }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Plan and apply application activation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          terraform plan \
+            -refresh=true \
+            -lock=true \
+            -input=false \
+            -no-color \
+            -var-file=config/dev.tfvars \
+            -var='deploy_application=true' \
+            -var="frontend_image_tag=$IMAGE_TAG" \
+            -var="backend_image_tag=$IMAGE_TAG" \
+            -out="$RUNNER_TEMP/application.tfplan"
+
+          terraform show -json "$RUNNER_TEMP/application.tfplan" > "$RUNNER_TEMP/application.json"
+
+          deletes="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(any(.change.actions[]?; . == "delete"))] | length' "$RUNNER_TEMP/application.json")"
+          unexpected="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(.change.actions != ["no-op"]) | select(.address | test("^(aws_ecs_task_definition\\.frontend|aws_ecs_task_definition\\.backend|aws_ecs_service\\.frontend|aws_ecs_service\\.backend|aws_appautoscaling_target\\.frontend|aws_appautoscaling_target\\.backend)$") | not) | .address] | length' "$RUNNER_TEMP/application.json")"
+
+          test "$deletes" -eq 0
+          test "$unexpected" -eq 0
+
+          terraform apply \
+            -input=false \
+            -auto-approve \
+            "$RUNNER_TEMP/application.tfplan"
+
+      - name: Wait for ECS services
+        shell: bash
+        run: |
+          set -euo pipefail
+          cluster="$(terraform output -raw ecs_cluster_name)"
+          aws ecs wait services-stable \
+            --cluster "$cluster" \
+            --services \
+              "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend" \
+              "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend" \
+              "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-monitoring" \
+            --region "$AWS_REGION"
+
+      - name: Run database migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          cluster="$(terraform output -raw ecs_cluster_name)"
+          task_definition="$(terraform output -raw backend_task_definition_arn)"
+          backend_sg="$(terraform output -raw backend_security_group_id)"
+          subnets="$(terraform output -json private_app_subnet_ids | jq -c '[.[]]')"
+          network_config="$(jq -nc --argjson subnets "$subnets" --arg sg "$backend_sg" '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"DISABLED"}}')"
+          overrides="$(jq -nc '{containerOverrides:[{name:"backend",command:["alembic","upgrade","head"]}]}')"
+
+          task_arn="$(aws ecs run-task \
+            --cluster "$cluster" \
+            --task-definition "$task_definition" \
+            --launch-type FARGATE \
+            --network-configuration "$network_config" \
+            --overrides "$overrides" \
+            --region "$AWS_REGION" \
+            --query 'tasks[0].taskArn' \
+            --output text)"
+
+          test -n "$task_arn" && test "$task_arn" != "None"
+
+          aws ecs wait tasks-stopped \
+            --cluster "$cluster" \
+            --tasks "$task_arn" \
+            --region "$AWS_REGION"
+
+          exit_code="$(aws ecs describe-tasks \
+            --cluster "$cluster" \
+            --tasks "$task_arn" \
+            --region "$AWS_REGION" \
+            --query "tasks[0].containers[?name=='backend'].exitCode | [0]" \
+            --output text)"
+
+          test "$exit_code" = "0"
+
+      - name: Development smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          alb_dns="$(terraform output -raw alb_dns_name)"
+          base_url="http://$alb_dns"
+
+          curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/" >/dev/null
+          curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/api/health" >/dev/null
+          curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/api/info" >/dev/null
+          curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/api/health/db" >/dev/null
+
+          status="$(curl --silent --output "$RUNNER_TEMP/items.json" --write-out '%{http_code}' "$base_url/api/items")"
+          test "$status" = "401"
+
+          curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/grafana/api/health" >/dev/null
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          {
+            echo "## NOVA Development Rebuild"
+            echo
+            echo "- Branch: \`Joao\`"
+            echo "- AWS region: \`$AWS_REGION\`"
+            echo "- Image tag: \`$IMAGE_TAG\`"
+            echo "- ALB: \`http://$(terraform output -raw alb_dns_name)\`"
+            echo "- Grafana: \`$(terraform output -raw grafana_url)\`"
+            echo "- State key: \`$TF_STATE_KEY\`"
+          } >> "$GITHUB_STEP_SUMMARY"
