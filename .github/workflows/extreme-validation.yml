@@ -174,9 +174,17 @@ jobs:
           finish_checks
 
       - name: Run Gitleaks
+        id: gitleaks
         continue-on-error: true
+        run: ./scripts/run-gitleaks.sh
+
+      - name: Record Gitleaks result
+        if: always()
+        env:
+          GITLEAKS_OUTCOME: ${{ steps.gitleaks.outcome }}
         run: |
-          ./scripts/run-gitleaks.sh
+          source scripts/extreme-checks.sh
+          record_external_result gitleaks "$([ "$GITLEAKS_OUTCOME" = "success" ] && echo 0 || echo 1)"
       - name: CodeQL init
         id: codeql_init
         continue-on-error: true
