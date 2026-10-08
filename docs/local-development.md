@@ -48,7 +48,7 @@ The bootstrap script:
 - validates root and bootstrap Terraform configurations;
 - compiles the backend Python source and tests.
 
-The script does not create AWS resources.
+The bootstrap does **not** authenticate to AWS, authenticate to GitHub, create credentials, or create AWS resources.
 
 ## 3. Load the local tool environment
 
@@ -161,24 +161,65 @@ as defined by the repository and CI workflow.
 
 The repository does not store AWS credentials.
 
-For CloudShell, AWS CLI normally uses the current CloudShell identity:
+### Current CloudShell phase
+
+AWS authentication is intentionally **not part of the bootstrap**.
+
+CloudShell can already provide the AWS execution identity needed for commands executed from that environment. The bootstrap only installs/prepares the AWS CLI; it does not call `aws configure`, create access keys, write credential files, or fetch secrets.
+
+### Future local-workstation phase
+
+A future authentication helper should:
+
+```text
+.env
+ |
+ +--> AWS credential/configuration inputs
+ |
+ v
+authentication helper
+ |
+ v
+AWS CLI / Terraform session
+```
+
+The future implementation must:
+
+- read credentials/configuration from a local `.env` or another explicitly approved secret source;
+- never commit the `.env`;
+- never print secret values;
+- avoid embedding credentials in Terraform files;
+- fail closed when required values are missing.
+
+That helper is intentionally **not implemented yet**.
+
+Confirm the current identity manually when AWS deployment is actually being performed:
 
 ```bash
 aws sts get-caller-identity
 ```
 
-For a local workstation, configure AWS authentication using the user's approved AWS CLI method before running Terraform against AWS.
+## 8. Future GitHub authentication
 
-Confirm the account and region before deployment:
+The repository is already cloned from GitHub during normal setup, so no GitHub authentication step is required for the current CloudShell bootstrap.
 
-```bash
-aws sts get-caller-identity
-aws configure get region || true
+A future authentication helper may provide a standardized GitHub CLI/Git workflow:
+
+```text
+.env / approved credential source
+          |
+          v
+GitHub authentication helper
+          |
+          +--> gh auth
+          +--> git credential / token flow
 ```
 
-The bootstrap itself never writes credentials into the repository.
+The future helper must never commit, echo, or persist plaintext credentials in tracked repository files.
 
-## 8. Terraform remote state
+This GitHub authentication layer is also intentionally **not implemented yet**.
+
+## 9. Terraform remote state
 
 The root Terraform configuration uses an S3 backend with the S3 lockfile mechanism.
 
@@ -207,7 +248,7 @@ terraform -chdir=bootstrap apply
 
 Do not commit `bootstrap/terraform.tfvars`.
 
-## 9. Initialize the root backend
+## 10. Initialize the root backend
 
 After the state bucket exists:
 
@@ -231,7 +272,7 @@ Verify:
 terraform state list
 ```
 
-## 10. Build application images
+## 11. Build application images
 
 The production ECS task definitions use immutable ECR tags.
 
@@ -256,7 +297,7 @@ docker run --rm "cloudstart-dev-frontend:$IMAGE_TAG" nginx -t
 
 The AWS frontend image must not depend on the Docker Compose hostname `backend`.
 
-## 11. Repository boundaries
+## 12. Repository boundaries
 
 The bootstrap creates only local developer artifacts:
 
@@ -269,7 +310,7 @@ Both are ignored by Git.
 
 Secrets, AWS credentials, Terraform state, `.tfvars`, and certificates must never be committed.
 
-## 12. CloudShell
+## 13. CloudShell
 
 AWS CloudShell is a supported execution environment for this repository.
 
@@ -287,7 +328,7 @@ make smoke
 
 After local validation, the AWS deployment flow should be executed explicitly.
 
-## 13. Deployment automation boundary
+## 14. Deployment automation boundary
 
 The local bootstrap is intentionally separate from AWS provisioning.
 
@@ -308,6 +349,12 @@ AWS deployment
     +--> ECS deployment
     +--> migrations
     +--> smoke tests
+
+Future authentication
+    |
+    +--> local .env / approved secret source
+    +--> AWS authentication helper
+    +--> GitHub authentication helper
 ```
 
 This separation makes failures attributable to a specific layer and prevents a local environment bootstrap from unexpectedly creating billable AWS resources.
