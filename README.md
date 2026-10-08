@@ -2084,12 +2084,26 @@ terraform.tfvars
 .terraform/
 *.backup*
 audit-nova-*/
+.deploy/
+.env
+.env.*
+secrets/
 ```
 
-The following are allowed and expected:
+The versioned development configuration is intentionally separated from generic Terraform variable files:
+
+```text
+config/dev.tfvars
+config/dev.env
+```
+
+These files contain only non-sensitive deployment values and state metadata.
+
+The following example files are also allowed:
 
 ```text
 terraform.tfvars.example
+bootstrap/terraform.tfvars.example
 ```
 
 ---
@@ -2758,7 +2772,16 @@ evidence
 
 ## 66. One-command operational starting point
 
-For an operator returning to the project:
+The development environment now has a repository-owned deployment configuration and an end-to-end deployment command.
+
+The non-sensitive configuration lives in:
+
+```text
+config/dev.tfvars
+config/dev.env
+```
+
+A fresh deployment from the `Joao` branch is:
 
 ```bash
 cd ~/NOVA
@@ -2767,25 +2790,42 @@ git fetch origin
 git switch Joao
 git pull --ff-only origin Joao
 
-git status --short --branch
-terraform validate
-
-terraform plan -out=nova-start.tfplan
+make deploy
 ```
 
-Then review the plan before:
+The command automatically:
 
-```bash
-terraform apply nova-start.tfplan
+```text
+verify branch and AWS account
+        ↓
+initialize the dedicated development state key
+        ↓
+plan and apply the complete infrastructure baseline
+        ↓
+build frontend/backend images from the checked-out source
+        ↓
+push immutable Git-SHA images to ECR
+        ↓
+activate frontend/backend ECS services
+        ↓
+wait for ECS stability
+        ↓
+run Alembic migrations
+        ↓
+run ALB/API/database/Grafana smoke tests
 ```
 
-After deployment:
+The repository configuration deliberately keeps `deploy_application = false` as the Terraform file baseline. The deployment script enables it only after ECR exists and the new images have been published.
 
-```bash
-terraform output
+The Grafana administrator password is generated locally on first deployment and stored only under:
+
+```text
+.deploy/grafana-admin-password
 ```
 
-and perform the ECS/ALB/RDS/Monitoring checks documented above.
+That path is ignored by Git. AWS RDS master credentials remain managed by RDS and Secrets Manager.
+
+The automation never authenticates to GitHub and never writes credentials to the repository.
 
 ---
 
