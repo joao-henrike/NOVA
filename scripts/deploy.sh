@@ -40,7 +40,7 @@ command -v jq >/dev/null 2>&1 || fatal "jq is required by the deployment automat
 command -v curl >/dev/null 2>&1 || fatal "curl is required by the deployment automation."
 
 git_branch="$(git branch --show-current)"
-[ "$git_branch" = "Joao" ] || fatal "Deployment is restricted to branch Joao; current branch: \${git_branch:-detached HEAD}."
+[ "$git_branch" = "Joao" ] || fatal "Deployment is restricted to branch Joao; current branch: ${git_branch:-detached HEAD}."
 
 test -z "$(git status --porcelain)" || fatal "Working tree contains uncommitted or untracked changes. Commit or stash them before deployment."
 
@@ -53,7 +53,7 @@ log "AWS region : $AWS_REGION"
 mkdir -p "$SECRET_DIR"
 chmod 700 "$SECRET_DIR"
 
-if [ -n "\${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+if [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
   printf '%s' "$GRAFANA_ADMIN_PASSWORD" > "$SECRET_FILE"
 elif [ -s "$SECRET_FILE" ]; then
   GRAFANA_ADMIN_PASSWORD="$(cat "$SECRET_FILE")"
@@ -73,7 +73,7 @@ password_length="$(wc -c < "$SECRET_FILE")"
 export TF_VAR_grafana_admin_password="$GRAFANA_ADMIN_PASSWORD"
 unset GRAFANA_ADMIN_PASSWORD
 
-IMAGE_TAG="\${DEPLOY_TAG:-$(git rev-parse --short=12 HEAD)}"
+IMAGE_TAG="${DEPLOY_TAG:-$(git rev-parse --short=12 HEAD)}"
 [ -n "$IMAGE_TAG" ] || fatal "Could not determine deployment image tag."
 
 export TF_VAR_frontend_image_tag="$IMAGE_TAG"
