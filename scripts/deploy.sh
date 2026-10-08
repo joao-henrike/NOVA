@@ -42,7 +42,7 @@ command -v curl >/dev/null 2>&1 || fatal "curl is required by the deployment aut
 git_branch="$(git branch --show-current)"
 [ "$git_branch" = "Joao" ] || fatal "Deployment is restricted to branch Joao; current branch: \${git_branch:-detached HEAD}."
 
-git diff --quiet && git diff --cached --quiet || fatal "Working tree contains uncommitted changes. Commit or stash them before deployment."
+test -z "$(git status --porcelain)" || fatal "Working tree contains uncommitted or untracked changes. Commit or stash them before deployment."
 
 log "Checking AWS identity"
 actual_account="$(aws sts get-caller-identity --query Account --output text)"
@@ -107,8 +107,8 @@ terraform plan \
 
 terraform show -json "$BASELINE_PLAN" > "$BASELINE_JSON"
 
-BASELINE_DELETES="$(jq '[.resource_changes[]? | select(any(.change.actions[]?; . == "delete"))] | length' "$BASELINE_JSON")"
-BASELINE_NONCREATE="$(jq '[.resource_changes[]? | select(.change.actions != ["create"]) | .address] | length' "$BASELINE_JSON")"
+BASELINE_DELETES="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(any(.change.actions[]?; . == "delete"))] | length' "$BASELINE_JSON")"
+BASELINE_NONCREATE="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(.change.actions != ["create"]) | .address] | length' "$BASELINE_JSON")"
 
 [ "$BASELINE_DELETES" -eq 0 ] || fatal "Fresh baseline plan contains deletions."
 [ "$BASELINE_NONCREATE" -eq 0 ] || fatal "Fresh baseline plan contains non-create resource actions."
@@ -148,7 +148,7 @@ terraform plan \
 
 terraform show -json "$APPLICATION_PLAN" > "$APPLICATION_JSON"
 
-APP_DELETES="$(jq '[.resource_changes[]? | select(any(.change.actions[]?; . == "delete"))] | length' "$APPLICATION_JSON")"
+APP_DELETES="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(any(.change.actions[]?; . == "delete"))] | length' "$APPLICATION_JSON")"
 APP_UNEXPECTED="$(jq '[.resource_changes[]? | select(.change.actions != ["no-op"]) | select(.address | test("^(aws_ecs_task_definition\\.frontend|aws_ecs_task_definition\\.backend|aws_ecs_service\\.frontend|aws_ecs_service\\.backend|aws_appautoscaling_target\\.frontend|aws_appautoscaling_target\\.backend)$") | not) | .address] | length' "$APPLICATION_JSON")"
 
 [ "$APP_DELETES" -eq 0 ] || fatal "Application activation plan contains deletions."
