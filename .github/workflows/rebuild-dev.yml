@@ -47,27 +47,13 @@ jobs:
 
       - name: Require explicit confirmation
         env:
-          EVENT_NAME: ${{ github.event_name }}
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
-
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            test "$CONFIRMATION" = "REBUILD" || {
-              echo "Refusing destructive rebuild. The workflow input must be exactly REBUILD." >&2
-              exit 1
-            }
-          else
-            test -f .github/workflows/rebuild-dev.trigger || {
-              echo "Refusing destructive rebuild: trigger file is missing." >&2
-              exit 1
-            }
-            grep -qx "AUTHORIZED_REBUILD" .github/workflows/rebuild-dev.trigger || {
-              echo "Refusing destructive rebuild: trigger file authorization marker is invalid." >&2
-              exit 1
-            }
-          fi
-
+          test "$CONFIRMATION" = "REBUILD" || {
+            echo "Refusing destructive rebuild. The workflow input must be exactly REBUILD." >&2
+            exit 1
+          }
       - name: Configure AWS OIDC
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
