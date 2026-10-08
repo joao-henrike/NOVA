@@ -42,6 +42,7 @@ check "buildx" docker buildx version
 check "compose" docker compose version
 check "aws" aws --version
 check "curl" curl --version
+check "jq" jq --version
 
 if [ "${CHECK_CI_TOOLS:-0}" = "1" ]; then
   check "checkov" "$VENV_BIN/checkov" --version
