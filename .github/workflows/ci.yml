@@ -236,7 +236,7 @@ jobs:
           TRIVY_IGNOREFILE: ${{ runner.temp }}/empty.trivyignore
       - name: Gitleaks
         shell: bash
-        run: ./scripts/run-gitleaks.sh
+        run: bash scripts/run-gitleaks.sh
 
       - name: ShellCheck
         run: shellcheck --severity=error -x ./*.sh scripts/*.sh
