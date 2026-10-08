@@ -26,7 +26,9 @@ printf '%s\n' "CloudStart / NOVA environment doctor"
 printf '%s\n' "Repository: $ROOT_DIR"
 printf '%s\n\n' "Branch: $(git -C "$ROOT_DIR" branch --show-current)"
 
-test "$(git -C "$ROOT_DIR" branch --show-current)" = "Joao"   && printf 'OK    %-18s Joao\n' "git-branch"   || { printf 'FAIL  %-18s expected Joao\n' "git-branch"; failures=$((failures + 1)); }
+test "$(git -C "$ROOT_DIR" branch --show-current)" = "Joao" \
+  && printf 'OK    %-18s Joao\n' "git-branch" \
+  || { printf 'FAIL  %-18s expected Joao\n' "git-branch"; failures=$((failures + 1)); }
 
 check "terraform" terraform version
 check "tflint" tflint --version
@@ -35,12 +37,15 @@ check "pytest" "$VENV_BIN/python" -m pytest --version
 check "ruff" "$VENV_BIN/python" -m ruff --version
 check "mypy" "$VENV_BIN/python" -m mypy --version
 check "bandit" "$VENV_BIN/python" -m bandit --version
-check "checkov" "$VENV_BIN/checkov" --version
-check "pip-audit" "$VENV_BIN/pip-audit" --version
 check "docker" docker --version
 check "compose" docker compose version
 check "aws" aws --version
 check "curl" curl --version
+
+if [ "${CHECK_CI_TOOLS:-0}" = "1" ]; then
+  check "checkov" "$VENV_BIN/checkov" --version
+  check "pip-audit" "$VENV_BIN/pip-audit" --version
+fi
 
 printf '\n'
 if [ "$failures" -eq 0 ]; then
