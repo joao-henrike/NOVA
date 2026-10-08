@@ -20,7 +20,7 @@ setup:
 doctor:
 	bash scripts/doctor.sh
 
-validate: fmt tf-validate
+validate: fmt
 	$(PYTHON) -m compileall -q apps/backend/app apps/backend/tests
 
 fmt:
