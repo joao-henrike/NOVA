@@ -2897,3 +2897,85 @@ Therefore:
 
 > **Every important infrastructure correction must end up documented and versioned in `Joao`, so that the next environment can be recreated from source rather than from memory or manual console changes.**
 
+
+
+---
+
+## 70. Reproducible local/CloudShell bootstrap
+
+A fresh checkout can prepare the project-specific local environment from the repository itself.
+
+From the `Joao` branch:
+
+```bash
+git clone --branch Joao --single-branch https://github.com/joao-henrike/NOVA.git
+cd NOVA
+make setup
+make doctor
+```
+
+The bootstrap downloads the pinned project tooling into `.tools/bin`:
+
+```text
+Terraform 1.16.4
+TFLint    0.64.0
+AWS CLI v2 (only when the host does not already provide it)
+```
+
+It also creates:
+
+```text
+.venv/
+```
+
+and installs the backend runtime/development dependencies together with the CI-aligned Checkov and pip-audit versions.
+
+The bootstrap never creates AWS resources.
+
+### Local application
+
+Start the complete application stack:
+
+```bash
+make up
+make smoke
+```
+
+Run backend tests:
+
+```bash
+make test
+```
+
+Run migrations only:
+
+```bash
+make migrate
+```
+
+Stop the local stack:
+
+```bash
+make down
+```
+
+### Infrastructure validation
+
+```bash
+make validate
+make tflint
+```
+
+Remote Terraform state is configured separately and requires an explicit `TF_STATE_BUCKET` before:
+
+```bash
+make tf-init
+```
+
+The full local bootstrap and development workflow is documented in:
+
+```text
+docs/local-development.md
+```
+
+This keeps environment preparation reproducible while preserving a hard boundary between local setup and billable AWS provisioning.
