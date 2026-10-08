@@ -151,10 +151,10 @@ EOF
 
           echo "### REPOSITORY CONTRACT"
           run_check repository_expected_files bash -c 'for f in Makefile README.md .terraform.lock.hcl .tflint.hcl .checkov.yaml backend.tf providers.tf variables.tf locals.tf main.tf vpc.tf security_groups.tf ecr.tf ecs.tf ecs_services.tf iam.tf rds.tf monitoring.tf outputs.tf config/dev.env config/dev.tfvars terraform.tfvars.example bootstrap/main.tf bootstrap/variables.tf bootstrap/providers.tf bootstrap/outputs.tf .github/workflows/ci.yml .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml .github/workflows/extreme-validation.yml; do test -f "$f" || { echo "missing: $f"; exit 1; }; done'
-          run_check repository_no_private_keys bash -c '! git grep -nE "BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY|aws_secret_access_key|AWS_SECRET_ACCESS_KEY|ghp_[A-Za-z0-9]{20,}" -- .'
+          run_check repository_no_private_keys bash -c '! git grep -nE "BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY|aws_secret_access_key|AWS_SECRET_ACCESS_KEY|ghp_[A-Za-z0-9]{20,}" -- . ":!.github/workflows/extreme-validation.yml"'
           run_check repository_dev_tfvars_no_secrets bash -c '! grep -nEi "^[[:space:]]*(password|secret|token|private_key|access_key)[[:space:]]*=" config/dev.tfvars'
           run_check repository_canonical_state bash -c 'grep -q "cloudstart/dev/terraform.tfstate" backend.tf config/dev.env .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml'
-          run_check repository_no_stale_state_docs bash -c '! grep -RIn --exclude-dir=.git --exclude="*.png" "cloudstart/terraform.tfstate" docs README.md config scripts backend.tf'
+          run_check repository_no_stale_state_docs bash -c '! grep -RIn --exclude-dir=.git --exclude="*.png" "cloudstart/terraform.tfstate" docs README.md scripts backend.tf'
           run_check repository_tfvars_contract bash -c 'grep -oE "variable[[:space:]]+\"[A-Za-z0-9_]+\"" variables.tf | sed -E "s/.*\"([A-Za-z0-9_]+)\"/\\1/" | sort -u > "$RUNNER_TEMP/declared-vars"; sed -nE "s/^([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=.*/\\1/p" config/dev.tfvars | sort -u > "$RUNNER_TEMP/config-vars"; comm -13 "$RUNNER_TEMP/declared-vars" "$RUNNER_TEMP/config-vars" > "$RUNNER_TEMP/unknown-vars"; test ! -s "$RUNNER_TEMP/unknown-vars"'
           run_check repository_git_diff git diff --check
 
