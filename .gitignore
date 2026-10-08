@@ -53,6 +53,7 @@ tfdoc/
 # Local bootstrap environment and downloaded CLI tools
 .tools/
 .venv/
+.tflint.d/
 
 # Python / Node artifacts if auxiliary tooling is added later
 __pycache__/
