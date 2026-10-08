@@ -117,7 +117,7 @@ jobs:
       - name: Validate backend runtime
         run: |
           set -euo pipefail
-          docker run -d --name nova-backend-ci -p 18000:8000 cloudstart/backend:ci-${GITHUB_SHA}
+          docker run -d --name nova-backend-ci -p 18000:8000 "cloudstart/backend:ci-${GITHUB_SHA}"
           for _ in $(seq 1 20); do
             if curl --fail --silent http://127.0.0.1:18000/health >/dev/null; then exit 0; fi
             sleep 2
