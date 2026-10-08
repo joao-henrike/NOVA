@@ -491,7 +491,7 @@ Destroy canonical dev state
      ↓
 Destroy legacy state:
   cloudstart/redeploy-2026-10-08/terraform.tfstate
-  cloudstart/terraform.tfstate
+  cloudstart/dev/terraform.tfstate
      ↓
 Verify old CloudStart named resources are absent
      ↓
