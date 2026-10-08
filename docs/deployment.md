@@ -17,6 +17,26 @@ An AWS identity with permissions to create the Terraform-managed resources is re
 
 ## 2. Repository defaults
 
+The development environment now has repository-owned non-sensitive configuration:
+
+```text
+config/dev.tfvars
+config/dev.env
+```
+
+For a fresh development deployment, the preferred command is:
+
+```bash
+make deploy
+```
+
+The deployment automation verifies branch `Joao` and the expected AWS account, initializes the dedicated state key, creates the full infrastructure baseline, builds and pushes immutable frontend/backend images, activates ECS, runs migrations, waits for all ECS services, and performs ALB/API/database/Grafana smoke tests.
+
+The Grafana administrator password is generated locally by `scripts/deploy.sh` on first use and stored under `.deploy/`. This directory is ignored by Git. AWS RDS master passwords remain managed by RDS and Secrets Manager.
+
+The automation does not authenticate GitHub or store GitHub credentials.
+
+
 Unless overridden through Terraform variables or a `.tfvars` file, the current defaults include:
 
 ```text
@@ -25,7 +45,9 @@ environment               = dev
 aws_region                = us-east-1
 availability_zone_count   = 2
 vpc_cidr                  = 10.20.0.0/16
-deploy_application        = true
+deploy_application        = false
+
+The committed `config/dev.tfvars` keeps this safe Terraform baseline. `make deploy` temporarily overrides it only after ECR repositories exist and the new application images are available.
 frontend_image_tag        = v0.1.1
 backend_image_tag         = v0.1.0
 frontend_desired_count    = 2
@@ -36,7 +58,8 @@ frontend_max_count        = 6
 backend_max_count         = 6
 db_engine_version          = 16
 db_instance_class          = db.t4g.micro
-db_backup_retention        = 1 day
+db_backup_retention         = 1 day
+monitoring_db_backup_retention = 1 day
 ```
 
 The effective ECS desired/minimum count follows the configured desired/minimum values while `deploy_application = true`.
@@ -155,7 +178,7 @@ Before application deployment:
 terraform plan
 ```
 
-The plan should declare the infrastructure and application control plane, while the ECS services remain configured for zero running tasks because `deploy_application` is false by default.
+The plan should declare the infrastructure and application control plane, while the ECS services remain configured for zero running tasks because `deploy_application` is false in the committed baseline. The one-command deployment overrides this only after the ECR/image phase.
 
 ## 8. Apply the infrastructure baseline
 
