@@ -6,7 +6,13 @@ TERRAFORM := $(TOOLS_BIN)/terraform
 PYTHON := $(VENV_BIN)/python
 AWS_REGION ?= us-east-1
 
-.PHONY: setup doctor validate fmt tflint up down logs restart test migrate smoke tf-init tf-validate tf-plan
+.DEFAULT_GOAL := start
+
+.PHONY: start setup doctor validate fmt tflint up down logs restart test migrate smoke tf-init tf-validate tf-plan
+
+# Default entry point after cloning the repository.
+# It prepares the local environment, validates it, and starts the application.
+start: setup doctor validate up
 
 setup:
 	bash scripts/bootstrap-local.sh
@@ -67,6 +73,5 @@ smoke:
 	curl --fail --silent --show-error http://127.0.0.1:8080/api/health >/dev/null
 	curl --fail --silent --show-error http://127.0.0.1:8080/api/info >/dev/null
 	curl --fail --silent --show-error http://127.0.0.1:8080/api/health/db >/dev/null
-	@status=$$(curl --silent --output /tmp/nova-items.json --write-out "%{http_code}" http://127.0.0.1:8080/api/items); \
-	test "$$status" = "401"
+	@status=$$(curl --silent --output /tmp/nova-items.json --write-out "%{http_code}" http://127.0.0.1:8080/api/items); 	test "$$status" = "401"
 	@echo "Local smoke tests passed."
