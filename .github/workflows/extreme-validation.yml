@@ -91,6 +91,7 @@ jobs:
           echo "### BACKEND"
           run_check backend_dependency_install python -m pip install --upgrade pip
           run_check backend_dependencies python -m pip install -r apps/backend/requirements.txt -r apps/backend/requirements-dev.txt
+          run_check backend_install_pip_audit python -m pip install --disable-pip-version-check --no-warn-script-location pip-audit==2.10.1
           run_check backend_pip_check pip check
           run_check backend_compile python -m compileall -q apps/backend/app apps/backend/tests
           run_check backend_ruff ruff check apps/backend/app apps/backend/tests
