@@ -12,11 +12,6 @@ on:
         required: false
         type: string
         default: ""
-  push:
-    branches:
-      - Joao
-    paths:
-      - .github/workflows/rebuild-dev.trigger
 
 
 permissions:
