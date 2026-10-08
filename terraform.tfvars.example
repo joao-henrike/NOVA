@@ -36,7 +36,7 @@ db_instance_class          = "db.t4g.micro"
 db_engine_version          = "16"
 db_allocated_storage       = 20
 db_max_allocated_storage   = 100
-db_backup_retention_period = 7
+db_backup_retention_period = 1
 
 owner              = "cloudstart"
 cost_center        = "cloudstart-mvp"
@@ -47,4 +47,4 @@ rds_deletion_protection = false
 
 
 # Monitoring stack (Zabbix + Grafana)
-grafana_admin_password = "CHANGE-ME-WITH-AT-LEAST-12-CHARACTERS"
+# The deployment script generates this sensitive value locally and passes it to Terraform.
