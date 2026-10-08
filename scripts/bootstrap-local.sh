@@ -11,8 +11,6 @@ DOCKER_CLI_PLUGINS_DIR="$DOCKER_CONFIG_DIR/cli-plugins"
 TERRAFORM_VERSION="1.16.4"
 TFLINT_VERSION="0.64.0"
 COMPOSE_VERSION="5.6.0"
-CHECKOV_VERSION="3.3.8"
-PIP_AUDIT_VERSION="2.10.1"
 
 mkdir -p "$BIN_DIR" "$DOCKER_CLI_PLUGINS_DIR"
 
@@ -129,8 +127,10 @@ setup_python() {
     python3 -m venv "$VENV_DIR"
   fi
 
-  "$VENV_DIR/bin/python" -m pip install --upgrade pip
-  "$VENV_DIR/bin/pip" install     -r "$ROOT_DIR/apps/backend/requirements.txt"     -r "$ROOT_DIR/apps/backend/requirements-dev.txt"     "checkov==$CHECKOV_VERSION"     "pip-audit==$PIP_AUDIT_VERSION"
+  export PIP_NO_CACHE_DIR=1
+
+  "$VENV_DIR/bin/python" -m pip install --upgrade --no-cache-dir pip
+  "$VENV_DIR/bin/pip" install     --no-cache-dir     -r "$ROOT_DIR/apps/backend/requirements.txt"     -r "$ROOT_DIR/apps/backend/requirements-dev.txt"
 }
 
 validate() {
