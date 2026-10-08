@@ -279,6 +279,13 @@ jobs:
             grep -q '^on:' "$f" || grep -q '^"on":' "$f"
             grep -q '^jobs:' "$f"
           done
+      - name: Install actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Actionlint
+        run: actionlint
+
       - name: Verify actions are pinned
         shell: bash
         run: |
