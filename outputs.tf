@@ -58,6 +58,11 @@ output "backend_ecs_service_name" {
   value       = aws_ecs_service.backend.name
 }
 
+output "backend_security_group_id" {
+  description = "Security group ID used by the backend ECS service and private migration tasks."
+  value       = aws_security_group.backend.id
+}
+
 output "frontend_task_definition_arn" {
   description = "Current frontend ECS task definition ARN."
   value       = aws_ecs_task_definition.frontend.arn
