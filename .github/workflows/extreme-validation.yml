@@ -105,9 +105,9 @@ jobs:
           run_check backend_pytest bash -c 'cd apps/backend && pytest -q'
 
           echo "### FRONTEND"
-          run_check frontend_build docker build --pull -t nova-extreme-frontend:$GITHUB_SHA apps/frontend
-          run_check frontend_nginx_config docker run --rm nova-extreme-frontend:$GITHUB_SHA nginx -t
-          run_check frontend_runtime bash -c 'cid=$(docker run -d -p 18080:80 nova-extreme-frontend:$GITHUB_SHA); trap "docker rm -f $cid >/dev/null 2>&1 || true" EXIT; for _ in $(seq 1 30); do curl --fail --silent http://127.0.0.1:18080/health >/dev/null && curl --fail --silent http://127.0.0.1:18080/ >/dev/null && exit 0; sleep 2; done; exit 1'
+          run_check frontend_build docker build --pull -t "nova-extreme-frontend:$GITHUB_SHA" apps/frontend
+          run_check frontend_nginx_config docker run --rm "nova-extreme-frontend:$GITHUB_SHA" nginx -t
+          run_check frontend_runtime bash -c 'cid=$(docker run -d -p 18080:80 "nova-extreme-frontend:$GITHUB_SHA"); trap "docker rm -f $cid >/dev/null 2>&1 || true" EXIT; for _ in $(seq 1 30); do curl --fail --silent http://127.0.0.1:18080/health >/dev/null && curl --fail --silent http://127.0.0.1:18080/ >/dev/null && exit 0; sleep 2; done; exit 1'
           run_check frontend_html_contract python3 -c 'from pathlib import Path; from html.parser import HTMLParser; t=Path("apps/frontend/public/index.html").read_text(); p=HTMLParser(); p.feed(t); assert "<title>CloudStart</title>" in t'
           run_check frontend_nginx_contract bash -c 'grep -q "location = /health" apps/frontend/nginx.conf && grep -q "try_files" apps/frontend/nginx.conf'
 
@@ -215,7 +215,7 @@ jobs:
       - name: Run Gitleaks
         id: gitleaks
         continue-on-error: true
-        run: ./scripts/run-gitleaks.sh
+        run: bash scripts/run-gitleaks.sh
 
       - name: Record Gitleaks result
         if: always()
