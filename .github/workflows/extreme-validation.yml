@@ -41,9 +41,7 @@ jobs:
     env:
       AWS_REGION: us-east-1
       EXPECTED_AWS_ACCOUNT_ID: "760396521507"
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       AWS_CD_ROLE_ARN: ${{ vars.AWS_CD_ROLE_ARN }}
-      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
       DATABASE_URL: postgresql+psycopg://cloudstart_admin:postgres-extreme-ci-only@127.0.0.1:5432/cloudstart
       DB_HOST: 127.0.0.1
       DB_PORT: "5432"
@@ -80,6 +78,23 @@ jobs:
 
       - name: Initialize evidence
         run: source scripts/extreme-checks.sh; init_checks
+
+      - name: Load deployment metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          source config/dev.env
+          {
+            echo "AWS_REGION=$AWS_REGION"
+            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED_AWS_ACCOUNT_ID"
+            echo "TF_STATE_BUCKET=$TF_STATE_BUCKET"
+          } >> "$GITHUB_ENV"
+          printf 'validation-%s\n' "$(openssl rand -hex 24)" > "$RUNNER_TEMP/grafana-admin-password"
+          {
+            echo "GRAFANA_ADMIN_PASSWORD<<EOF"
+            cat "$RUNNER_TEMP/grafana-admin-password"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
       - name: Execute exhaustive local validation
         continue-on-error: true
