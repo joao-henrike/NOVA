@@ -260,3 +260,36 @@ jobs:
         uses: github/codeql-action/analyze@439137e1b50c27ba9e2f9befc93e43091b449c34
         with:
           category: /language:python
+  workflows:
+    name: GitHub Actions Workflow Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout workflows
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+      - name: Parse workflow YAML
+        run: ruby -e 'require "yaml"; Dir[".github/workflows/*.yml"].sort.each { |f| YAML.load_file(f); puts "parsed #{f}" }'
+      - name: Validate workflow structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in .github/workflows/*.yml; do
+            grep -q '^name:' "$f"
+            grep -q '^on:' "$f" || grep -q '^"on":' "$f"
+            grep -q '^jobs:' "$f"
+          done
+      - name: Verify actions are pinned
+        shell: bash
+        run: |
+          set -euo pipefail
+          bad=0
+          while IFS= read -r line; do
+            ref="$(printf '%s' "$line" | sed 's/.*@//')"
+            if ! printf '%s' "$ref" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "Unpinned action: $line"
+              bad=1
+            fi
+          done < <(grep -RhoE 'uses:[[:space:]]+[^[:space:]]+@[^[:space:]]+' .github/workflows/*.yml)
+          test "$bad" -eq 0
+
