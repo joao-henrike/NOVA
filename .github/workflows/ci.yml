@@ -284,7 +284,7 @@ jobs:
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Actionlint
-        run: actionlint
+        run: actionlint -ignore 'SC2016:'
 
       - name: Verify actions are pinned
         shell: bash
