@@ -104,6 +104,15 @@ inventory_aws() {
   aws iam list-roles --output json 2>/dev/null | jq -r '.Roles[]? | select(.RoleName|startswith("cloudstart-dev-")) | [.RoleName,.Arn] | @tsv' || true
   aws logs describe-log-groups --output json 2>/dev/null | jq -r '.logGroups[]? | select((.logGroupName|startswith("/ecs/cloudstart-dev")) or (.logGroupName|startswith("cloudstart-dev"))) | [.logGroupName,(.storedBytes // 0)] | @tsv' || true
   echo
+  echo "=== Lambda / SSM parameters ==="
+  aws lambda list-functions --output json 2>/dev/null | jq -r '.Functions[]? | select(.FunctionName|startswith("cloudstart-dev-")) | [.FunctionName,.FunctionArn] | @tsv' || true
+  aws ssm describe-parameters --output json 2>/dev/null | jq -r '.Parameters[]? | select((.Name|startswith("/cloudstart-dev/")) or (.Name|startswith("/cloudstart/dev/"))) | .Name' || true
+  echo
+  echo "=== EC2 instances / EIPs / EBS volumes ==="
+  aws ec2 describe-addresses --output json 2>/dev/null | jq -r '.Addresses[]? | select(any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev-nat-eip"))) or (any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev"))) | [.AllocationId,(.AssociationId // ""),(.PublicIp // "")] | @tsv' || true
+  aws ec2 describe-instances --output json 2>/dev/null | jq -r '.Reservations[].Instances[]? | select(.State.Name!="terminated") | select(any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | [.InstanceId,.State.Name] | @tsv' || true
+  aws ec2 describe-volumes --output json 2>/dev/null | jq -r '.Volumes[]? | select(.State!="deleted") | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev"))) | [.VolumeId,.State,.Size] | @tsv' || true
+  echo
   echo "=== VPCs / NAT / subnets / ENIs ==="
   data="$(aws ec2 describe-vpcs --output json 2>/dev/null || printf '{"Vpcs":[]}')"
   jq -r '.Vpcs[]? | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | [.VpcId,.CidrBlock] | @tsv' <<< "$data"
