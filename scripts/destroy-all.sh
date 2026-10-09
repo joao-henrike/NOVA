@@ -189,6 +189,11 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   [[ -z "$networks" ]] || run_step "remove_repo_networks" docker network rm $networks || true
   volumes="$(docker volume ls -q --filter "label=com.docker.compose.project.working_dir=$ROOT_DIR" 2>/dev/null || true)"
   [[ -z "$volumes" ]] || run_step "remove_repo_volumes" docker volume rm $volumes || true
+  images="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^(cloudstart/(frontend|backend)):' || true)"
+  while IFS= read -r image; do
+    [[ -n "$image" ]] || continue
+    run_step "remove_project_image_$image" docker image rm -f "$image" || true
+  done <<< "$images"
 else
   log "Docker daemon unavailable; local Docker cleanup could not be verified."
   printf 'local_docker_daemon\tFAIL\t127\n' >> "$RESULTS_FILE"
