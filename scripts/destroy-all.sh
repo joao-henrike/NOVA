@@ -105,13 +105,13 @@ inventory_aws() {
   echo
   echo "=== VPCs / NAT / subnets / ENIs ==="
   data="$(aws ec2 describe-vpcs --output json 2>/dev/null || printf '{"Vpcs":[]}')"
-  jq -r '.Vpcs[]? | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev"))) | [.VpcId,.CidrBlock] | @tsv' <<< "$data"
+  jq -r '.Vpcs[]? | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | [.VpcId,.CidrBlock] | @tsv' <<< "$data"
   while IFS= read -r vpc; do
     [[ -n "$vpc" ]] || continue
     aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$vpc" --output json 2>/dev/null | jq -r '.NatGateways[]? | select(.State!="deleted" and .State!="failed") | ["NAT",.NatGatewayId,.State] | @tsv' || true
     aws ec2 describe-subnets --filters "Name=vpc-id,Values=$vpc" --output json 2>/dev/null | jq -r '.Subnets[]? | ["SUBNET",.SubnetId,.CidrBlock] | @tsv' || true
     aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=$vpc" --output json 2>/dev/null | jq -r '.NetworkInterfaces[]? | ["ENI",.NetworkInterfaceId,.Status,(.Description//"")] | @tsv' || true
-  done < <(jq -r '.Vpcs[]? | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev"))) | .VpcId' <<< "$data")
+  done < <(jq -r '.Vpcs[]? | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | .VpcId' <<< "$data")
   echo
   echo "=== Local Docker Compose ==="
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
@@ -220,7 +220,7 @@ scope_resources() {
   data="$(aws logs describe-log-groups --output json)" || return 1
   jq -r '.logGroups[]? | select((.logGroupName|startswith("/ecs/cloudstart-dev")) or (.logGroupName|startswith("cloudstart-dev"))) | .logGroupName' <<< "$data"
   data="$(aws ec2 describe-vpcs --output json)" || return 1
-  jq -r '.Vpcs[]? | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev"))) | .VpcId' <<< "$data"
+  jq -r '.Vpcs[]? | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | .VpcId' <<< "$data"
   data="$(aws ec2 describe-addresses --output json)" || return 1
   jq -r '.Addresses[]? | select(any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev-nat-eip"))) or (any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev"))) | .AllocationId' <<< "$data"
 }
