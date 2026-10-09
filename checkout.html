@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CloudStart | Checkout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"><script src="store.js" defer></script><script src="checkout.js" defer></script>
+</head>
+<body class="checkout-page">
+<header class="checkout-header"><div class="container checkout-head-inner"><a class="brand" href="index.html"><span class="brand-icon">C</span><span>Cloud<span class="accent">Start</span></span></a><div class="checkout-actions"><span class="secure">Ambiente demonstrativo</span><button id="themeButton" class="icon-button" aria-label="Alternar tema">◐</button><a href="index.html" class="back-link">Voltar à loja</a></div></div></header>
+<div class="checkout-steps"><div class="active"><b>1</b><span>Identificação</span></div><i></i><div><b>2</b><span>Pagamento</span></div><i></i><div><b>3</b><span>Confirmação</span></div></div>
+<main class="container checkout-layout">
+<form id="checkoutForm" class="checkout-main">
+<section class="checkout-card"><div class="card-heading"><b>1</b><div><h1>Dados do comprador</h1><p>Usaremos essas informações para o pedido.</p></div></div><div class="form-grid"><label>Nome completo<input name="name" required autocomplete="name"></label><label>E-mail<input name="email" type="email" required autocomplete="email"></label><label>CPF/CNPJ<input name="document" inputmode="numeric"></label><label>Telefone<input name="phone" inputmode="tel"></label></div></section>
+<section class="checkout-card"><div class="card-heading"><b>2</b><div><h2>Entrega</h2><p>Preencha para itens físicos. Serviços não precisam de endereço.</p></div></div><div class="form-grid"><label>CEP<input name="zipCode" inputmode="numeric" placeholder="00000-000"></label><label>Cidade<input name="city"></label><label>Rua<input name="street"></label><label>Número<input name="number"></label><label>Bairro<input name="neighborhood"></label><label>Complemento<input name="complement"></label></div></section>
+<section class="checkout-card"><div class="card-heading"><b>3</b><div><h2>Pagamento</h2><p>Escolha como deseja pagar.</p></div></div>
+<div class="payment-list">
+<label class="payment-method selected"><input type="radio" name="payment" value="pix" checked><span class="payment-icon">PIX</span><span><strong>Pix</strong><small>Confirmação imediata</small></span><em></em></label>
+<label class="payment-method"><input type="radio" name="payment" value="credit"><span class="payment-icon">CC</span><span><strong>Cartão de crédito</strong><small>Até 12x sem juros na demonstração</small></span><em></em></label>
+<label class="payment-method"><input type="radio" name="payment" value="debit"><span class="payment-icon">DC</span><span><strong>Cartão de débito</strong><small>Pagamento à vista</small></span><em></em></label>
+<label class="payment-method"><input type="radio" name="payment" value="boleto"><span class="payment-icon">BL</span><span><strong>Boleto bancário</strong><small>Compensação bancária</small></span><em></em></label>
+</div>
+<div id="cardFields" class="card-fields" hidden><div class="form-grid"><label>Número do cartão<input name="cardNumber" autocomplete="cc-number" placeholder="0000 0000 0000 0000"></label><label>Nome no cartão<input name="cardName" autocomplete="cc-name"></label><label>Validade<input name="expiry" placeholder="MM/AA" autocomplete="cc-exp"></label><label>CVV<input name="cvv" type="password" autocomplete="cc-csc"></label><label>Parcelas<select name="installments"><option>1x</option><option>2x</option><option>3x</option><option>6x</option><option>10x</option><option>12x</option></select></label></div><small class="security-note">Demonstração: em produção, o cartão deve ser tokenizado por um gateway. O CloudStart não deve armazenar CVV.</small></div>
+<div id="pixInfo" class="pix-info"><strong>Pix selecionado</strong><span>O backend poderá gerar QR Code e código copia e cola.</span></div>
+</section>
+<button class="button primary full checkout-submit" type="submit">Finalizar pedido demonstrativo</button><p class="legal">Nenhuma cobrança real é realizada nesta versão.</p>
+</form>
+<aside class="order-sidebar"><section class="summary-card"><div class="summary-heading"><h2>Resumo do pedido</h2><a href="index.html#catalogo">Editar</a></div><div id="summaryItems"></div><div class="summary-line"><span>Subtotal</span><strong id="subtotal">R$ 0,00</strong></div><div class="summary-line"><span>Frete</span><strong>Calculado depois</strong></div><div class="coupon"><input id="coupon" placeholder="Cupom de desconto"><button id="applyCoupon" type="button">Aplicar</button></div><div class="summary-total"><span>Total</span><strong id="total">R$ 0,00</strong></div></section><section class="security-card"><strong>Compra protegida</strong><span>Dados sensíveis não são persistidos no frontend.</span><span>Pagamento preparado para integração com gateway.</span></section></aside>
+</main>
+<div class="toast" id="toast"></div>
+</body></html>

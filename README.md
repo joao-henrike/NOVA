@@ -1,51 +1,58 @@
-# CloudStart Frontend V1
+# CloudStart Commerce V7
 
-## Incluído
+Frontend estático e profissional para prototipação do CloudStart.
 
-- Catálogo de suites, servidores, hardware e cloud.
-- Fotos ilustrativas dos produtos.
-- Filtro e busca.
-- Carrinho com localStorage.
-- Seleção de porte: pequeno, médio e grande.
+## Objetivo
+
+Demonstrar uma jornada de e-commerce B2B para infraestrutura de TI, inspirada em padrões comuns de grandes lojas online: busca global, navegação por categorias, filtros, favoritos, quick view, carrinho lateral, checkout dedicado, conta e confirmação de pedido.
+
+## Estrutura
+
+- `index.html` — vitrine e catálogo.
+- `checkout.html` — checkout completo.
+- `confirmation.html` — confirmação do pedido demonstrativo.
+- `login.html` / `register.html` — autenticação demonstrativa.
+- `store.js` — catálogo, carrinho, tema e favoritos.
+- `app.js` — comportamento da loja.
+- `checkout.js` — comportamento do checkout.
+- `auth.js` — login/cadastro/Google demonstrativos.
+- `assets/images/` — imagens locais de fallback.
+
+## Funcionalidades
+
+- Carrinho lateral com abertura/fechamento confiável.
+- Quantidade, remoção e subtotal.
+- Persistência do carrinho via `localStorage`.
+- Checkout dedicado.
+- Pix, crédito, débito e boleto.
+- Tema claro/escuro em todas as telas.
+- Busca e filtros por categoria.
+- Ordenação por preço e nome.
+- Favoritos.
+- Quick view dos produtos.
 - Calculadora de infraestrutura.
-- Descontos demonstrativos por porte.
-- Planos Cloud.
-- Checkout demonstrativo com PIX, cartão e boleto.
-- Modal de orçamento.
-- Dark/light mode.
-- Responsividade mobile.
+- Recomendações por porte.
+- Login, cadastro e botão Google demonstrativos.
+- Fallback local para imagens externas que não carregarem.
 - Estrutura preparada para integração com backend.
-- Sem pagamento real.
 
-## Boas práticas
+## Como executar
 
-Os preços exibidos no navegador são apenas informativos. Em uma implementação real, o backend deve:
+Abra `index.html` diretamente no navegador. Não precisa de Node.js, npm ou servidor local.
 
-1. Receber somente IDs e quantidades.
-2. Buscar os preços oficiais no banco.
-3. Recalcular subtotal, descontos e total.
-4. Validar estoque e regras comerciais.
-5. Criar a cobrança usando um gateway de pagamento.
-6. Nunca armazenar CVV ou dados sensíveis de cartão.
-7. Usar autenticação, autorização, HTTPS e idempotência.
-8. Atualizar o pedido por webhook assinado do gateway.
+As fotos de fabricantes/editoriais são carregadas por URL quando houver internet. Se uma URL não responder, o produto troca automaticamente para uma imagem local de fallback, evitando cards quebrados.
 
-## Imagens
+## Integração futura
 
-As imagens são externas e ilustrativas. Em produção, substitua por imagens próprias/CDN da empresa.
+Sugestões de endpoints:
 
-## Execução
+- `POST /api/auth/login`
+- `POST /api/auth/register`
+- `POST /api/auth/google`
+- `GET /api/products`
+- `GET /api/products/:id`
+- `POST /api/orders`
+- `POST /api/payments/intents`
+- `POST /api/quotes`
 
-Abra `index.html` no navegador ou utilize um servidor estático, por exemplo:
-
-```bash
-python -m http.server 8080
-```
-
-Depois acesse `http://localhost:8080`.
-
-## Imagens de produtos
-
-A versão atual usa imagens reais de produtos/linhas encontradas em páginas de fabricantes ou revendedores, incluindo Ubiquiti, Dell e Fortinet. Alguns itens de software/suites continuam usando imagens ilustrativas.
-
-Para produção, o ideal é armazenar as imagens autorizadas em uma CDN própria da CloudStart e manter os respectivos direitos/licenças de uso.
+Preços e pedidos desta versão são demonstrativos. Nenhum pagamento real é processado.

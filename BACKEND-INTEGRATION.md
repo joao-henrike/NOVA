@@ -1,53 +1,29 @@
-# Integração futura com Backend
+# Backend Integration — CloudStart Commerce V7
 
-O frontend foi desenhado para enviar um pedido para:
+O frontend não executa pagamentos reais nem autenticação real.
 
-`POST /api/orders`
+## Pontos de integração
 
-Exemplo conceitual:
+### Auth
+Substituir o comportamento demonstrativo de `auth.js` por chamadas HTTPS ao serviço de autenticação.
 
-```json
-{
-  "items": [
-    {
-      "productId": "server-r550",
-      "quantity": 1
-    }
-  ],
-  "companySize": "medium",
-  "payment": {
-    "method": "pix"
-  },
-  "customer": {
-    "name": "Cliente",
-    "email": "cliente@empresa.com"
-  }
-}
-```
+### Produtos
+Mover o catálogo de `store.js` para `GET /api/products`.
 
-## Regra importante
+### Carrinho
+O carrinho atual usa `localStorage` apenas para prototipação. Em produção, o servidor deve recalcular preços e disponibilidade.
 
-Não confie no preço enviado pelo frontend.
+### Checkout
+`checkout.js` monta a intenção do pedido no cliente. Em produção:
 
-O backend deve consultar o produto pelo `productId`, obter o preço oficial e recalcular tudo:
+1. Enviar itens e identificador do cliente ao backend.
+2. Recalcular preços no servidor.
+3. Criar intenção de pagamento no gateway.
+4. Receber somente tokens/status do gateway.
+5. Nunca persistir CVV ou número completo do cartão.
 
-`subtotal -> desconto -> impostos/frete -> total`
+### Google
+O botão atual é apenas demonstrativo. Implementar OAuth/OpenID Connect no backend e validar o token no servidor.
 
-O frontend serve como interface e experiência do usuário.
-
-## Pagamento
-
-Para produção, use um gateway como Stripe, Mercado Pago, Pagar.me ou Adyen.
-
-O fluxo recomendado é:
-
-1. Frontend cria pedido.
-2. Backend valida itens.
-3. Backend cria cobrança no gateway.
-4. Gateway retorna dados necessários para o checkout.
-5. Usuário conclui o pagamento.
-6. Gateway chama webhook do backend.
-7. Backend valida a assinatura do webhook.
-8. Pedido muda para `paid`, `failed`, `cancelled` etc.
-
-Nunca implemente armazenamento próprio de número de cartão ou CVV.
+### Segurança
+Nunca confiar em preço, desconto, estoque ou status de pagamento vindos do navegador.

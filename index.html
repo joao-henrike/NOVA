@@ -1,342 +1,97 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="CloudStart - catálogo de infraestrutura, hardware, suites e soluções em nuvem.">
-  <title>CloudStart | Infraestrutura & Cloud</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="CloudStart Commerce — infraestrutura, segurança, servidores, networking e soluções em nuvem.">
+<title>CloudStart | Infraestrutura para empresas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"><script src="store.js" defer></script><script src="app.js" defer></script>
 </head>
 <body>
-  <header class="header">
-    <a class="brand" href="#" aria-label="CloudStart início">
-      <span class="brand-mark">C</span>
-      <span>Cloud<span>Start</span></span>
-    </a>
-
-    <nav class="nav" id="mainNav">
-      <a href="#catalogo">Catálogo</a>
-      <a href="#calculadora">Calculadora</a>
-      <a href="#cloud">Cloud</a>
-      <a href="#suporte">Suporte</a>
-    </nav>
-
+<div class="topline"><div class="container topinner"><span>CloudStart Commerce</span><span>Valores demonstrativos para prototipação</span></div></div>
+<header class="header">
+  <div class="container header-main">
+    <a class="brand" href="index.html"><span class="brand-icon">C</span><span>Cloud<span class="accent">Start</span></span></a>
+    <div class="search-wrap"><input id="search" type="search" placeholder="Buscar servidor, switch, firewall, cloud..." autocomplete="off"><button id="searchButton" aria-label="Buscar">Buscar</button></div>
     <div class="header-actions">
-      <button class="icon-btn" id="themeToggle" title="Alternar tema" aria-label="Alternar tema">☾</button>
-      <button class="cart-btn" id="openCart" aria-label="Abrir carrinho">
-        🛒 <span>Carrinho</span> <b id="cartCount">0</b>
-      </button>
-      <button class="menu-btn" id="menuToggle" aria-label="Abrir menu">☰</button>
+      <a href="login.html" class="account-link"><span class="action-icon">●</span><span><small>Olá, visitante</small><strong>Entrar / conta</strong></span></a>
+      <button class="icon-button" id="themeButton" title="Alternar tema" aria-label="Alternar tema">◐</button>
+      <button class="cart-trigger" id="cartTrigger"><span>Carrinho</span><b id="cartCount">0</b></button>
     </div>
-  </header>
-
-  <main>
-    <section class="hero">
-      <div class="hero-content">
-        <span class="eyebrow">INFRAESTRUTURA • HARDWARE • CLOUD</span>
-        <h1>Monte a infraestrutura ideal para sua empresa.</h1>
-        <p>Escolha equipamentos, suites e serviços em nuvem. Compare opções por porte e calcule uma estimativa antes de solicitar seu pedido.</p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="#catalogo">Explorar catálogo</a>
-          <a class="btn btn-secondary" href="#calculadora">Montar solução</a>
-        </div>
-        <div class="hero-note">Valores demonstrativos para protótipo • pagamento preparado para integração com backend</div>
-      </div>
-      <div class="hero-card">
-        <div class="server-visual">
-          <div class="server-lights"><i></i><i></i><i></i></div>
-          <div class="server-lines"></div>
-          <div class="server-label">CLOUDSTART</div>
-        </div>
-        <div class="hero-stat"><strong>Alta disponibilidade</strong><span>Arquiteturas preparadas para crescer</span></div>
-      </div>
-    </section>
-
-    <section class="section" id="catalogo">
-      <div class="section-heading">
-        <div>
-          <span class="eyebrow">CATÁLOGO</span>
-          <h2>Produtos e soluções</h2>
-          <p>Equipamentos e serviços para diferentes necessidades.</p>
-        </div>
-        <div class="catalog-tools">
-          <input id="searchInput" type="search" placeholder="Buscar produto..." aria-label="Buscar produto">
-          <select id="categoryFilter" aria-label="Filtrar categoria">
-            <option value="all">Todas as categorias</option>
-            <option value="suite">Suites</option>
-            <option value="server">Servidores</option>
-            <option value="hardware">Hardware</option>
-            <option value="cloud">Cloud</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="size-switcher" aria-label="Porte da empresa">
-        <button class="size-option active" data-size="small"><strong>Pequeno porte</strong><span>até 50 usuários</span></button>
-        <button class="size-option" data-size="medium"><strong>Médio porte</strong><span>51–250 usuários</span></button>
-        <button class="size-option" data-size="large"><strong>Grande porte</strong><span>251+ usuários</span></button>
-      </div>
-
-      <div class="recommendation" id="recommendation"></div>
-      <div class="product-grid" id="productGrid"></div>
-    </section>
-
-    <section class="section calculator-section" id="calculadora">
-      <div class="section-heading">
-        <div>
-          <span class="eyebrow">CALCULADORA</span>
-          <h2>Monte sua infraestrutura</h2>
-          <p>Crie uma estimativa com quantidades, porte e serviços.</p>
-        </div>
-      </div>
-
-      <div class="calculator">
-        <div class="calculator-form">
-          <div class="field">
-            <label for="calcServers">Servidores</label>
-            <input id="calcServers" type="number" min="0" max="99" value="1">
-            <small>R$ 18.990,00 / unidade</small>
-          </div>
-          <div class="field">
-            <label for="calcSwitches">Switches</label>
-            <input id="calcSwitches" type="number" min="0" max="99" value="1">
-            <small>R$ 8.490,00 / unidade</small>
-          </div>
-          <div class="field">
-            <label for="calcFirewalls">Firewalls</label>
-            <input id="calcFirewalls" type="number" min="0" max="99" value="1">
-            <small>R$ 4.890,00 / unidade</small>
-          </div>
-          <div class="field">
-            <label for="calcUsers">Usuários / licenças</label>
-            <input id="calcUsers" type="number" min="0" max="99999" value="10">
-            <small>R$ 49,90 / usuário</small>
-          </div>
-          <div class="field full">
-            <label for="calcCloud">Plano Cloud</label>
-            <select id="calcCloud">
-              <option value="0">Sem plano Cloud</option>
-              <option value="399">Cloud Pro — R$ 399/mês</option>
-              <option value="799">Cloud Business — R$ 799/mês</option>
-              <option value="1499">Cloud Enterprise — R$ 1.499/mês</option>
-            </select>
-          </div>
-        </div>
-
-        <aside class="estimate-card">
-          <span>ESTIMATIVA</span>
-          <h3 id="estimateTotal">R$ 0,00</h3>
-          <div class="estimate-line"><span>Subtotal</span><strong id="estimateSubtotal">R$ 0,00</strong></div>
-          <div class="estimate-line"><span>Desconto do porte</span><strong id="estimateDiscount">R$ 0,00</strong></div>
-          <div class="estimate-line"><span>Cloud mensal</span><strong id="estimateCloud">R$ 0,00</strong></div>
-          <hr>
-          <button class="btn btn-primary full-btn" id="addEstimate">Adicionar ao carrinho</button>
-          <button class="btn btn-secondary full-btn" id="requestQuote">Solicitar orçamento</button>
-          <small>Estimativa fictícia. Valores finais dependem do backend/comercial.</small>
-        </aside>
-      </div>
-    </section>
-
-    <section class="section cloud-section" id="cloud">
-      <div class="cloud-copy">
-        <span class="eyebrow">CLOUDSTART CLOUD</span>
-        <h2>Infraestrutura em nuvem sem complicação.</h2>
-        <p>Planos pensados para pequenas, médias e grandes empresas, com espaço para evolução e integração futura com a infraestrutura AWS.</p>
-        <button class="btn btn-primary" data-cloud-modal>Conhecer planos</button>
-      </div>
-      <div class="cloud-plans">
-        <article class="cloud-plan"><span>START</span><strong>R$ 399/mês</strong><small>Para equipes enxutas</small></article>
-        <article class="cloud-plan featured"><span>BUSINESS</span><strong>R$ 799/mês</strong><small>Para crescimento</small></article>
-        <article class="cloud-plan"><span>ENTERPRISE</span><strong>R$ 1.499/mês</strong><small>Para alta demanda</small></article>
-      </div>
-    </section>
-
-    <section class="section support" id="suporte">
-      <div>
-        <span class="eyebrow">SUPORTE</span>
-        <h2>Precisa de uma arquitetura personalizada?</h2>
-        <p>Monte seu carrinho ou envie uma solicitação para que o time comercial possa analisar a solução.</p>
-      </div>
-      <button class="btn btn-primary" id="supportBtn">Falar com especialista</button>
-    </section>
-  </main>
-
-  <footer class="footer">
-    <strong>CloudStart</strong>
-    <span>Infraestrutura, hardware e cloud para empresas.</span>
-    <span>© 2026 CloudStart • Protótipo frontend</span>
-  </footer>
-
-  <div class="modal-backdrop" id="cartModal" hidden>
-    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="cartTitle">
-      <button class="modal-close" data-close="cartModal">×</button>
-      <span class="eyebrow">PEDIDO</span>
-      <h2 id="cartTitle">Seu carrinho</h2>
-      <div id="cartItems"></div>
-      <div class="cart-total"><span>Total</span><strong id="cartTotal">R$ 0,00</strong></div>
-      <button class="btn btn-primary full-btn" id="checkoutBtn">Continuar para pagamento</button>
-    </section>
   </div>
+  <div class="category-bar"><div class="container category-inner">
+    <a href="#catalogo">Todos</a><a href="#catalogo" data-category="server">Servidores</a><a href="#catalogo" data-category="network">Networking</a><a href="#catalogo" data-category="security">Firewall e segurança</a><a href="#catalogo" data-category="cloud">Soluções em nuvem</a><a href="#catalogo" data-category="suite">Suites</a><a href="#solucoes">Por porte</a><a href="#suporte">Atendimento</a>
+  </div></div>
+</header>
 
-  <div class="modal-backdrop checkout-backdrop" id="checkoutModal" hidden>
-    <section class="checkout-page" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
-      <header class="checkout-header">
-        <div class="checkout-brand">
-          <span class="brand-mark">C</span>
-          <strong>Cloud<span>Start</span></strong>
-        </div>
-        <div class="checkout-secure">🔒 Compra segura</div>
-        <button class="modal-close" data-close="checkoutModal" aria-label="Fechar">×</button>
-      </header>
-
-      <div class="checkout-progress">
-        <div class="checkout-step active"><b>1</b><span>Identificação</span></div>
-        <i></i>
-        <div class="checkout-step"><b>2</b><span>Pagamento</span></div>
-        <i></i>
-        <div class="checkout-step"><b>3</b><span>Confirmação</span></div>
-      </div>
-
-      <div class="checkout-layout">
-        <form id="checkoutForm" class="checkout-main">
-          <section class="checkout-card">
-            <div class="checkout-card-title">
-              <div class="step-number">1</div>
-              <div><h2 id="checkoutTitle">Seus dados</h2><p>Precisamos dessas informações para identificar o pedido.</p></div>
-            </div>
-            <div class="form-grid">
-              <div class="field"><label for="customerName">Nome completo</label><input id="customerName" name="name" required placeholder="Digite seu nome"></div>
-              <div class="field"><label for="customerEmail">E-mail</label><input id="customerEmail" name="email" type="email" required placeholder="voce@empresa.com"></div>
-              <div class="field"><label for="customerCpf">CPF/CNPJ</label><input id="customerCpf" name="document" placeholder="Digite o documento"></div>
-              <div class="field"><label for="customerPhone">Telefone</label><input id="customerPhone" name="phone" placeholder="(11) 99999-9999"></div>
-            </div>
-          </section>
-
-          <section class="checkout-card">
-            <div class="checkout-card-title">
-              <div class="step-number">2</div>
-              <div><h2>Onde receber</h2><p>Informe o endereço para produtos físicos.</p></div>
-            </div>
-            <div class="form-grid">
-              <div class="field"><label for="zipCode">CEP</label><input id="zipCode" name="zipCode" inputmode="numeric" placeholder="00000-000"></div>
-              <div class="field"><label for="city">Cidade</label><input id="city" name="city" placeholder="São Paulo"></div>
-              <div class="field"><label for="street">Rua</label><input id="street" name="street" placeholder="Nome da rua"></div>
-              <div class="field"><label for="number">Número</label><input id="number" name="number" placeholder="123"></div>
-              <div class="field"><label for="neighborhood">Bairro</label><input id="neighborhood" name="neighborhood" placeholder="Centro"></div>
-              <div class="field"><label for="complement">Complemento</label><input id="complement" name="complement" placeholder="Sala, bloco..."></div>
-            </div>
-          </section>
-
-          <section class="checkout-card">
-            <div class="checkout-card-title">
-              <div class="step-number">3</div>
-              <div><h2>Como você quer pagar?</h2><p>Escolha uma forma de pagamento.</p></div>
-            </div>
-
-            <div class="payment-options">
-              <label class="payment-option selected">
-                <input type="radio" name="paymentMethod" value="pix" checked>
-                <span class="payment-icon pix-icon">PIX</span>
-                <span class="payment-info"><strong>Pix</strong><small>Pagamento instantâneo e aprovação rápida</small></span>
-                <span class="radio-dot"></span>
-              </label>
-              <label class="payment-option">
-                <input type="radio" name="paymentMethod" value="credit_card">
-                <span class="payment-icon">💳</span>
-                <span class="payment-info"><strong>Cartão de crédito</strong><small>Até 12x</small></span>
-                <span class="radio-dot"></span>
-              </label>
-              <label class="payment-option">
-                <input type="radio" name="paymentMethod" value="debit_card">
-                <span class="payment-icon">💳</span>
-                <span class="payment-info"><strong>Cartão de débito</strong><small>Pagamento à vista</small></span>
-                <span class="radio-dot"></span>
-              </label>
-              <label class="payment-option">
-                <input type="radio" name="paymentMethod" value="boleto">
-                <span class="payment-icon">▤</span>
-                <span class="payment-info"><strong>Boleto</strong><small>Pagamento bancário</small></span>
-                <span class="radio-dot"></span>
-              </label>
-            </div>
-
-            <div id="cardFields" class="card-fields" hidden>
-              <div class="form-grid">
-                <div class="field full"><label>Número do cartão</label><input inputmode="numeric" autocomplete="cc-number" placeholder="0000 0000 0000 0000"></div>
-                <div class="field"><label>Nome no cartão</label><input autocomplete="cc-name" placeholder="Nome impresso no cartão"></div>
-                <div class="field"><label>Parcelas</label>
-                  <select id="installments" name="installments">
-                    <option value="1">1x sem juros</option><option value="2">2x sem juros</option><option value="3">3x sem juros</option>
-                    <option value="6">6x sem juros</option><option value="10">10x sem juros</option><option value="12">12x sem juros</option>
-                  </select>
-                </div>
-                <div class="field"><label>Validade</label><input autocomplete="cc-exp" placeholder="MM/AA"></div>
-                <div class="field"><label>CVV</label><input type="password" autocomplete="cc-csc" placeholder="***"></div>
-              </div>
-              <small class="security-note">🔒 Em produção, os dados do cartão devem ser tokenizados por um gateway de pagamento. Não armazene CVV.</small>
-            </div>
-
-            <div id="pixInfo" class="pix-info">
-              <span class="pix-big">PIX</span>
-              <div><strong>Você receberá o código Pix após confirmar.</strong><small>A aprovação acontece após a confirmação do pagamento.</small></div>
-            </div>
-          </section>
-
-          <button class="btn btn-primary checkout-submit" type="submit">Continuar e revisar pedido</button>
-          <p class="checkout-legal">Ao continuar, você concorda com os termos da CloudStart. Este é um checkout demonstrativo e não realiza cobrança real.</p>
-        </form>
-
-        <aside class="checkout-summary">
-          <div class="summary-card">
-            <h2>Resumo da compra</h2>
-            <div id="checkoutSummaryItems"></div>
-            <div class="summary-line"><span>Produtos</span><strong id="checkoutSubtotal">R$ 0,00</strong></div>
-            <div class="summary-line"><span>Frete</span><strong class="green">Grátis</strong></div>
-            <div class="coupon-box"><input id="couponInput" placeholder="Cupom de desconto"><button type="button" id="applyCoupon">Aplicar</button></div>
-            <div class="summary-total"><span>Total</span><strong id="checkoutTotal">R$ 0,00</strong></div>
-          </div>
-          <div class="security-box">
-            <strong>🔒 Compra protegida</strong>
-            <span>Seus dados são tratados com segurança.</span>
-            <span>Pagamento preparado para integração com gateway.</span>
-          </div>
-        </aside>
-      </div>
-    </section>
+<main>
+<section class="hero">
+  <div class="container hero-grid">
+    <div class="hero-copy"><span class="eyebrow">INFRAESTRUTURA CORPORATIVA</span>
+      <h1>Monte uma infraestrutura pronta para crescer.</h1>
+      <p>Servidores, networking, segurança e soluções em nuvem em uma experiência comercial preparada para empresas de pequeno, médio e grande porte.</p>
+      <div class="hero-actions"><a class="button primary" href="#catalogo">Comprar soluções</a><a class="button secondary" href="#solucoes">Ver recomendações</a></div>
+      <div class="hero-benefits"><span>Compra demonstrativa</span><span>Checkout completo</span><span>Frontend API-ready</span></div>
+    </div>
+    <div class="hero-visual"><div class="hero-card"><span>ARQUITETURA</span><strong>Local + Cloud</strong><small>Uma jornada para hardware e serviços recorrentes.</small><div class="network-diagram"><i></i><i></i><i></i><em></em></div></div></div>
   </div>
+</section>
 
-  <div class="modal-backdrop" id="quoteModal"  <div class="modal-backdrop" id="quoteModal" hidden>
-    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="quoteTitle">
-      <button class="modal-close" data-close="quoteModal">×</button>
-      <span class="eyebrow">ORÇAMENTO</span>
-      <h2 id="quoteTitle">Solicitar orçamento</h2>
-      <form id="quoteForm">
-        <div class="field"><label>Empresa</label><input name="company" required></div>
-        <div class="field"><label>Contato</label><input name="contact" required></div>
-        <div class="field"><label>E-mail</label><input name="email" type="email" required></div>
-        <div class="field"><label>Mensagem</label><textarea name="message" rows="4" placeholder="Descreva sua necessidade..."></textarea></div>
-        <button class="btn btn-primary full-btn" type="submit">Enviar solicitação</button>
-      </form>
-    </section>
+<section class="trust"><div class="container trust-grid"><div><strong>10+</strong><span>soluções no catálogo</span></div><div><strong>4</strong><span>formas de pagamento</span></div><div><strong>3</strong><span>portes de empresa</span></div><div><strong>100%</strong><span>frontend demonstrativo</span></div></div></section>
+
+<section class="container section" id="catalogo">
+  <div class="section-title"><div><span class="eyebrow">CATÁLOGO</span><h2>Escolha por categoria</h2><p>Uma vitrine inspirada em padrões de grandes e-commerces: busca rápida, filtros, favoritos, compra direta e resumo do carrinho.</p></div></div>
+  <div class="catalog-controls">
+    <div class="chips" id="categoryChips">
+      <button class="chip active" data-category="all">Todos</button><button class="chip" data-category="server">Servidores</button><button class="chip" data-category="network">Networking</button><button class="chip" data-category="security">Firewall</button><button class="chip" data-category="cloud">Nuvem</button><button class="chip" data-category="suite">Suites</button>
+    </div>
+    <select id="sort"><option value="relevance">Mais relevantes</option><option value="priceAsc">Menor preço</option><option value="priceDesc">Maior preço</option><option value="name">Nome A–Z</option></select>
   </div>
+  <div class="recommendation"><div><strong id="resultTitle">Soluções em destaque</strong><span id="resultCount">0 produtos</span></div><span>Entrega e valores são demonstrativos</span></div>
+  <div class="product-grid" id="productGrid"></div>
+</section>
 
-  <div class="modal-backdrop" id="cloudModal" hidden>
-    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle">
-      <button class="modal-close" data-close="cloudModal">×</button>
-      <span class="eyebrow">PLANOS CLOUD</span>
-      <h2 id="cloudTitle">Escolha seu nível</h2>
-      <div class="modal-plans">
-        <button class="plan-choice" data-cloud-price="399"><strong>Start</strong><span>R$ 399/mês</span></button>
-        <button class="plan-choice" data-cloud-price="799"><strong>Business</strong><span>R$ 799/mês</span></button>
-        <button class="plan-choice" data-cloud-price="1499"><strong>Enterprise</strong><span>R$ 1.499/mês</span></button>
-      </div>
-    </section>
+<section class="container section" id="solucoes">
+  <div class="section-title"><div><span class="eyebrow">PORTE DA EMPRESA</span><h2>Comece pelo cenário da sua operação</h2><p>Use recomendações como ponto de partida e ajuste o carrinho conforme sua necessidade.</p></div></div>
+  <div class="size-grid">
+    <button class="size-card" data-size="small"><span>01</span><strong>Pequena</strong><small>Até 50 usuários</small><p>Segurança, conectividade e custo-benefício.</p><b>Ver recomendação</b></button>
+    <button class="size-card active" data-size="medium"><span>02</span><strong>Média</strong><small>51 a 250 usuários</small><p>Redundância, gestão e crescimento planejado.</p><b>Ver recomendação</b></button>
+    <button class="size-card" data-size="large"><span>03</span><strong>Grande</strong><small>251+ usuários</small><p>Alta disponibilidade, escala e governança.</p><b>Ver recomendação</b></button>
   </div>
+  <div class="solution-panel" id="solutionPanel"></div>
+</section>
 
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="script.js"></script>
-</body>
-</html>
+<section class="container section calculator-section" id="calculadora">
+  <div class="section-title"><div><span class="eyebrow">CONFIGURADOR</span><h2>Monte um cenário de infraestrutura</h2><p>Estimativa fictícia para demonstrar um fluxo de venda consultiva.</p></div></div>
+  <div class="calculator"><div class="calc-fields">
+    <label>Servidores<input id="calcServers" type="number" min="0" max="20" value="1"></label>
+    <label>Switches<input id="calcSwitches" type="number" min="0" max="20" value="1"></label>
+    <label>Firewalls<input id="calcFirewalls" type="number" min="0" max="20" value="1"></label>
+    <label>Usuários<input id="calcUsers" type="number" min="0" max="5000" value="50"></label>
+    <label class="wide">Plano de nuvem<select id="calcCloud"><option value="0">Sem plano</option><option value="399">Cloud Pro — R$ 399/mês</option><option value="799">Cloud Business — R$ 799/mês</option><option value="1499">Cloud Enterprise — R$ 1.499/mês</option></select></label>
+  </div><aside class="estimate"><span>ESTIMATIVA</span><strong id="estimateTotal">R$ 0,00</strong><div><span>Subtotal</span><b id="estimateSubtotal">R$ 0,00</b></div><div><span>Desconto por porte</span><b id="estimateDiscount">R$ 0,00</b></div><div><span>Plano cloud mensal</span><b id="estimateCloud">R$ 0,00</b></div><button class="button primary full" id="addEstimate">Adicionar cenário ao carrinho</button><a class="button secondary full" href="#suporte">Solicitar orçamento</a></aside></div>
+</section>
+
+<section class="cloud-highlight"><div class="container cloud-grid"><div><span class="eyebrow">CLOUDSTART CLOUD</span><h2>Hardware hoje. Serviços recorrentes amanhã.</h2><p>Combine infraestrutura física, backup, monitoramento e cloud em uma jornada comercial única.</p><a class="button primary" href="#catalogo" data-category="cloud">Explorar cloud</a></div><div class="cloud-stats"><div><strong>Backup</strong><span>continuidade operacional</span></div><div><strong>Monitoramento</strong><span>visibilidade do ambiente</span></div><div><strong>Escala</strong><span>crescimento sob demanda</span></div></div></div></section>
+
+<section class="container section support" id="suporte"><div><span class="eyebrow">ATENDIMENTO</span><h2>Precisa de uma arquitetura sob medida?</h2><p>Envie seus requisitos e o protótipo prepara o pedido para integração futura com um endpoint de orçamento.</p></div><button class="button primary" id="quoteButton">Falar com especialista</button></section>
+</main>
+
+<footer class="footer"><div class="container footer-grid">
+  <div><a class="brand" href="index.html"><span class="brand-icon">C</span><span>Cloud<span class="accent">Start</span></span></a><p>Infraestrutura, hardware, segurança e cloud.</p></div>
+  <div><strong>Comprar</strong><a href="#catalogo">Catálogo</a><a href="#solucoes">Por porte</a><a href="checkout.html">Checkout</a></div>
+  <div><strong>Conta</strong><a href="login.html">Entrar</a><a href="register.html">Criar conta</a><button id="footerCart">Carrinho</button></div>
+  <div><strong>Projeto</strong><span>Protótipo frontend</span><span>Valores demonstrativos</span><span>© 2026 CloudStart</span></div>
+</div></footer>
+
+<aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+  <div class="drawer-head"><div><span class="eyebrow">SEU PEDIDO</span><h2>Carrinho</h2></div><button class="drawer-close" id="cartClose" aria-label="Fechar carrinho">×</button></div>
+  <div class="drawer-body" id="cartItems"></div>
+  <div class="drawer-footer"><div class="drawer-total"><span>Subtotal</span><strong id="cartSubtotal">R$ 0,00</strong></div><small>Frete e impostos são definidos na etapa de checkout.</small><a class="button primary full" id="checkoutLink" href="checkout.html">Continuar para pagamento</a><button class="button ghost full" id="continueShopping">Continuar comprando</button></div>
+</aside>
+<div class="drawer-overlay" id="drawerOverlay" hidden></div>
+
+<div class="quickview" id="quickview" hidden><div class="quickview-card"><button class="drawer-close" data-close-quick>×</button><div id="quickviewContent"></div></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body></html>
