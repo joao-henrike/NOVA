@@ -120,11 +120,13 @@ The command checks the AWS account against `config/dev.env`, requires the exact 
 - Captures an inventory before cleanup.
 - Runs `terraform destroy` independently for the canonical state and any legacy keys listed in `config/dev.env`, continuing to the next state if one fails.
 - Stops the local application and monitoring Compose stacks, including their local named volumes.
+- Removes local `cloudstart/frontend` and `cloudstart/backend` images created by this project.
 - Captures an independent AWS inventory afterwards and writes per-step results.
+- If (and only if) every step succeeded and the post-scan is clean, hides the current empty state objects with S3 delete markers. Previous S3 object versions remain available for recovery.
 
 Reports are saved under `.deploy/destroy-all-<UTC timestamp>/` and include `inventory-before.txt`, `inventory-after.txt`, `results.tsv`, and the detailed command log. The script exits nonzero if a command failed or the final scan still finds project-scoped resources; do not treat a nonzero exit as a clean teardown.
 
-**Important limitation of this first pass:** resources outside the known Terraform states are reported rather than deleted directly through arbitrary AWS service APIs. If the post-scan lists any resource, the teardown is incomplete and the report contains its identifier. The remote Terraform S3 bucket and bootstrap lock table are preserved so the project can continue to use its deployment backend.
+**Important limitation of this first pass:** resources outside the known Terraform states are reported rather than deleted directly through arbitrary AWS service APIs. If the post-scan lists any resource, the teardown is incomplete and the report contains its identifier. The remote Terraform S3 bucket and bootstrap lock table are preserved so the project can continue to use its deployment backend. The current state-key pointers are only hidden after a confirmed clean inventory; historical versions are not purged.
 
 ## 5. Terraform formatting and validation
 
