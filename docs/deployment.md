@@ -279,7 +279,7 @@ docker push <backend_ecr_repository_url>:v0.1.0
 
 The current ECR repositories reject tag mutation because they are configured with immutable tags.
 
-## 12. Enable the ECS application
+## 13. Enable the ECS application
 
 Set:
 
@@ -300,7 +300,7 @@ terraform apply
 
 At this point the ECS desired/minimum counts become the configured non-zero values, defaulting to two tasks for each service.
 
-## 13. Validate the ALB path
+## 14. Validate the ALB path
 
 Get the ALB DNS output:
 
@@ -327,7 +327,7 @@ Expected routing:
 
 The current implementation does not expose HTTPS on the ALB.
 
-## 14. Operational checks
+## 15. Operational checks
 
 ### ECS
 
@@ -366,7 +366,7 @@ Zabbix server/web health
 monitoring PostgreSQL availability
 ```
 
-## 15. What the current repository does not automate
+## 16. What the current repository does not automate
 
 The following operations are not automatically performed:
 
@@ -381,7 +381,7 @@ Run a full DR test
 Run a restore drill
 ```
 
-## 16. Safe destroy considerations
+## 17. Safe destroy considerations
 
 The current defaults set:
 
@@ -402,7 +402,7 @@ terraform plan
 
 For production, explicitly review backup and deletion-protection implications before applying destructive changes.
 
-## 17. Bootstrap state care
+## 18. Bootstrap state care
 
 The bootstrap stack's local state is security-sensitive because it describes the remote-state infrastructure.
 
@@ -417,7 +417,7 @@ secret material
 
 The repository `.gitignore` is intended to keep Terraform runtime artifacts and local secret/config files out of Git.
 
-## 18. Current deployment model summary
+## 19. Current deployment model summary
 
 ```text
 Developer
@@ -492,7 +492,7 @@ GET /api/health/db
 This gives end-to-end coverage of the load balancer, frontend, backend and database path without requiring Kubernetes or host-level agent assumptions.
 
 
-## 19. Rebuild development directly from GitHub
+## 20. Rebuild development directly from GitHub
 
 For a complete development rebuild, use the dedicated GitHub Actions workflow:
 
@@ -550,7 +550,7 @@ AWS_CD_ROLE_ARN variable
 
 The workflow generates a temporary Grafana administrator password during the rebuild and passes it to Terraform as a sensitive variable. The generated value is stored by the application stack in AWS Secrets Manager and is not printed into the workflow logs.
 
-## 20. Automated development CD
+## 21. Automated development CD
 
 Pushes to the `Joao` branch that change application code trigger `.github/workflows/deploy-dev.yml`.
 
