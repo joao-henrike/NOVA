@@ -99,7 +99,34 @@ docker compose down
 
 Persistent local PostgreSQL data is stored in the Compose volume `postgres_data`.
 
-## 4. Terraform formatting and validation
+## 4. Local teardown and resource audit
+
+The project now provides a local CLI/Makefile path for teardown; it is not a GitHub Actions workflow.
+
+For a read-only inventory of the current AWS identity, CloudStart development resources, and local Compose stacks:
+
+```bash
+make inventory-cloud
+```
+
+To run the destructive first-pass cleanup:
+
+```bash
+make destroy-all
+```
+
+The command checks the AWS account against `config/dev.env`, requires the exact confirmation phrase for the account and region, and then:
+
+- Captures an inventory before cleanup.
+- Runs `terraform destroy` independently for the canonical state and any legacy keys listed in `config/dev.env`, continuing to the next state if one fails.
+- Stops the local application and monitoring Compose stacks, including their local named volumes.
+- Captures an independent AWS inventory afterwards and writes per-step results.
+
+Reports are saved under `.deploy/destroy-all-<UTC timestamp>/` and include `inventory-before.txt`, `inventory-after.txt`, `results.tsv`, and the detailed command log. The script exits nonzero if a command failed or the final scan still finds project-scoped resources; do not treat a nonzero exit as a clean teardown.
+
+**Important limitation of this first pass:** resources outside the known Terraform states are reported rather than deleted directly through arbitrary AWS service APIs. If the post-scan lists any resource, the teardown is incomplete and the report contains its identifier. The remote Terraform S3 bucket and bootstrap lock table are preserved so the project can continue to use its deployment backend.
+
+## 5. Terraform formatting and validation
 
 Root stack:
 
@@ -118,7 +145,7 @@ terraform -chdir=bootstrap validate
 
 The standard CI workflow performs these static validation steps automatically for matching changes. The separate `extreme-validation.yml` workflow performs a broader full-system validation with independent checks and preserved evidence.
 
-## 5. Bootstrap the remote state
+## 6. Bootstrap the remote state
 
 Create a local bootstrap variable file from the example:
 
@@ -146,7 +173,7 @@ DynamoDB table for state-lock compatibility
 
 The bootstrap stack uses local state by design.
 
-## 6. Initialize the root backend
+## 7. Initialize the root backend
 
 After the bootstrap succeeds:
 
@@ -170,7 +197,7 @@ use_lockfile = true
 encrypt      = true
 ```
 
-## 7. Plan the root infrastructure
+## 8. Plan the root infrastructure
 
 Before application deployment:
 
@@ -180,7 +207,7 @@ terraform plan
 
 The plan should declare the infrastructure and application control plane, while the ECS services remain configured for zero running tasks because `deploy_application` is false in the committed baseline. The one-command deployment overrides this only after the ECR/image phase.
 
-## 8. Apply the infrastructure baseline
+## 9. Apply the infrastructure baseline
 
 ```bash
 terraform apply
@@ -203,7 +230,7 @@ IAM roles/policy
 Zabbix/Grafana monitoring task + monitoring RDS + Grafana ALB route
 ```
 
-## 9. Build the application images
+## 10. Build the application images
 
 Build the same images used by the repository's Container CI:
 
@@ -221,7 +248,7 @@ docker build -t cloudstart/backend:v0.1.0 apps/backend
 
 The development CD workflow builds, scans, and publishes application images automatically. The manual commands below remain useful for local/operator recovery.
 
-## 10. Authenticate Docker to ECR
+## 11. Authenticate Docker to ECR
 
 After obtaining the repository URLs from Terraform outputs, authenticate Docker to the target ECR registry using the AWS CLI.
 
@@ -234,7 +261,7 @@ aws ecr get-login-password --region <region> \
 
 This command pattern is an operational procedure; the repository does not hardcode a live AWS account ID.
 
-## 11. Tag and push images
+## 12. Tag and push images
 
 Tag the local images with the immutable ECR repository URLs:
 
