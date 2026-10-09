@@ -111,7 +111,7 @@ inventory_aws() {
   echo "=== EC2 instances / EIPs / EBS volumes ==="
   aws ec2 describe-addresses --output json 2>/dev/null | jq -r '.Addresses[]? | select(any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev-nat-eip"))) or (any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev"))) | [.AllocationId,(.AssociationId // ""),(.PublicIp // "")] | @tsv' || true
   aws ec2 describe-instances --output json 2>/dev/null | jq -r '.Reservations[].Instances[]? | select(.State.Name!="terminated") | select(any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | [.InstanceId,.State.Name] | @tsv' || true
-  aws ec2 describe-volumes --output json 2>/dev/null | jq -r '.Volumes[]? | select(.State!="deleted") | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev"))) | [.VolumeId,.State,.Size] | @tsv' || true
+  aws ec2 describe-volumes --output json 2>/dev/null | jq -r '.Volumes[]? | select(.State!="deleted") | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | [.VolumeId,.State,.Size] | @tsv' || true
   echo
   echo "=== VPCs / NAT / subnets / ENIs ==="
   data="$(aws ec2 describe-vpcs --output json 2>/dev/null || printf '{"Vpcs":[]}')"
@@ -251,7 +251,7 @@ scope_resources() {
   data="$(aws ec2 describe-instances --output json)" || return 1
   jq -r '.Reservations[].Instances[]? | select(.State.Name!="terminated") | select(any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | .InstanceId' <<< "$data"
   data="$(aws ec2 describe-volumes --output json)" || return 1
-  jq -r '.Volumes[]? | select(.State!="deleted") | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev"))) | .VolumeId' <<< "$data"
+  jq -r '.Volumes[]? | select(.State!="deleted") | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | .VolumeId' <<< "$data"
   data="$(aws ec2 describe-network-interfaces --output json)" || return 1
   jq -r '.NetworkInterfaces[]? | select(.Status!="deleted") | select((any(.TagSet[]?;.Key=="Project" and .Value=="cloudstart") and any(.TagSet[]?;.Key=="Environment" and .Value=="dev")) or ((.Description // "")|test("cloudstart-dev";"i"))) | .NetworkInterfaceId' <<< "$data"
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
