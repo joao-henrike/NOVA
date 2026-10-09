@@ -8,7 +8,7 @@ AWS_REGION ?= us-east-1
 
 .DEFAULT_GOAL := start
 
-.PHONY: start setup doctor validate fmt tflint deploy up down logs restart test migrate smoke tf-init tf-validate tf-plan
+.PHONY: start setup doctor validate fmt tflint deploy destroy-all inventory-cloud up down logs restart test migrate smoke tf-init tf-validate tf-plan
 
 # Default entry point after cloning the repository.
 # It prepares the local environment, validates it, and starts the application.
@@ -43,6 +43,15 @@ tf-plan:
 
 deploy: setup doctor validate
 	bash scripts/deploy.sh
+
+# Destructive local pipeline: confirms AWS account/region, tears down all configured
+# Terraform states, stops local Compose stacks, then reports AWS resources still present.
+destroy-all:
+	bash scripts/destroy-all.sh
+
+# Non-destructive AWS inventory of this project's tagged/named resources.
+inventory-cloud:
+	bash scripts/destroy-all.sh --inventory-only
 
 up:
 	docker compose up -d --build
