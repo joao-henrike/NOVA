@@ -238,6 +238,8 @@ jobs:
         shell: bash
         run: bash scripts/run-gitleaks.sh
 
+      - name: Validate project cleanup script syntax
+        run: bash -n scripts/destroy-all.sh
       - name: ShellCheck
         run: shellcheck --severity=error -x ./*.sh scripts/*.sh
 
