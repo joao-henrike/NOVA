@@ -12,6 +12,7 @@ CONFIG_ENV="$ROOT_DIR/config/dev.env"
 [[ -f "$CONFIG_ENV" ]] || { echo "Missing $CONFIG_ENV" >&2; exit 2; }
 # shellcheck disable=SC1091
 source "$CONFIG_ENV"
+export PATH="$ROOT_DIR/.tools/bin:$PATH"
 : "${AWS_REGION:=us-east-1}"
 : "${EXPECTED_AWS_ACCOUNT_ID:=}"
 : "${TF_STATE_BUCKET:=}"
@@ -189,7 +190,9 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   volumes="$(docker volume ls -q --filter "label=com.docker.compose.project.working_dir=$ROOT_DIR" 2>/dev/null || true)"
   [[ -z "$volumes" ]] || run_step "remove_repo_volumes" docker volume rm $volumes || true
 else
-  log "Docker daemon unavailable; local Docker cleanup skipped."
+  log "Docker daemon unavailable; local Docker cleanup could not be verified."
+  printf 'local_docker_daemon\tFAIL\t127\n' >> "$RESULTS_FILE"
+  FAILED_STEPS=$((FAILED_STEPS + 1))
 fi
 
 log "Stage 3: independent AWS post-destroy inventory."
@@ -217,12 +220,34 @@ scope_resources() {
   jq -r '.SecretList[]? | select((.Name|startswith("cloudstart-dev/")) or (.Name|startswith("cloudstart-dev-"))) | .ARN' <<< "$data"
   data="$(aws iam list-roles --output json)" || return 1
   jq -r '.Roles[]? | select(.RoleName|startswith("cloudstart-dev-")) | .Arn' <<< "$data"
+  data="$(aws lambda list-functions --output json)" || return 1
+  jq -r '.Functions[]? | select(.FunctionName|startswith("cloudstart-dev-")) | .FunctionArn' <<< "$data"
+  data="$(aws ssm describe-parameters --output json)" || return 1
+  jq -r '.Parameters[]? | select((.Name|startswith("/cloudstart-dev/")) or (.Name|startswith("/cloudstart/dev/"))) | .Name' <<< "$data"
+  data="$(aws rds describe-db-snapshots --snapshot-type manual --output json)" || return 1
+  jq -r '.DBSnapshots[]? | select(.DBSnapshotIdentifier|startswith("cloudstart-dev")) | .DBSnapshotIdentifier' <<< "$data"
   data="$(aws logs describe-log-groups --output json)" || return 1
   jq -r '.logGroups[]? | select((.logGroupName|startswith("/ecs/cloudstart-dev")) or (.logGroupName|startswith("cloudstart-dev"))) | .logGroupName' <<< "$data"
   data="$(aws ec2 describe-vpcs --output json)" || return 1
   jq -r '.Vpcs[]? | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | .VpcId' <<< "$data"
   data="$(aws ec2 describe-addresses --output json)" || return 1
   jq -r '.Addresses[]? | select(any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev-nat-eip"))) or (any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev"))) | .AllocationId' <<< "$data"
+  data="$(aws ec2 describe-nat-gateways --output json)" || return 1
+  jq -r '.NatGateways[]? | select(.State!="deleted" and .State!="failed") | select(any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev-nat")))) | .NatGatewayId' <<< "$data"
+  data="$(aws ec2 describe-instances --output json)" || return 1
+  jq -r '.Reservations[].Instances[]? | select(.State.Name!="terminated") | select(any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev")))) | .InstanceId' <<< "$data"
+  data="$(aws ec2 describe-volumes --output json)" || return 1
+  jq -r '.Volumes[]? | select(.State!="deleted") | select((any(.Tags[]?;.Key=="Project" and .Value=="cloudstart") and any(.Tags[]?;.Key=="Environment" and .Value=="dev")) or any(.Tags[]?;.Key=="Name" and (.Value|startswith("cloudstart-dev"))) | .VolumeId' <<< "$data"
+  data="$(aws ec2 describe-network-interfaces --output json)" || return 1
+  jq -r '.NetworkInterfaces[]? | select(.Status!="deleted") | select((any(.TagSet[]?;.Key=="Project" and .Value=="cloudstart") and any(.TagSet[]?;.Key=="Environment" and .Value=="dev")) or ((.Description // "")|test("cloudstart-dev";"i"))) | .NetworkInterfaceId' <<< "$data"
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    docker ps -aq --filter "label=com.docker.compose.project.working_dir=$ROOT_DIR" | sed 's/^/LOCAL_CONTAINER /'
+    docker network ls -q --filter "label=com.docker.compose.project.working_dir=$ROOT_DIR" | sed 's/^/LOCAL_NETWORK /'
+    docker volume ls -q --filter "label=com.docker.compose.project.working_dir=$ROOT_DIR" | sed 's/^/LOCAL_VOLUME /'
+  else
+    echo "LOCAL_DOCKER_INVENTORY_UNAVAILABLE"
+    return 1
+  fi
 }
 if scope_resources > "$WORK_DIR/remaining-raw.txt"; then
   sort -u "$WORK_DIR/remaining-raw.txt" > "$WORK_DIR/remaining.txt"
@@ -237,6 +262,17 @@ log "Before: $BEFORE_FILE"
 log "After: $AFTER_FILE"
 log "Log: $LOG_FILE"
 log "Results: $RESULTS_FILE"
+if [[ "$INVENTORY_COMPLETE" == true && "$REMAINING_COUNT" -eq 0 && "$FAILED_STEPS" -eq 0 ]]; then
+  log "Final scan is clean. Removing current empty state objects via S3 delete markers; previous versions remain recoverable."
+  idx=0
+  for key in "${STATE_KEYS[@]}"; do
+    idx=$((idx + 1))
+    if aws s3api head-object --bucket "$TF_STATE_BUCKET" --key "$key" --region "$AWS_REGION" >/dev/null 2>&1; then
+      run_step "remove_current_empty_state_$idx" aws s3api delete-object --bucket "$TF_STATE_BUCKET" --key "$key" --region "$AWS_REGION" || true
+    fi
+  done
+fi
+
 if [[ "$INVENTORY_COMPLETE" != true || "$REMAINING_COUNT" -ne 0 || "$FAILED_STEPS" -ne 0 ]]; then
   echo
   echo "DESTROY/AUDIT INCOMPLETE: AWS resources outside known Terraform states may remain."
@@ -245,5 +281,6 @@ if [[ "$INVENTORY_COMPLETE" != true || "$REMAINING_COUNT" -ne 0 || "$FAILED_STEP
   exit 1
 fi
 echo
-echo "Terraform-managed resources were destroyed, local Compose stacks were removed, and the AWS post-scan found no scoped tagged/name-matched leftovers."
+echo "Terraform-managed resources were destroyed, local Compose stacks were removed, and the post-scan found no scoped leftovers."
+echo "Preserved backend bucket: $TF_STATE_BUCKET. Current state keys were hidden; versioned history remains recoverable."
 echo "Report: $REPORT_DIR"
