@@ -1,0 +1,27 @@
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Endpoint utilizado pelo ALB e pelo ECS container health check.
+    location = /health {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # SPA fallback. Se o frontend não for SPA, pode ser substituído
+    # por "try_files $uri $uri/ =404;".
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Não expor arquivos ocultos.
+    location ~ /\. {
+        deny all;
+    }
+}

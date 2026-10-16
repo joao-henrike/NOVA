@@ -1,32 +1,19 @@
-data "aws_caller_identity" "current" {}
+module "frontend" {
+  source = "../../modules/frontend"
 
-data "aws_region" "current" {}
+  name        = var.project_name
+  environment = var.environment
+  aws_region  = var.aws_region
 
-check "frontend_capacity_consistency" {
-  assert {
-    condition     = var.frontend_min_task_count <= var.frontend_desired_task_count && var.frontend_desired_task_count <= var.frontend_max_task_count
-    error_message = "Frontend task counts must satisfy min <= desired <= max."
-  }
-}
+  vpc_id             = var.vpc_id
+  private_subnet_ids  = var.private_subnet_ids
+  ecs_cluster_arn     = var.ecs_cluster_arn
+  frontend_security_group_id = var.frontend_security_group_id
+  alb_security_group_id       = var.alb_security_group_id
 
-check "backend_capacity_consistency" {
-  assert {
-    condition     = var.backend_min_task_count <= var.backend_desired_task_count && var.backend_desired_task_count <= var.backend_max_task_count
-    error_message = "Backend task counts must satisfy min <= desired <= max."
-  }
-}
+  alb_listener_arn = var.alb_listener_arn
 
-check "rds_storage_consistency" {
-  assert {
-    condition     = var.db_max_allocated_storage >= var.db_allocated_storage
-    error_message = "db_max_allocated_storage must be greater than or equal to db_allocated_storage."
-  }
-}
+  container_image = var.container_image
 
-
-check "grafana_password_when_monitoring_enabled" {
-  assert {
-    condition     = var.grafana_admin_password != null && length(var.grafana_admin_password) >= 12
-    error_message = "grafana_admin_password must be provided with at least 12 characters for the current Zabbix/Grafana monitoring stack."
-  }
+  tags = var.tags
 }

@@ -1,107 +1,49 @@
-output "aws_account_id" {
-  description = "AWS account ID used for the deployment."
-  value       = data.aws_caller_identity.current.account_id
+output "ecr_repository_name" {
+  description = "Nome do ECR do frontend."
+  value       = aws_ecr_repository.frontend.name
 }
 
-output "aws_region" {
-  description = "AWS region used for the deployment."
-  value       = data.aws_region.current.name
-}
-
-output "vpc_id" {
-  description = "ID of the CloudStart VPC."
-  value       = aws_vpc.this.id
-}
-
-output "public_subnet_ids" {
-  description = "Public subnet IDs by Availability Zone."
-  value       = { for az, subnet in aws_subnet.public : az => subnet.id }
-}
-
-output "private_app_subnet_ids" {
-  description = "Private application subnet IDs by Availability Zone."
-  value       = { for az, subnet in aws_subnet.private_app : az => subnet.id }
-}
-
-output "private_db_subnet_ids" {
-  description = "Private database subnet IDs by Availability Zone."
-  value       = { for az, subnet in aws_subnet.private_db : az => subnet.id }
-}
-
-output "alb_dns_name" {
-  description = "Public DNS name of the Application Load Balancer."
-  value       = aws_lb.this.dns_name
-}
-
-output "frontend_ecr_repository_url" {
-  description = "ECR repository URL for frontend images."
+output "ecr_repository_url" {
+  description = "URL do ECR do frontend."
   value       = aws_ecr_repository.frontend.repository_url
 }
 
-output "backend_ecr_repository_url" {
-  description = "ECR repository URL for backend images."
-  value       = aws_ecr_repository.backend.repository_url
+output "ecr_repository_arn" {
+  description = "ARN do ECR do frontend."
+  value       = aws_ecr_repository.frontend.arn
 }
 
-output "ecs_cluster_name" {
-  description = "ECS cluster name."
-  value       = aws_ecs_cluster.this.name
+output "target_group_arn" {
+  description = "ARN do Target Group do frontend."
+  value       = aws_lb_target_group.frontend.arn
 }
 
-output "frontend_ecs_service_name" {
-  description = "ECS frontend service name."
+output "target_group_name" {
+  description = "Nome do Target Group do frontend."
+  value       = aws_lb_target_group.frontend.name
+}
+
+output "ecs_service_name" {
+  description = "Nome do ECS Service do frontend."
   value       = aws_ecs_service.frontend.name
 }
 
-output "backend_ecs_service_name" {
-  description = "ECS backend service name."
-  value       = aws_ecs_service.backend.name
-}
-
-output "frontend_task_definition_arn" {
-  description = "Current frontend ECS task definition ARN."
+output "ecs_task_definition_arn" {
+  description = "ARN da Task Definition do frontend."
   value       = aws_ecs_task_definition.frontend.arn
 }
 
-output "backend_task_definition_arn" {
-  description = "Current backend ECS task definition ARN."
-  value       = aws_ecs_task_definition.backend.arn
+output "execution_role_arn" {
+  description = "ARN da Execution Role."
+  value       = aws_iam_role.execution.arn
 }
 
-output "rds_endpoint" {
-  description = "RDS connection endpoint hostname and port."
-  value       = aws_db_instance.this.endpoint
+output "task_role_arn" {
+  description = "ARN da Task Role."
+  value       = aws_iam_role.task.arn
 }
 
-output "rds_port" {
-  description = "RDS PostgreSQL listener port."
-  value       = aws_db_instance.this.port
-}
-
-output "rds_master_username" {
-  description = "RDS master username."
-  value       = aws_db_instance.this.username
-}
-
-output "rds_master_user_secret_arn" {
-  description = "Secrets Manager ARN containing the RDS-managed master password."
-  value       = aws_db_instance.this.master_user_secret[0].secret_arn
-  sensitive   = true
-}
-
-
-
-output "grafana_url" {
-  description = "Grafana URL exposed through the current public ALB listener."
-  value       = "http://${aws_lb.this.dns_name}/grafana/"
-}
-
-output "monitoring_ecs_service_name" {
-  description = "ECS monitoring service name hosting Zabbix server, Zabbix web, and Grafana."
-  value       = aws_ecs_service.monitoring.name
-}
-
-output "monitoring_rds_endpoint" {
-  description = "Private RDS endpoint used by the Zabbix monitoring database."
-  value       = aws_db_instance.monitoring.endpoint
+output "log_group_name" {
+  description = "Nome do CloudWatch Log Group."
+  value       = aws_cloudwatch_log_group.frontend.name
 }

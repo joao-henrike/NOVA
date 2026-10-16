@@ -1,9 +1,16 @@
-terraform {
-  backend "s3" {
-    key          = "cloudstart/terraform.tfstate"
-    encrypt      = true
-    use_lockfile = true
-    # bucket and dynamodb_table are intentionally supplied during `terraform init`
-    # because Terraform backend blocks cannot reference input variables.
-  }
-}
+# Configure o backend remoto somente depois de criar o bucket de estado
+# e o mecanismo de locking adotado pela infraestrutura principal.
+#
+# Exemplo:
+#
+# terraform {
+#   backend "s3" {
+#     bucket       = "cloudstart-terraform-state"
+#     key          = "frontend/dev/terraform.tfstate"
+#     region       = "us-east-1"
+#     encrypt      = true
+#     use_lockfile = true
+#   }
+# }
+#
+# Nunca versionar credenciais AWS no repositório.

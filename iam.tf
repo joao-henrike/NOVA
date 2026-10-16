@@ -3,125 +3,76 @@ data "aws_iam_policy_document" "ecs_task_assume_role" {
     effect = "Allow"
 
     actions = [
-      "sts:AssumeRole"
+      "sts:AssumeRole",
     ]
 
     principals {
-      type        = "Service"
+      type = "Service"
+
       identifiers = [
-        "ecs-tasks.amazonaws.com"
+        "ecs-tasks.amazonaws.com",
       ]
     }
   }
 }
 
-data "aws_iam_policy_document" "ecs_execution_permissions" {
-  statement {
-    sid    = "EcrPull"
-    effect = "Allow"
-
-    actions = [
-      "ecr:GetAuthorizationToken"
-    ]
-
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "EcrRepositoryPull"
-    effect = "Allow"
-
-    actions = [
-      "ecr:BatchCheckLayerAvailability",
-      "ecr:BatchGetImage",
-      "ecr:GetDownloadUrlForLayer"
-    ]
-
-    resources = [
-      aws_ecr_repository.frontend.arn,
-      aws_ecr_repository.backend.arn
-    ]
-  }
-
-
-  statement {
-    sid    = "ReadDatabaseSecret"
-    effect = "Allow"
-
-    actions = [
-      "secretsmanager:GetSecretValue"
-    ]
-
-    resources = [
-      aws_db_instance.this.master_user_secret[0].secret_arn
-    ]
-  }
-}
-
-resource "aws_iam_role" "ecs_execution" {
-  name               = "${local.name}-ecs-execution"
+resource "aws_iam_role" "execution" {
+  name               = "${var.name}-${var.environment}-frontend-execution"
   assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
 
-  tags = merge(local.global_tags, {
-    Name = "${local.name}-ecs-execution"
+  tags = merge(var.tags, {
+    Name        = "${var.name}-frontend-execution"
+    Component   = "frontend"
+    Environment = var.environment
+    ManagedBy   = "terraform"
   })
 }
 
-resource "aws_iam_role_policy" "ecs_execution" {
-  name   = "${local.name}-ecs-execution"
-  role   = aws_iam_role.ecs_execution.id
-  policy = data.aws_iam_policy_document.ecs_execution_permissions.json
-}
+# Permissões necessárias para o ECS Agent:
+# - baixar imagem do ECR
+# - enviar logs para o CloudWatch
+resource "aws_iam_role_policy" "execution" {
+  name = "${var.name}-${var.environment}-frontend-execution"
+  role = aws_iam_role.execution.id
 
-
-data "aws_iam_policy_document" "ecs_monitoring_execution_permissions" {
-  statement {
-    sid    = "ReadMonitoringSecrets"
-    effect = "Allow"
-
-    actions = [
-      "secretsmanager:GetSecretValue"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EcrPull"
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ]
+        Resource = "${aws_cloudwatch_log_group.frontend.arn}:*"
+      },
     ]
-
-    resources = [
-      aws_db_instance.monitoring.master_user_secret[0].secret_arn,
-      aws_secretsmanager_secret.grafana_admin.arn
-    ]
-  }
-}
-
-resource "aws_iam_role" "ecs_monitoring_execution" {
-  name               = "${local.name}-ecs-monitoring-execution"
-  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
-
-  tags = merge(local.global_tags, {
-    Name      = "${local.name}-ecs-monitoring-execution"
-    Component = "monitoring"
   })
 }
 
-resource "aws_iam_role_policy" "ecs_monitoring_execution" {
-  name   = "${local.name}-ecs-monitoring-execution"
-  role   = aws_iam_role.ecs_monitoring_execution.id
-  policy = data.aws_iam_policy_document.ecs_monitoring_execution_permissions.json
-}
-
-resource "aws_iam_role" "ecs_frontend_task" {
-  name               = "${local.name}-ecs-frontend-task"
+# Task Role separado do Execution Role.
+# Fica sem permissões por padrão e pode receber apenas as permissões
+# que a aplicação realmente precisar futuramente.
+resource "aws_iam_role" "task" {
+  name               = "${var.name}-${var.environment}-frontend-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
 
-  tags = merge(local.global_tags, {
-    Name      = "${local.name}-ecs-frontend-task"
-    Component = "frontend"
-  })
-}
-
-resource "aws_iam_role" "ecs_backend_task" {
-  name               = "${local.name}-ecs-backend-task"
-  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
-
-  tags = merge(local.global_tags, {
-    Name      = "${local.name}-ecs-backend-task"
-    Component = "backend"
+  tags = merge(var.tags, {
+    Name        = "${var.name}-frontend-task"
+    Component   = "frontend"
+    Environment = var.environment
+    ManagedBy   = "terraform"
   })
 }
