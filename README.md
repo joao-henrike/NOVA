@@ -1,4 +1,4 @@
-# CloudStart Commerce V7
+# CloudStart Commerce V8 — Front-end aprimorado
 
 Frontend estático e profissional para prototipação do CloudStart.
 
@@ -11,6 +11,7 @@ Demonstrar uma jornada de e-commerce B2B para infraestrutura de TI, inspirada em
 - `index.html` — vitrine e catálogo.
 - `checkout.html` — checkout completo.
 - `confirmation.html` — confirmação do pedido demonstrativo.
+- `quote.html` / `quote.js` — orçamento com impressão ou salvamento em PDF via navegador.
 - `login.html` / `register.html` — autenticação demonstrativa.
 - `store.js` — catálogo, carrinho, tema e favoritos.
 - `app.js` — comportamento da loja.
@@ -26,11 +27,17 @@ Demonstrar uma jornada de e-commerce B2B para infraestrutura de TI, inspirada em
 - Checkout dedicado.
 - Pix, crédito, débito e boleto.
 - Tema claro/escuro em todas as telas.
-- Busca e filtros por categoria.
-- Ordenação por preço e nome.
+- Busca textual combinada com categoria, faixa de preço, favoritos e ordenação.
+- Comparador de até três equipamentos com tabela de especificações.
+- Filtro para exibir somente favoritos.
+- Estados vazios, skeletons de carregamento e mensagens de feedback.
 - Favoritos.
 - Quick view dos produtos.
-- Calculadora de infraestrutura.
+- Calculadora de infraestrutura com limites de entrada.
+- Geração de orçamento imprimível / salvar como PDF pelo navegador.
+- Menu de categorias responsivo e atalho Ctrl/Cmd + K para a busca.
+- Validação demonstrativa de cadastro, confirmação de senha e campos de cartão.
+- Checkout condicional por método de pagamento; dados completos de cartão não são gravados no localStorage.
 - Recomendações por porte.
 - Login, cadastro e botão Google demonstrativos.
 - Fallback local para imagens externas que não carregarem.
@@ -39,6 +46,8 @@ Demonstrar uma jornada de e-commerce B2B para infraestrutura de TI, inspirada em
 ## Como executar
 
 Abra `index.html` diretamente no navegador. Não precisa de Node.js, npm ou servidor local.
+
+O PDF é gerado usando a função de impressão do navegador: clique em “Salvar como PDF / Imprimir” e escolha “Salvar como PDF”. Não há biblioteca externa.
 
 As fotos de fabricantes/editoriais são carregadas por URL quando houver internet. Se uma URL não responder, o produto troca automaticamente para uma imagem local de fallback, evitando cards quebrados.
 

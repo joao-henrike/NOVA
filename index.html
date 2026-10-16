@@ -13,14 +13,14 @@
 <header class="header">
   <div class="container header-main">
     <a class="brand" href="index.html"><span class="brand-icon">C</span><span>Cloud<span class="accent">Start</span></span></a>
-    <div class="search-wrap"><input id="search" type="search" placeholder="Buscar servidor, switch, firewall, cloud..." autocomplete="off"><button id="searchButton" aria-label="Buscar">Buscar</button></div>
+    <button class="mobile-menu-button" id="mobileMenuButton" aria-expanded="false" aria-controls="categoryBar">Menu</button><div class="search-wrap"><input id="search" type="search" placeholder="Buscar servidor, switch, firewall, cloud..." autocomplete="off" aria-label="Buscar produtos"><button id="searchButton" aria-label="Buscar">Buscar</button></div>
     <div class="header-actions">
       <a href="login.html" class="account-link"><span class="action-icon">●</span><span><small>Olá, visitante</small><strong>Entrar / conta</strong></span></a>
       <button class="icon-button" id="themeButton" title="Alternar tema" aria-label="Alternar tema">◐</button>
       <button class="cart-trigger" id="cartTrigger"><span>Carrinho</span><b id="cartCount">0</b></button>
     </div>
   </div>
-  <div class="category-bar"><div class="container category-inner">
+  <div class="category-bar" id="categoryBar"><div class="container category-inner">
     <a href="#catalogo">Todos</a><a href="#catalogo" data-category="server">Servidores</a><a href="#catalogo" data-category="network">Networking</a><a href="#catalogo" data-category="security">Firewall e segurança</a><a href="#catalogo" data-category="cloud">Soluções em nuvem</a><a href="#catalogo" data-category="suite">Suites</a><a href="#solucoes">Por porte</a><a href="#suporte">Atendimento</a>
   </div></div>
 </header>
@@ -46,9 +46,9 @@
     <div class="chips" id="categoryChips">
       <button class="chip active" data-category="all">Todos</button><button class="chip" data-category="server">Servidores</button><button class="chip" data-category="network">Networking</button><button class="chip" data-category="security">Firewall</button><button class="chip" data-category="cloud">Nuvem</button><button class="chip" data-category="suite">Suites</button>
     </div>
-    <select id="sort"><option value="relevance">Mais relevantes</option><option value="priceAsc">Menor preço</option><option value="priceDesc">Maior preço</option><option value="name">Nome A–Z</option></select>
+    <div class="filter-row"><label class="filter-field">Preço mínimo<input id="minPrice" type="number" min="0" placeholder="R$ 0"></label><label class="filter-field">Preço máximo<input id="maxPrice" type="number" min="0" placeholder="Sem limite"></label><label class="filter-check"><input id="favoritesOnly" type="checkbox"> Só favoritos</label><label class="filter-field sort-field">Ordenar por<select id="sort"><option value="relevance">Relevância</option><option value="priceAsc">Menor preço</option><option value="priceDesc">Maior preço</option><option value="name">Nome A–Z</option></select></label><button class="button secondary filter-reset" id="resetFilters" type="button">Limpar filtros</button></div>
   </div>
-  <div class="recommendation"><div><strong id="resultTitle">Soluções em destaque</strong><span id="resultCount">0 produtos</span></div><span>Entrega e valores são demonstrativos</span></div>
+  <div class="recommendation"><div><strong id="resultTitle">Soluções em destaque</strong><span id="resultCount">0 produtos</span></div><span>Entrega e valores são demonstrativos</span></div><div class="compare-toolbar"><span id="compareCount">0 equipamentos selecionados</span><button id="compareButton" class="button secondary" type="button" disabled>Comparar selecionados</button></div>
   <div class="product-grid" id="productGrid"></div>
 </section>
 
@@ -92,6 +92,8 @@
 </aside>
 <div class="drawer-overlay" id="drawerOverlay" hidden></div>
 
+<div class="quickview" id="compareModal" hidden><div class="quickview-card"><button class="drawer-close" data-close-compare aria-label="Fechar comparação">×</button><div id="compareContent"></div></div></div>
 <div class="quickview" id="quickview" hidden><div class="quickview-card"><button class="drawer-close" data-close-quick>×</button><div id="quickviewContent"></div></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="compare-dock" id="compareDock" hidden><span id="compareDockText">Comparação</span><button class="button primary" id="compareDockButton" type="button">Comparar</button><button class="button ghost" id="clearCompare" type="button">Limpar</button></div>
 </body></html>
