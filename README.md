@@ -718,39 +718,16 @@ rollback = enabled
 
 ## 19. ECS task counts and autoscaling
 
-Frontend defaults:
+When application deployment is enabled, the configured capacity is:
 
 ```text
-Desired = 2
-Minimum = 2
-Maximum = 6
+Frontend: Desired 2 / Minimum 2 / Maximum 6
+Backend:  Desired 2 / Minimum 2 / Maximum 6
 ```
 
-Backend defaults:
+When deploy_application = false (the committed repository baseline), Terraform evaluates frontend/backend desired and minimum counts as zero so infrastructure creation does not start the application workloads implicitly. The monitoring service remains at one task because the Zabbix server is stateful.
 
-```text
-Desired = 2
-Minimum = 2
-Maximum = 6
-```
-
-Autoscaling uses target tracking for:
-
-```text
-CPU
-Memory
-```
-
-Targets:
-
-```text
-CPU = 60%
-Memory = 70%
-```
-
-Terraform deliberately ignores ECS `desired_count` changes after the service has been created so Application Auto Scaling can control the runtime count.
-
----
+Autoscaling uses target tracking for CPU (60%) and memory (70%). Terraform deliberately ignores ECS desired_count changes after service creation so Application Auto Scaling can control runtime counts.
 
 ## 20. Monitoring architecture
 
