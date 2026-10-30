@@ -321,6 +321,51 @@ class ApplicationApiTest(unittest.TestCase):
         access_after_logout = self.client.get("/api/auth/me", headers=headers)
         self.assertEqual(access_after_logout.status_code, 401)
 
+    def test_cookie_logout_rejects_cross_origin_and_preserves_session(self) -> None:
+        _, refresh_token = self._issue_session()
+
+        rejected = self.client.post(
+            "/api/auth/logout",
+            cookies={"nova_refresh_token": refresh_token},
+            headers={"Origin": "http://attacker.test"},
+        )
+        self.assertEqual(rejected.status_code, 403)
+
+        from app.core.security import hash_refresh_token
+
+        with self.session_factory() as session:
+            record = (
+                session.query(RefreshToken)
+                .filter_by(token_hash=hash_refresh_token(refresh_token))
+                .one()
+            )
+            self.assertIsNone(record.revoked_at)
+
+        accepted = self.client.post(
+            "/api/auth/logout",
+            cookies={"nova_refresh_token": refresh_token},
+            headers={"Origin": "http://testserver"},
+        )
+        self.assertEqual(accepted.status_code, 204)
+
+        with self.session_factory() as session:
+            record = (
+                session.query(RefreshToken)
+                .filter_by(token_hash=hash_refresh_token(refresh_token))
+                .one()
+            )
+            self.assertIsNotNone(record.revoked_at)
+
+    def test_body_token_logout_does_not_require_browser_origin(self) -> None:
+        _, refresh_token = self._issue_session()
+
+        response = self.client.post(
+            "/api/auth/logout",
+            json={"refresh_token": refresh_token},
+        )
+
+        self.assertEqual(response.status_code, 204)
+
     def test_new_oauth_login_removes_expired_states(self) -> None:
         expired_state = f"expired-{uuid4()}"
         current_state = f"current-{uuid4()}"
