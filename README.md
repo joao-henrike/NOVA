@@ -363,9 +363,10 @@ nginx:1.29-alpine
 The AWS production Nginx configuration is responsible for:
 
 * serving the static application;
-* SPA fallback;
-* `/health` endpoint;
-* no dependency on Docker Compose DNS names.
+* SPA fallback and `/health` endpoint;
+* no dependency on Docker Compose DNS names;
+* serving local `app.js` and `styles.css` assets only (no inline JavaScript/CSS);
+* enforcing a restrictive CSP, `nosniff`, anti-framing, no-referrer, and Permissions Policy headers.
 
 The production image must **not** use:
 
