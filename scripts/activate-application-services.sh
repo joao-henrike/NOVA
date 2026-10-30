@@ -19,7 +19,7 @@ monitoring_service="$(terraform output -raw monitoring_ecs_service_name)"
 
 activate_service() {
   local component="$1"
-  local service task_definition desired_count min_capacity max_capacity
+  local service task_definition desired_count min_capacity max_capacity current_desired_count
 
   service="$(terraform output -raw "${component}_ecs_service_name")"
   task_definition="$(terraform output -raw "${component}_task_definition_arn")"
