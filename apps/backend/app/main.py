@@ -24,10 +24,10 @@ async def secure_api_responses(
 ) -> Response:
     response = await call_next(request)
     if request.url.path.startswith("/api/"):
-        response.headers.setdefault("Cache-Control", "no-store")
-        response.headers.setdefault("Pragma", "no-cache")
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
