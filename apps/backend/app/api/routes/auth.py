@@ -434,9 +434,12 @@ def refresh(
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     _enforce_auth_rate_limit(request, db, scope="refresh")
-    token = data.refresh_token or refresh_cookie
+    body_token = data.refresh_token
+    token = body_token or refresh_cookie
     if not token:
         raise HTTPException(status_code=401, detail="Refresh token required.")
+    if not body_token:
+        _require_same_origin_cookie_request(request)
 
     try:
         user, access_token, new_refresh, expires_in = service.rotate_refresh_token(
