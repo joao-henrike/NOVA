@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from threading import Barrier
 from uuid import uuid4
 
@@ -143,6 +144,7 @@ def test_concurrent_rate_limit_requests_cannot_exceed_shared_quota(
     allowed_limit = 4
     barrier = Barrier(request_count)
     bucket_key = _bucket_key(scope=scope, client_ip=client_ip)
+    window_time = datetime.now(UTC)
 
     try:
         def attempt_request() -> str:
@@ -155,6 +157,7 @@ def test_concurrent_rate_limit_requests_cannot_exceed_shared_quota(
                         client_ip=client_ip,
                         limit=allowed_limit,
                         window_seconds=300,
+                        now=window_time,
                     )
                     return "accepted"
                 except RateLimitExceeded:
