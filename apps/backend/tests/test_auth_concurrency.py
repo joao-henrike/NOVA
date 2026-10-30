@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 from app.core.security import hash_refresh_token
-from app.models.auth import AuthRateLimitBucket, AuthProvider, OAuthState, RefreshToken
+from app.models.auth import AuthProvider, AuthRateLimitBucket, OAuthState, RefreshToken
 from app.models.user import User
 from app.services.auth import AuthenticationError, AuthService
 from app.services.rate_limit import RateLimitExceeded, _bucket_key, check_rate_limit
