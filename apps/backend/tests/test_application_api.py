@@ -18,7 +18,13 @@ from app.core.security import (
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.auth import AuthIdentity, AuthProvider, OAuthState, RefreshToken
+from app.models.auth import (
+    AuthIdentity,
+    AuthProvider,
+    AuthRateLimitBucket,
+    OAuthState,
+    RefreshToken,
+)
 from app.models.item import Item
 from app.models.user import User
 from app.services.auth import AuthService
@@ -76,6 +82,7 @@ class ApplicationApiTest(unittest.TestCase):
         settings.auth_jwt_secret_key = self.original_secret
         with self.session_factory() as session:
             session.query(RefreshToken).delete(synchronize_session=False)
+            session.query(AuthRateLimitBucket).delete(synchronize_session=False)
             session.query(OAuthState).delete(synchronize_session=False)
             session.query(Item).delete(synchronize_session=False)
             session.query(AuthIdentity).delete(synchronize_session=False)
@@ -344,6 +351,48 @@ class ApplicationApiTest(unittest.TestCase):
 
         self.assertIsNone(consumed)
         self.assertIsNone(remaining)
+
+    def test_auth_endpoint_rate_limit_returns_429_and_retry_after(self) -> None:
+        from app.api.routes.auth import AUTH_RATE_LIMITS
+
+        with patch.dict(AUTH_RATE_LIMITS, {"refresh": (1, 300)}):
+            first = self.client.post(
+                "/api/auth/refresh",
+                json={"refresh_token": "not-a-valid-refresh-token"},
+            )
+            blocked = self.client.post(
+                "/api/auth/refresh",
+                json={"refresh_token": "not-a-valid-refresh-token"},
+            )
+
+        self.assertEqual(first.status_code, 401)
+        self.assertEqual(blocked.status_code, 429)
+        self.assertGreaterEqual(int(blocked.headers["retry-after"]), 1)
+        self.assertEqual(blocked.headers["cache-control"], "no-store")
+        self.assertEqual(
+            blocked.json()["detail"],
+            "Too many authentication requests. Please try again later.",
+        )
+
+    def test_auth_rate_limits_are_separated_by_endpoint(self) -> None:
+        from app.api.routes.auth import AUTH_RATE_LIMITS
+
+        with patch.dict(
+            AUTH_RATE_LIMITS,
+            {"refresh": (1, 300), "logout": (1, 300)},
+        ):
+            self.client.post(
+                "/api/auth/refresh",
+                json={"refresh_token": "not-a-valid-refresh-token"},
+            )
+            blocked_refresh = self.client.post(
+                "/api/auth/refresh",
+                json={"refresh_token": "not-a-valid-refresh-token"},
+            )
+            logout_response = self.client.post("/api/auth/logout")
+
+        self.assertEqual(blocked_refresh.status_code, 429)
+        self.assertEqual(logout_response.status_code, 204)
 
     def test_missing_user_is_rejected(self) -> None:
         token, _ = create_access_token(uuid4(), uuid4())
