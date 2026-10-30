@@ -12,10 +12,18 @@ from app.core.config import settings
 from app.db.bootstrap_roles import provision_database_roles
 
 
-def _connection_info(*, user: str, password: str) -> str:
-    url = make_url(settings.sqlalchemy_database_url)
+def _database_url():
+    try:
+        url = make_url(settings.sqlalchemy_database_url)
+    except RuntimeError:
+        pytest.skip("A PostgreSQL database connection is required for this test.")
     if url.get_backend_name() != "postgresql":
         pytest.skip("Database role integration test requires PostgreSQL.")
+    return url
+
+
+def _connection_info(*, user: str, password: str) -> str:
+    url = _database_url()
 
     return make_conninfo(
         host=url.host,
@@ -29,12 +37,13 @@ def _connection_info(*, user: str, password: str) -> str:
 
 
 def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
-    admin_user = settings.db_user
-    admin_password = settings.db_password
+    admin_url = _database_url()
+    admin_user = admin_url.username
+    admin_password = admin_url.password
     if not admin_user or not admin_password:
         pytest.skip("The PostgreSQL master connection is required for this integration test.")
 
-    database_name = make_url(settings.sqlalchemy_database_url).database
+    database_name = admin_url.database
     runtime_role = f"nova_rt_{uuid4().hex[:16]}"
     migrator_role = f"nova_mg_{uuid4().hex[:16]}"
     runtime_password = "runtime-test-" + uuid4().hex + uuid4().hex
@@ -133,12 +142,16 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema_name))
             )
             for role in (runtime_role, migrator_role):
-                connection.execute(
-                    sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role))
-                )
-                connection.execute(
-                    sql.SQL("DROP ROLE {}").format(sql.Identifier(role))
-                )
+                if connection.execute(
+                    "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                    (role,),
+                ).fetchone():
+                    connection.execute(
+                        sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role))
+                    )
+                    connection.execute(
+                        sql.SQL("DROP ROLE {}").format(sql.Identifier(role))
+                    )
     except Exception:
         # Best-effort cleanup keeps random test roles/schemas out of the shared
         # PostgreSQL service even when an assertion exposes a privilege defect.
@@ -149,10 +162,14 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 )
             )
             for role in (runtime_role, migrator_role):
-                connection.execute(
-                    sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role))
-                )
-                connection.execute(
-                    sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role))
-                )
+                if connection.execute(
+                    "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                    (role,),
+                ).fetchone():
+                    connection.execute(
+                        sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role))
+                    )
+                    connection.execute(
+                        sql.SQL("DROP ROLE {}").format(sql.Identifier(role))
+                    )
         raise
