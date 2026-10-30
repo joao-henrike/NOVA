@@ -14,6 +14,7 @@ from app.core.security import (
     create_access_token,
     create_pkce_challenge,
     create_pkce_verifier,
+    hash_refresh_token,
 )
 from app.db.base import Base
 from app.db.session import get_db
@@ -330,8 +331,6 @@ class ApplicationApiTest(unittest.TestCase):
             headers={"Origin": "http://attacker.test"},
         )
         self.assertEqual(rejected.status_code, 403)
-
-        from app.core.security import hash_refresh_token
 
         with self.session_factory() as session:
             record = (
