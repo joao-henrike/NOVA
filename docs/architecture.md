@@ -263,7 +263,7 @@ Execution roles receive only `logs:CreateLogStream` and `logs:PutLogEvents` for 
 
 ### Task identities
 
-Separate frontend, backend, and monitoring task roles exist with no additional permissions in the current implementation. One-off bootstrap and migration tasks use the backend task role, which has no extra AWS permissions; their narrowly scoped startup secret access is on their separate execution roles.
+Separate frontend, backend, and monitoring task roles exist with no additional application AWS permissions in the current implementation. The one-off bootstrap and migration task definitions intentionally omit task_role_arn entirely, so their containers receive no ECS task-role credentials. Their separate execution roles handle only image pulls, workload-specific logs, and the exact startup secrets required by each task.
 
 ### PostgreSQL identities
 
@@ -446,20 +446,23 @@ aws_dynamodb_table
 ## 16. Terraform state architecture
 
 ```text
-Bootstrap stack
+Bootstrap stack (local Terraform state)
       |
-      +--> S3 versioned/encrypted state bucket
+      +--> S3 bucket: versioning, SSE-S3, public access block,
+      |    ownership controls, secure transport policy, lifecycle
       |
-      +--> DynamoDB lock table
+      +--> DynamoDB compatibility table
       |
       v
 Root Terraform backend
       |
+      +--> bucket supplied at terraform init
       +--> key = cloudstart/dev/terraform.tfstate
-      +--> use_lockfile = true
+      +--> encrypt = true
+      +--> use_lockfile = true (active lock mechanism)
 ```
 
-The bootstrap stack intentionally has no remote backend of its own.
+The bootstrap stack intentionally has no remote backend of its own. The DynamoDB table remains a compatibility resource; the root backend and current workflows do not use DynamoDB locking. The state helper verifies AWS account, bucket owner, and region before reusing an existing bucket or creating missing bootstrap resources.
 
 ## 17. CI architecture
 
@@ -508,44 +511,40 @@ Compose uses PostgreSQL 17 while the default AWS RDS uses PostgreSQL 16. This mi
 
 ## 19. Availability and failure behavior actually encoded
 
-The current Terraform provides several resilience mechanisms:
+The current Terraform provides these resilience mechanisms:
 
 ```text
-Multiple AZs
+Multiple Availability Zones
    + public/private subnet separation
-   + NAT per AZ
+   + NAT per selected AZ
    + ECS placement spread by AZ
-   + configurable >=2 task deployment
-   + ALB health checks
+   + configurable >=2 frontend/backend tasks when deployment is enabled
+   + ALB target health checks
    + ECS container health checks
    + ECS service deployment circuit breaker
    + rollback on failed ECS deployment
-   + RDS Multi-AZ
-   + automated RDS backups
+   + automated RDS backups (one-day default retention)
 ```
 
-These are infrastructure/runtime controls. The repository does not yet contain tested RTO/RPO procedures, restore drills, chaos testing, or a separate DR environment.
+Both application and monitoring RDS instances are explicitly Single-AZ (multi_az = false) in the current development configuration. The repository does not yet contain tested RTO/RPO procedures, restore drills, chaos testing, or a separate DR environment.
 
 ## 20. What is deliberately not part of the current architecture
 
-The following resources/services do not exist in the current Terraform/application source and therefore are excluded from the current architecture:
+The following services/resources are not managed or implemented by the current Terraform/application source:
 
 ```text
-ACM
+ACM certificate issuance and validation
+Route 53 records / managed DNS
 WAF
-Route 53
 CloudFront
 API Gateway
 Lambda
-EC2/Auto Scaling Groups
-EKS/Kubernetes
-ElastiCache/Redis
-SQS
-SNS
-EventBridge
+EC2 / Auto Scaling Groups
+EKS / Kubernetes
+ElastiCache / Redis
+SQS / SNS / EventBridge
 Step Functions
 OpenSearch
-Secrets beyond the RDS-managed secret
 Customer-managed KMS keys
 VPC endpoints
 Multi-account organization
@@ -553,43 +552,46 @@ Cross-region DR
 On-premises connectivity
 Corporate AD integration
 Mobile application
-Financial core
-Payment provider integration
+Financial core / payment integration
 Audit Fabric
-Cost Intelligence / FinOps engine
+Cost Intelligence / FinOps
 Distributed tracing
 ```
+
+The ALB can use an already-issued ACM certificate if the operator supplies its ARN and the matching hostname. The committed development baseline leaves both values empty; certificate issuance, domain validation, and DNS are outside this stack.
+
+Secrets Manager entries for RDS, runtime/migrator database credentials, backend JWT/OAuth settings, and Grafana are part of the current architecture; the specific names and ownership are listed in docs/configuration-reference.md.
 
 ## 21. Architectural truth table
 
 | Concern | Current implementation |
 | --- | --- |
-| Public entry | ALB HTTP :80 |
+| Public entry | ALB HTTP :80 by default; optional ACM-backed HTTPS |
 | Compute | ECS/Fargate |
 | Application services | Frontend + Backend |
-| App networking | Private subnets |
+| App networking | Private subnets; tasks have no public IP |
 | Public network resources | ALB + NAT |
-| Database | RDS PostgreSQL Single-AZ (dev cost profile) |
+| Database | Application and monitoring RDS PostgreSQL Single-AZ |
 | Database network | Private DB subnets |
-| Container registry | ECR |
-| Monitoring | Zabbix + Grafana containers |
+| Container registry | ECR with immutable tags and scan-on-push |
+| Monitoring | Zabbix 7.4.15 + Grafana 13.2.3 containers |
 | ECS logs | Five CloudWatch log groups; 7d dev / 30d prod |
-| Container metrics | ECS Container Insights + Zabbix/Grafana |
-| Alarms | Zabbix/Grafana; no project-managed CloudWatch alarms |
+| Container metrics | ECS Container Insights + configured Zabbix/Grafana checks |
+| Alarms | No project-managed CloudWatch alarms or notification routing |
 | Database identities | Runtime DML role + migrator role + RDS master bootstrap |
-| Secrets | RDS-managed master + separate runtime/migrator/backend-auth/Grafana secrets |
-| IAM | Purpose-specific ECS execution roles + empty task roles |
+| Secrets | RDS master + runtime + migrator + backend auth + Grafana |
+| IAM | Purpose-specific ECS execution roles; app task roles are empty; DB one-off tasks have no task role |
 | IaC | Terraform |
-| Remote state | S3 + S3 lockfile + bootstrap DynamoDB |
+| Remote state | S3 + S3 lockfile; bootstrap also creates compatibility DynamoDB table |
 | CI | GitHub Actions |
-| Automatic development image publish | Yes |
-| Automatic development ECS deployment | Yes |
-| HTTPS | No |
-| Application auth | Google + Apple |
-| Business database schema | No |
+| Automatic development image publish | Yes, after CI |
+| Automatic development ECS deployment | Yes, guarded development-only CD |
+| Destructive development rebuild | Manual only, exact REBUILD confirmation |
+| Production deployment | Not implemented |
+| HTTPS default | Disabled; optional with external ACM certificate and DNS |
+| Application auth | Google + Apple provider integration |
+| Business database schema | No; technical Item/auth/session tables only |
 | Financial engine | No |
 | Audit Fabric | No |
 | FinOps engine | No |
 | Hybrid/on-prem | No |
-
-> Monitoring image choices were aligned with the current Zabbix 8.0 container documentation and Grafana documentation available at the time of this update.
