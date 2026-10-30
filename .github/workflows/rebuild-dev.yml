@@ -35,9 +35,9 @@ env:
 jobs:
   rebuild:
     name: Destroy legacy infrastructure and recreate from Joao
-    if: github.ref == 'refs/heads/Joao' && vars.AWS_CD_ROLE_ARN != ''
+    if: github.ref == 'refs/heads/Joao' && vars.AWS_REBUILD_ROLE_ARN != ''
     runs-on: ubuntu-latest
-    environment: development
+    environment: development-rebuild
 
     steps:
       - name: Checkout Joao
@@ -59,7 +59,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ vars.AWS_CD_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_REBUILD_ROLE_ARN }}
           role-session-name: nova-rebuild-${{ github.run_id }}
           allowed-account-ids: ${{ env.EXPECTED_AWS_ACCOUNT_ID }}
 
