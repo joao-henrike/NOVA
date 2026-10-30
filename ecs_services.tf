@@ -23,6 +23,15 @@ resource "aws_ecs_task_definition" "frontend" {
       cpu       = var.frontend_task_cpu
       memory    = var.frontend_task_memory
 
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.frontend.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+
       portMappings = [
         {
           name          = "http"
@@ -88,6 +97,15 @@ resource "aws_ecs_task_definition" "backend" {
       essential = true
       cpu       = var.backend_task_cpu
       memory    = var.backend_task_memory
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.backend.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
 
       portMappings = [
         {
@@ -197,6 +215,15 @@ resource "aws_ecs_task_definition" "db_bootstrap" {
       essential = true
       command   = ["python", "-m", "app.db.bootstrap_roles"]
 
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.db_bootstrap.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+
       environment = [
         { name = "DB_HOST", value = aws_db_instance.this.address },
         { name = "DB_PORT", value = tostring(aws_db_instance.this.port) },
@@ -261,6 +288,15 @@ resource "aws_ecs_task_definition" "db_migration" {
       image     = "${aws_ecr_repository.backend.repository_url}:${var.backend_image_tag}"
       essential = true
       command   = ["alembic", "upgrade", "head"]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.db_migration.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
 
       environment = [
         { name = "APP_ENV", value = var.environment },

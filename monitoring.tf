@@ -198,6 +198,15 @@ resource "aws_ecs_task_definition" "monitoring" {
       cpu       = 512
       memory    = 1024
 
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.monitoring.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "zabbix-server"
+        }
+      }
+
       portMappings = [
         {
           name          = "zabbix-server"
@@ -243,6 +252,15 @@ resource "aws_ecs_task_definition" "monitoring" {
       essential = true
       cpu       = 256
       memory    = 512
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.monitoring.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "zabbix-web"
+        }
+      }
 
       portMappings = [
         {
@@ -308,6 +326,15 @@ resource "aws_ecs_task_definition" "monitoring" {
       essential = true
       cpu       = 256
       memory    = 512
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.monitoring.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "grafana"
+        }
+      }
 
       portMappings = [
         {

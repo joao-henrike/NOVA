@@ -1,4 +1,6 @@
 locals {
+  log_retention_days = var.environment == "prod" ? 30 : 7
+
   name = lower(join("-", compact([
     var.project_name,
     var.environment,
