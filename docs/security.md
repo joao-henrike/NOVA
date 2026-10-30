@@ -225,9 +225,10 @@ Google authentication
 Apple authentication
 OAuth state validation
 OIDC nonce validation
-CloudStart access tokens
-Refresh-token rotation
-Session revocation
+CloudStart access tokens bound to refresh-token families
+Refresh-token rotation and reuse detection
+Session-family revocation
+Immediate rejection of access tokens after family revocation
 ```
 
 The current backend still does not implement:

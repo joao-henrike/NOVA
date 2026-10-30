@@ -149,9 +149,9 @@ POST /api/auth/logout
 GET  /api/auth/me
 ```
 
-Access tokens are short-lived JWTs.
+Access tokens are short-lived JWTs bound to the same session family as their refresh token. Protected requests verify that the family still has an unexpired, non-revoked refresh record in PostgreSQL. Logging out or detecting refresh-token reuse therefore invalidates already-issued access tokens on subsequent requests, not only future refreshes.
 
-Refresh tokens are opaque random values. Only their SHA-256 hashes are stored in PostgreSQL. Refresh-token rotation is enabled, and reuse of a revoked token revokes the complete token family.
+Refresh tokens are opaque random values. Only their SHA-256 hashes are stored in PostgreSQL. Refresh-token rotation is enabled, and reuse of a revoked token revokes the complete token family. This adds one indexed session-family lookup to authenticated requests; the backend already queries PostgreSQL to load the user.
 
 The refresh token is delivered in an HttpOnly cookie:
 

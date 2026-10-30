@@ -84,17 +84,24 @@ class ApplicationApiTest(unittest.TestCase):
             )
             session.commit()
 
-    def _auth_headers(self, user_id=None) -> dict[str, str]:
-        token, _ = create_access_token(user_id or self.user_id)
-        return {"Authorization": f"Bearer {token}"}
-
-    def _issue_refresh_token(self) -> str:
+    def _issue_session(self, user_id=None) -> tuple[str, str]:
         with self.session_factory() as session:
-            user = session.get(User, self.user_id)
+            user = session.get(User, user_id or self.user_id)
             if user is None:
                 raise AssertionError("Test user does not exist.")
-            _, refresh_token, _ = AuthService().issue_session(session, user=user)
-            return refresh_token
+            access_token, refresh_token, _ = AuthService().issue_session(
+                session,
+                user=user,
+            )
+            return access_token, refresh_token
+
+    def _auth_headers(self, user_id=None) -> dict[str, str]:
+        access_token, _ = self._issue_session(user_id)
+        return {"Authorization": f"Bearer {access_token}"}
+
+    def _issue_refresh_token(self) -> str:
+        _, refresh_token = self._issue_session()
+        return refresh_token
 
     def test_items_requires_authentication(self) -> None:
         response = self.client.get("/api/items")
@@ -220,8 +227,12 @@ class ApplicationApiTest(unittest.TestCase):
         )
         self.assertEqual(revoked_replacement.status_code, 401)
 
-    def test_logout_revokes_refresh_token(self) -> None:
-        refresh_token = self._issue_refresh_token()
+    def test_logout_revokes_refresh_and_access_tokens(self) -> None:
+        access_token, refresh_token = self._issue_session()
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        before_logout = self.client.get("/api/auth/me", headers=headers)
+        self.assertEqual(before_logout.status_code, 200)
 
         logged_out = self.client.post(
             "/api/auth/logout",
@@ -235,8 +246,11 @@ class ApplicationApiTest(unittest.TestCase):
         )
         self.assertEqual(refreshed.status_code, 401)
 
+        access_after_logout = self.client.get("/api/auth/me", headers=headers)
+        self.assertEqual(access_after_logout.status_code, 401)
+
     def test_missing_user_is_rejected(self) -> None:
-        token, _ = create_access_token(uuid4())
+        token, _ = create_access_token(uuid4(), uuid4())
         response = self.client.get(
             "/api/items",
             headers={"Authorization": f"Bearer {token}"},

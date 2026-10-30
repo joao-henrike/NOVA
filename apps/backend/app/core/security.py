@@ -26,13 +26,14 @@ def hash_refresh_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def create_access_token(user_id: UUID) -> tuple[str, int]:
+def create_access_token(user_id: UUID, session_id: UUID) -> tuple[str, int]:
     secret = settings.require_auth_signing_key()
     now = datetime.now(UTC)
     expires_in = settings.auth_access_token_ttl_minutes * 60
 
     payload = {
         "sub": str(user_id),
+        "sid": str(session_id),
         "iss": settings.auth_token_issuer,
         "aud": settings.auth_token_audience,
         "iat": now,
@@ -47,7 +48,7 @@ def create_access_token(user_id: UUID) -> tuple[str, int]:
     )
 
 
-def decode_access_token(token: str) -> UUID:
+def decode_access_token(token: str) -> tuple[UUID, UUID]:
     try:
         payload = jwt.decode(
             token,
@@ -58,6 +59,7 @@ def decode_access_token(token: str) -> UUID:
             options={
                 "require": [
                     "sub",
+                    "sid",
                     "iss",
                     "aud",
                     "iat",
@@ -67,7 +69,7 @@ def decode_access_token(token: str) -> UUID:
                 ],
             },
         )
-        return UUID(payload["sub"])
+        return UUID(payload["sub"]), UUID(payload["sid"])
     except (InvalidTokenError, ValueError, RuntimeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -78,7 +80,7 @@ def decode_access_token(token: str) -> UUID:
 
 def require_bearer_token(
     credentials: HTTPAuthorizationCredentials | None,
-) -> UUID:
+) -> tuple[UUID, UUID]:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

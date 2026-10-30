@@ -41,10 +41,12 @@ class AuthSecurityTest(unittest.TestCase):
 
         try:
             user_id = uuid4()
-            token, expires_in = create_access_token(user_id)
-            decoded_id = decode_access_token(token)
+            session_id = uuid4()
+            token, expires_in = create_access_token(user_id, session_id)
+            decoded_user_id, decoded_session_id = decode_access_token(token)
 
-            self.assertEqual(decoded_id, user_id)
+            self.assertEqual(decoded_user_id, user_id)
+            self.assertEqual(decoded_session_id, session_id)
             self.assertEqual(expires_in, 15 * 60)
         finally:
             settings.auth_jwt_secret_key = original_secret
@@ -54,7 +56,7 @@ class AuthSecurityTest(unittest.TestCase):
         settings.auth_jwt_secret_key = "x" * 64
 
         try:
-            token, _ = create_access_token(uuid4())
+            token, _ = create_access_token(uuid4(), uuid4())
             header = jwt.get_unverified_header(token)
             self.assertEqual(header["alg"], "HS256")
         finally:

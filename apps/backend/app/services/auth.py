@@ -129,17 +129,18 @@ class AuthService:
         *,
         user: User,
     ) -> tuple[str, str, int]:
-        access_token, expires_in = create_access_token(user.id)
+        family_id = uuid4()
         refresh_token = generate_refresh_token()
 
         self.repository.create_refresh_token(
             session,
             user_id=user.id,
-            family_id=uuid4(),
+            family_id=family_id,
             token_hash=hash_refresh_token(refresh_token),
             expires_at=datetime.now(UTC)
             + timedelta(days=settings.auth_refresh_token_ttl_days),
         )
+        access_token, expires_in = create_access_token(user.id, family_id)
         session.commit()
         return access_token, refresh_token, expires_in
 
@@ -211,7 +212,7 @@ class AuthService:
             + timedelta(days=settings.auth_refresh_token_ttl_days),
         )
 
-        access_token, expires_in = create_access_token(user.id)
+        access_token, expires_in = create_access_token(user.id, record.family_id)
         session.commit()
 
         return user, access_token, new_refresh, expires_in

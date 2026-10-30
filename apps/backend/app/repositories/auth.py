@@ -162,6 +162,25 @@ class AuthRepository:
         record.revoked_at = datetime.now(UTC)
         record.replaced_by_hash = replaced_by_hash
 
+    def has_active_refresh_family(
+        self,
+        session: Session,
+        *,
+        user_id: UUID,
+        family_id: UUID,
+    ) -> bool:
+        statement = (
+            select(RefreshToken.id)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.family_id == family_id,
+                RefreshToken.revoked_at.is_(None),
+                RefreshToken.expires_at > datetime.now(UTC),
+            )
+            .limit(1)
+        )
+        return session.scalar(statement) is not None
+
     def revoke_family(self, session: Session, family_id: UUID) -> None:
         session.execute(
             update(RefreshToken)
