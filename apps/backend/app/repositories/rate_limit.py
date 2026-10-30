@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
+from typing import Any, cast
 
-from sqlalchemy import case, delete
+from sqlalchemy import Table, case, delete
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -17,7 +18,7 @@ class AuthRateLimitRepository:
         window_start: datetime,
         now: datetime,
     ) -> int:
-        table = AuthRateLimitBucket.__table__
+        table = cast(Table, AuthRateLimitBucket.__table__)
 
         # Authentication traffic is low-volume; prune stale counters here
         # instead of introducing a scheduled task or a separate cache.
@@ -33,6 +34,7 @@ class AuthRateLimitRepository:
             "request_count": 1,
         }
         dialect = session.get_bind().dialect.name
+        statement: Any
         if dialect == "postgresql":
             statement = postgresql_insert(table).values(**values)
         elif dialect == "sqlite":
