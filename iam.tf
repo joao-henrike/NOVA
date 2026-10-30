@@ -34,6 +34,13 @@ data "aws_iam_policy_document" "ecs_execution_permissions" {
     resources = [aws_ecr_repository.frontend.arn]
   }
 
+  statement {
+    sid       = "WriteFrontendLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.frontend.arn}:*"]
+  }
+
   # Compatibility only while deploy_application=false: the disabled baseline
   # keeps the legacy backend task definition valid if an existing service is
   # still running. The deployed backend switches to its dedicated execution role.
@@ -46,6 +53,17 @@ data "aws_iam_policy_document" "ecs_execution_permissions" {
       actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
       resources = [statement.value]
     }
+
+  dynamic "statement" {
+    for_each = var.deploy_application ? [] : [aws_cloudwatch_log_group.backend.arn]
+
+    content {
+      sid       = "LegacyBackendLogsWhileDisabled"
+      effect    = "Allow"
+      actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+      resources = ["${statement.value}:*"]
+    }
+  }
   }
 
   dynamic "statement" {
@@ -97,7 +115,15 @@ data "aws_iam_policy_document" "ecs_backend_execution_permissions" {
   }
 
   dynamic "statement" {
-    for_each = var.db_runtime_secret_arn == "" ? [] : [var.db_runtime_secret_arn]
+    for_each = var.db_runtime_secret_arn
+  statement {
+    sid       = "WriteBackendLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.backend.arn}:*"]
+  }
+
+ == "" ? [] : [var.db_runtime_secret_arn]
 
     content {
       sid       = "ReadRuntimeDatabaseSecret"
@@ -146,7 +172,15 @@ data "aws_iam_policy_document" "ecs_migration_execution_permissions" {
   }
 
   dynamic "statement" {
-    for_each = var.db_migrator_secret_arn == "" ? [] : [var.db_migrator_secret_arn]
+    for_each = var.db_migrator_secret_arn
+  statement {
+    sid       = "WriteMigrationLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.db_migration.arn}:*"]
+  }
+
+ == "" ? [] : [var.db_migrator_secret_arn]
 
     content {
       sid       = "ReadMigrationDatabaseSecret"
@@ -185,6 +219,14 @@ data "aws_iam_policy_document" "ecs_db_bootstrap_execution_permissions" {
 
   statement {
     sid       = "ReadRdsMasterSecretForRoleBootstrap"
+
+  statement {
+    sid       = "WriteBootstrapLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.db_bootstrap.arn}:*"]
+  }
+
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_db_instance.this.master_user_secret[0].secret_arn]
@@ -223,6 +265,13 @@ resource "aws_iam_role_policy" "ecs_db_bootstrap_execution" {
 
 
 data "aws_iam_policy_document" "ecs_monitoring_execution_permissions" {
+  statement {
+    sid       = "WriteMonitoringLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.monitoring.arn}:*"]
+  }
+
   statement {
     sid    = "ReadMonitoringSecrets"
     effect = "Allow"
