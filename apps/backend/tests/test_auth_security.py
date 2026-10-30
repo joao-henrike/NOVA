@@ -2,6 +2,7 @@ import unittest
 from uuid import uuid4
 
 import jwt
+from fastapi import HTTPException
 
 from app.core.config import Settings, settings
 from app.core.security import (
@@ -59,6 +60,82 @@ class AuthSecurityTest(unittest.TestCase):
             token, _ = create_access_token(uuid4(), uuid4())
             header = jwt.get_unverified_header(token)
             self.assertEqual(header["alg"], "HS256")
+        finally:
+            settings.auth_jwt_secret_key = original_secret
+
+    def test_access_token_rejects_invalid_signature(self) -> None:
+        original_secret = settings.auth_jwt_secret_key
+        settings.auth_jwt_secret_key = "x" * 64
+
+        try:
+            token, _ = create_access_token(uuid4(), uuid4())
+            header, payload, signature = token.split(".")
+            replacement = "A" if signature[0] != "A" else "B"
+            tampered_token = f"{header}.{payload}.{replacement}{signature[1:]}"
+
+            with self.assertRaises(HTTPException) as rejected:
+                decode_access_token(tampered_token)
+
+            self.assertEqual(rejected.exception.status_code, 401)
+        finally:
+            settings.auth_jwt_secret_key = original_secret
+
+    def test_access_token_rejects_invalid_registered_claims(self) -> None:
+        original_secret = settings.auth_jwt_secret_key
+        settings.auth_jwt_secret_key = "x" * 64
+
+        try:
+            token, _ = create_access_token(uuid4(), uuid4())
+            payload = jwt.decode(token, options={"verify_signature": False})
+            invalid_payloads = []
+
+            wrong_issuer = dict(payload)
+            wrong_issuer["iss"] = "unexpected-issuer"
+            invalid_payloads.append(("issuer", wrong_issuer))
+
+            wrong_audience = dict(payload)
+            wrong_audience["aud"] = "unexpected-audience"
+            invalid_payloads.append(("audience", wrong_audience))
+
+            expired = dict(payload)
+            expired["exp"] = 1
+            invalid_payloads.append(("expiration", expired))
+
+            missing_required_claim = dict(payload)
+            missing_required_claim.pop("jti")
+            invalid_payloads.append(("required claim", missing_required_claim))
+
+            for claim, invalid_payload in invalid_payloads:
+                forged_for_test = jwt.encode(
+                    invalid_payload,
+                    settings.auth_jwt_secret_key,
+                    algorithm="HS256",
+                )
+                with self.subTest(claim=claim):
+                    with self.assertRaises(HTTPException) as rejected:
+                        decode_access_token(forged_for_test)
+                    self.assertEqual(rejected.exception.status_code, 401)
+        finally:
+            settings.auth_jwt_secret_key = original_secret
+
+    def test_access_token_rejects_non_string_session_id(self) -> None:
+        original_secret = settings.auth_jwt_secret_key
+        settings.auth_jwt_secret_key = "x" * 64
+
+        try:
+            token, _ = create_access_token(uuid4(), uuid4())
+            payload = jwt.decode(token, options={"verify_signature": False})
+            payload["sid"] = 123
+            malformed_token = jwt.encode(
+                payload,
+                settings.auth_jwt_secret_key,
+                algorithm="HS256",
+            )
+
+            with self.assertRaises(HTTPException) as rejected:
+                decode_access_token(malformed_token)
+
+            self.assertEqual(rejected.exception.status_code, 401)
         finally:
             settings.auth_jwt_secret_key = original_secret
 

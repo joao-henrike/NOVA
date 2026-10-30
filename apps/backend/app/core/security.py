@@ -69,7 +69,11 @@ def decode_access_token(token: str) -> tuple[UUID, UUID]:
                 ],
             },
         )
-        return UUID(payload["sub"]), UUID(payload["sid"])
+        subject = payload["sub"]
+        session_id = payload["sid"]
+        if not isinstance(subject, str) or not isinstance(session_id, str):
+            raise ValueError("Token subject and session ID must be strings.")
+        return UUID(subject), UUID(session_id)
     except (InvalidTokenError, ValueError, RuntimeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -115,6 +115,88 @@ class ApplicationApiTest(unittest.TestCase):
         response = self.client.get("/api/items")
         self.assertEqual(response.status_code, 401)
 
+    def test_inactive_user_cannot_use_existing_access_token(self) -> None:
+        with self.session_factory() as session:
+            inactive_user = User(
+                email=f"inactive-{uuid4()}@example.com",
+                name="Inactive User",
+                email_verified=True,
+            )
+            session.add(inactive_user)
+            session.commit()
+            session.refresh(inactive_user)
+            inactive_user_id = inactive_user.id
+
+        access_token, refresh_token = self._issue_session(inactive_user_id)
+        with self.session_factory() as session:
+            inactive_user = session.get(User, inactive_user_id)
+            self.assertIsNotNone(inactive_user)
+            inactive_user.is_active = False
+            session.commit()
+
+        protected_response = self.client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        self.assertEqual(protected_response.status_code, 401)
+
+        refresh_response = self.client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": refresh_token},
+        )
+        self.assertEqual(refresh_response.status_code, 401)
+
+        with self.session_factory() as session:
+            record = session.query(RefreshToken).filter(
+                RefreshToken.token_hash == hash_refresh_token(refresh_token)
+            ).one()
+            self.assertIsNotNone(record.revoked_at)
+
+    def test_item_validation_boundaries(self) -> None:
+        headers = self._auth_headers()
+        created = self.client.post(
+            "/api/items",
+            json={
+                "name": "Validation boundary item",
+                "description": "This description can be cleared.",
+            },
+            headers=headers,
+        )
+        self.assertEqual(created.status_code, 201)
+        item_id = created.json()["id"]
+
+        invalid_queries = (
+            "/api/items?offset=-1",
+            "/api/items?limit=0",
+            "/api/items?limit=101",
+            "/api/items?status=unknown",
+        )
+        for path in invalid_queries:
+            with self.subTest(path=path):
+                response = self.client.get(path, headers=headers)
+                self.assertEqual(response.status_code, 422)
+
+        empty_patch = self.client.patch(
+            f"/api/items/{item_id}",
+            json={},
+            headers=headers,
+        )
+        self.assertEqual(empty_patch.status_code, 400)
+
+        cleared_description = self.client.patch(
+            f"/api/items/{item_id}",
+            json={"description": None},
+            headers=headers,
+        )
+        self.assertEqual(cleared_description.status_code, 200)
+        self.assertIsNone(cleared_description.json()["description"])
+
+        invalid_id = self.client.get(
+            "/api/items/not-a-uuid",
+            headers=headers,
+        )
+        self.assertEqual(invalid_id.status_code, 422)
+
     def test_items_crud(self) -> None:
         headers = self._auth_headers()
 

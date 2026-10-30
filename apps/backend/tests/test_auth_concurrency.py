@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 from app.core.security import hash_refresh_token
-from app.models.auth import AuthRateLimitBucket, RefreshToken
+from app.models.auth import AuthRateLimitBucket, AuthProvider, OAuthState, RefreshToken
 from app.models.user import User
 from app.services.auth import AuthenticationError, AuthService
 from app.services.rate_limit import RateLimitExceeded, _bucket_key, check_rate_limit
@@ -241,6 +241,57 @@ def test_expired_refresh_cleanup_on_postgresql_preserves_live_sessions(
                 session.execute(delete(User).where(User.id == user_id))
                 session.commit()
         settings.auth_jwt_secret_key = original_secret
+
+
+def test_concurrent_oauth_state_consumption_succeeds_only_once(
+    postgres_session_factory,
+) -> None:
+    state = f"oauth-state-race-{uuid4()}"
+    now = datetime.now(UTC)
+    barrier = Barrier(2)
+    service = AuthService()
+
+    try:
+        with postgres_session_factory() as session:
+            session.add(
+                OAuthState(
+                    provider=AuthProvider.GOOGLE,
+                    state=state,
+                    nonce=f"nonce-{uuid4()}",
+                    code_verifier="test-code-verifier",
+                    redirect_uri="https://example.invalid/callback",
+                    expires_at=now + timedelta(minutes=5),
+                )
+            )
+            session.commit()
+
+        def consume_state() -> bool:
+            with postgres_session_factory() as session:
+                barrier.wait(timeout=10)
+                return (
+                    service.consume_oauth_state(
+                        session,
+                        provider=AuthProvider.GOOGLE,
+                        state=state,
+                    )
+                    is not None
+                )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(consume_state),
+                executor.submit(consume_state),
+            ]
+            outcomes = [future.result(timeout=20) for future in futures]
+
+        assert outcomes.count(True) == 1
+        assert outcomes.count(False) == 1
+    finally:
+        with postgres_session_factory() as session:
+            session.query(OAuthState).filter(
+                OAuthState.state == state
+            ).delete(synchronize_session=False)
+            session.commit()
 
 
 def test_concurrent_rate_limit_requests_cannot_exceed_shared_quota(
