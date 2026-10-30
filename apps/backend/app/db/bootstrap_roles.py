@@ -13,7 +13,6 @@ import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
-
 _ROLE_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
 
 

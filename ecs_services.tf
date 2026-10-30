@@ -127,7 +127,7 @@ resource "aws_ecs_task_definition" "backend" {
             name      = "DB_PASSWORD"
             valueFrom = "${var.db_runtime_secret_arn}:password::"
           }
-        ] : [
+          ] : [
           {
             name      = "DB_PASSWORD"
             valueFrom = "${aws_db_instance.this.master_user_secret[0].secret_arn}:password::"
