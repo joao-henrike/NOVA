@@ -6,7 +6,7 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from google.auth.exceptions import TransportError
 
-from app.api.routes.auth import _validate_redirect_uri
+from app.api.routes.auth import _extract_apple_profile_name, _validate_redirect_uri
 from app.core.config import settings
 from app.services.providers import (
     ProviderAuthenticationError,
@@ -188,6 +188,28 @@ class ProviderSettingsTest(unittest.TestCase):
             self.assertRaises(ProviderAuthenticationError),
         ):
             verify_apple_id_token(token, "expected-nonce")
+
+    def test_apple_browser_profile_uses_name_but_never_email(self) -> None:
+        supplied_profile = (
+            '{"email":"victim@example.com",'
+            '"name":{"firstName":"  Jane ","lastName":" Doe  "}}'
+        )
+
+        self.assertEqual(_extract_apple_profile_name(supplied_profile), "Jane Doe")
+
+    def test_apple_browser_profile_rejects_invalid_or_non_object_data(self) -> None:
+        self.assertIsNone(_extract_apple_profile_name(None))
+        self.assertIsNone(_extract_apple_profile_name("not-json"))
+        self.assertIsNone(_extract_apple_profile_name('["not", "an", "object"]'))
+        self.assertIsNone(_extract_apple_profile_name('{"name":"not-an-object"}'))
+
+    def test_apple_browser_profile_limits_display_name_length(self) -> None:
+        long_name = "A" * 250
+        supplied_profile = (
+            '{"name":{"firstName":"' + long_name + '","lastName":""}}'
+        )
+
+        self.assertEqual(len(_extract_apple_profile_name(supplied_profile) or ""), 200)
 
     def test_redirect_uri_requires_https_outside_localhost_development(self) -> None:
         settings.app_env = "dev"
