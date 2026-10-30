@@ -295,10 +295,35 @@ jobs:
           bad=0
           while IFS= read -r line; do
             ref="$(printf '%s' "$line" | sed 's/.*@//')"
-            if ! printf '%s' "$ref" | grep -Eq '^[0-9a-f]{40}$'; then
+            if ! printf '%s' "$ref" | grep -Eq '^[0-9a-f]{40}
+; then
               echo "Unpinned action: $line"
               bad=1
             fi
           done < <(grep -RhoE 'uses:[[:space:]]+[^[:space:]]+@[^[:space:]]+' .github/workflows/*.yml)
           test "$bad" -eq 0
+
+      - name: Reject direct workflow-input interpolation in shell
+        shell: bash
+        run: |
+          ruby - <<'RUBY'
+          require "yaml"
+
+          marker = "$" + "{{ inputs."
+
+          Dir[".github/workflows/*.yml"].sort.each do |file|
+            workflow = YAML.load_file(file)
+            (workflow["jobs"] || {}).each_value do |job|
+              (job["steps"] || []).each do |step|
+                next unless step.is_a?(Hash)
+
+                script = step["run"].to_s
+                next unless script.include?(marker)
+
+                name = step["name"] || "(unnamed step)"
+                abort "#{file}: #{name} interpolates workflow input inside run:. Pass it through env: instead."
+              end
+            end
+          end
+          RUBY
 
