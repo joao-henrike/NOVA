@@ -1,5 +1,7 @@
+import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 import jwt
@@ -177,8 +179,9 @@ class AuthSecurityTest(unittest.TestCase):
             "postgresql+psycopg://user+name:p%40ss%2Fword@db.example:5433/nova",
         )
 
-        with self.assertRaisesRegex(RuntimeError, "configuration is incomplete"):
-            Settings().sqlalchemy_database_url
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "configuration is incomplete"):
+                Settings(_env_file=None).sqlalchemy_database_url
 
     def test_provider_and_signing_configuration_validation(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "Google authentication is not configured"):

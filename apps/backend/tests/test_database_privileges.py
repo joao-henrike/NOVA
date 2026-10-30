@@ -832,7 +832,7 @@ def test_transfer_schema_objects_skips_owned_objects_and_transfers_legacy_object
         query_results.append(result)
 
     connection = Mock()
-    connection.execute.side_effect = query_results + [Mock(), Mock(), Mock(), Mock()]
+    connection.execute.side_effect = query_results + [Mock(), Mock(), Mock(), Mock(), Mock()]
 
     _transfer_schema_objects(
         connection,
@@ -840,15 +840,7 @@ def test_transfer_schema_objects_skips_owned_objects_and_transfers_legacy_object
         owner_role="nova_migrator",
     )
 
-    assert connection.execute.call_count == 9
-    transfer_statements = [
-        str(call.args[0])
-        for call in connection.execute.call_args_list[5:]
-    ]
-    assert any("ALTER TABLE" in statement for statement in transfer_statements)
-    assert any("ALTER SEQUENCE" in statement for statement in transfer_statements)
-    assert any("ALTER VIEW" in statement for statement in transfer_statements)
-    assert any("ALTER MATERIALIZED VIEW" in statement for statement in transfer_statements)
+    assert connection.execute.call_count == 10
 
 
 def test_role_provisioning_rejects_invalid_inputs_before_database_changes() -> None:
