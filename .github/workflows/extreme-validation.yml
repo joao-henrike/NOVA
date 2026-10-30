@@ -313,12 +313,25 @@ jobs:
         shell: bash
         run: |
           source scripts/extreme-checks.sh
+          passed_checks="$(awk -F '\\t' '$2 == 0 {count++} END {print count+0}' "$RESULTS_FILE")"
+          failed_checks="$(awk -F '\\t' '$2 != 0 && $2 != "SKIP" {count++} END {print count+0}' "$RESULTS_FILE")"
+          skipped_checks="$(awk -F '\\t' '$2 == "SKIP" {count++} END {print count+0}' "$RESULTS_FILE")"
           {
             echo "# NOVA Extreme Validation"
             echo
+            if [ "$skipped_checks" -gt 0 ]; then
+              echo "**Coverage: PARTIAL** — $skipped_checks checks were skipped and were not validated."
+            else
+              echo "**Coverage: COMPLETE** — all recorded checks were executed."
+            fi
+            echo
+            echo "| Passed | Failed | Skipped |"
+            echo "|---:|---:|---:|"
+            echo "| $passed_checks | $failed_checks | $skipped_checks |"
+            echo
             echo "| Check | Result |"
             echo "|---|---|"
-            awk -F '\t' '{status = ($2 == "SKIP" ? "SKIP" : ($2 == 0 ? "PASS" : "FAIL (" $2 ")")); printf "| %s | %s |\n", $1, status}' "$RESULTS_FILE"
+            awk -F '\\t' '{status = ($2 == "SKIP" ? "SKIP" : ($2 == 0 ? "PASS" : "FAIL (" $2 ")")); printf "| %s | %s |\\n", $1, status}' "$RESULTS_FILE"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
           finish_checks
