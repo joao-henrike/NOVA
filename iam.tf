@@ -7,10 +7,8 @@ data "aws_iam_policy_document" "ecs_task_assume_role" {
     ]
 
     principals {
-      type = "Service"
-      identifiers = [
-        "ecs-tasks.amazonaws.com"
-      ]
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
     }
   }
 }
@@ -24,6 +22,8 @@ data "aws_iam_policy_document" "ecs_execution_base_permissions" {
   }
 }
 
+# Legacy execution role is used by the frontend at all times and by the backend
+# only while deploy_application=false. Its backend-only access is conditional.
 data "aws_iam_policy_document" "ecs_execution_permissions" {
   source_policy_documents = [data.aws_iam_policy_document.ecs_execution_base_permissions.json]
 
@@ -41,9 +41,6 @@ data "aws_iam_policy_document" "ecs_execution_permissions" {
     resources = ["${aws_cloudwatch_log_group.frontend.arn}:*"]
   }
 
-  # Compatibility only while deploy_application=false: the disabled baseline
-  # keeps the legacy backend task definition valid if an existing service is
-  # still running. The deployed backend switches to its dedicated execution role.
   dynamic "statement" {
     for_each = var.deploy_application ? [] : [aws_ecr_repository.backend.arn]
 
@@ -53,6 +50,7 @@ data "aws_iam_policy_document" "ecs_execution_permissions" {
       actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
       resources = [statement.value]
     }
+  }
 
   dynamic "statement" {
     for_each = var.deploy_application ? [] : [aws_cloudwatch_log_group.backend.arn]
@@ -63,7 +61,6 @@ data "aws_iam_policy_document" "ecs_execution_permissions" {
       actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
       resources = ["${statement.value}:*"]
     }
-  }
   }
 
   dynamic "statement" {
@@ -114,8 +111,6 @@ data "aws_iam_policy_document" "ecs_backend_execution_permissions" {
     resources = [aws_ecr_repository.backend.arn]
   }
 
-  dynamic "statement" {
-    for_each = var.db_runtime_secret_arn
   statement {
     sid       = "WriteBackendLogs"
     effect    = "Allow"
@@ -123,7 +118,8 @@ data "aws_iam_policy_document" "ecs_backend_execution_permissions" {
     resources = ["${aws_cloudwatch_log_group.backend.arn}:*"]
   }
 
- == "" ? [] : [var.db_runtime_secret_arn]
+  dynamic "statement" {
+    for_each = var.db_runtime_secret_arn == "" ? [] : [var.db_runtime_secret_arn]
 
     content {
       sid       = "ReadRuntimeDatabaseSecret"
@@ -171,8 +167,6 @@ data "aws_iam_policy_document" "ecs_migration_execution_permissions" {
     resources = [aws_ecr_repository.backend.arn]
   }
 
-  dynamic "statement" {
-    for_each = var.db_migrator_secret_arn
   statement {
     sid       = "WriteMigrationLogs"
     effect    = "Allow"
@@ -180,7 +174,8 @@ data "aws_iam_policy_document" "ecs_migration_execution_permissions" {
     resources = ["${aws_cloudwatch_log_group.db_migration.arn}:*"]
   }
 
- == "" ? [] : [var.db_migrator_secret_arn]
+  dynamic "statement" {
+    for_each = var.db_migrator_secret_arn == "" ? [] : [var.db_migrator_secret_arn]
 
     content {
       sid       = "ReadMigrationDatabaseSecret"
@@ -218,15 +213,14 @@ data "aws_iam_policy_document" "ecs_db_bootstrap_execution_permissions" {
   }
 
   statement {
-    sid       = "ReadRdsMasterSecretForRoleBootstrap"
-
-  statement {
     sid       = "WriteBootstrapLogs"
     effect    = "Allow"
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["${aws_cloudwatch_log_group.db_bootstrap.arn}:*"]
   }
 
+  statement {
+    sid       = "ReadRdsMasterSecretForRoleBootstrap"
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_db_instance.this.master_user_secret[0].secret_arn]
@@ -263,7 +257,6 @@ resource "aws_iam_role_policy" "ecs_db_bootstrap_execution" {
   policy = data.aws_iam_policy_document.ecs_db_bootstrap_execution_permissions.json
 }
 
-
 data "aws_iam_policy_document" "ecs_monitoring_execution_permissions" {
   statement {
     sid       = "WriteMonitoringLogs"
@@ -273,13 +266,9 @@ data "aws_iam_policy_document" "ecs_monitoring_execution_permissions" {
   }
 
   statement {
-    sid    = "ReadMonitoringSecrets"
-    effect = "Allow"
-
-    actions = [
-      "secretsmanager:GetSecretValue"
-    ]
-
+    sid       = "ReadMonitoringSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = [
       aws_db_instance.monitoring.master_user_secret[0].secret_arn,
       aws_secretsmanager_secret.grafana_admin.arn
