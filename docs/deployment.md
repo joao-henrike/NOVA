@@ -19,7 +19,7 @@ For local validation and deployment, use:
 
 Run make setup and make doctor to prepare/check the local toolchain. The bootstrap does not install jq, and make doctor checks it explicitly. Checkov and pip-audit are CI-only tools and are not part of the default local setup.
 
-An AWS identity with permissions to inspect the account, manage the remote-state bootstrap, provision the required Secrets Manager entries, and create/update the Terraform-managed development resources is required for make deploy. GitHub deployment uses the external OIDC role described in docs/ci-cd.md. Neither path stores AWS access keys in the repository.
+An AWS identity with permissions to inspect the account, manage the remote-state bootstrap, provision the required Secrets Manager entries, and create/update the Terraform-managed development resources is required for local `make deploy`. The GitHub CD workflow uses the dedicated OIDC role described in [CI/CD](ci-cd.md), and that role verifies an already-existing state bucket rather than bootstrapping it. Neither path stores AWS access keys in the repository.
 
 ## 2. Repository defaults
 
@@ -36,7 +36,7 @@ For a fresh development deployment, the preferred command is:
 make deploy
 ```
 
-The deployment automation verifies branch `Joao` and the expected AWS account, creates the protected remote-state bucket when it is missing, provisions the restricted database secrets and backend authentication secret, initializes the canonical state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, registers new ECS task definitions without switching live frontend/backend services, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, activates the new application task revisions, preserves current running capacity (or uses the configured initial count), restores autoscaling bounds, and waits for ECS stability, and performs ALB/API/database/Grafana smoke tests. The local Makefile deployment and both GitHub workflows use the same provisioning scripts.
+The local deployment automation verifies branch `Joao` and the expected AWS account, creates the protected remote-state bucket when it is missing, provisions the restricted database secrets and backend authentication secret, initializes the canonical state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, registers new ECS task definitions without switching live frontend/backend services, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, activates the new application task revisions, preserves current running capacity (or uses the configured initial count), restores autoscaling bounds, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests. GitHub CD follows the same application sequence but uses verify-only state-bucket access and cannot create the state bucket. The local Makefile deployment and both GitHub workflows use the same provisioning scripts.
 
 The Grafana administrator password is generated locally by `scripts/deploy.sh` on first use and stored under `.deploy/`. This directory is ignored by Git. The database provisioner stores generated runtime/migrator password values only in AWS Secrets Manager; its local `.deploy/db-secret-arns.env` file contains ARNs only. The RDS master password remains managed by RDS and is injected only into the one-off role-bootstrap task.
 

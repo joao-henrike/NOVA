@@ -203,7 +203,44 @@ GRAFANA_ADMIN_PASSWORD
 
 Optional Google/Apple OAuth secrets are listed in docs/configuration-reference.md. Supply every field for a provider or leave that provider unused. The deployment creates/reuses the backend authentication JSON secret and keeps its JWT signing key stable.
 
-The AWS OIDC role is configured outside this repository. It must be able to verify the account and state bucket, bootstrap missing remote-state resources, provision the three application Secrets Manager entries, and perform the scoped Terraform/ECR/ECS operations. Secret provisioning requires DescribeSecret, GetSecretValue, CreateSecret, and PutSecretValue on the runtime DB, migrator DB, and backend authentication secrets. Do not grant account-wide administrator permissions merely to satisfy the workflow.
+The role is provisioned by the isolated Terraform stack in `bootstrap/github-oidc/`; its trust policy is restricted to the immutable GitHub owner/repository IDs, the `development` Environment, and audience `sts.amazonaws.com`. The expected OIDC subject is:
+
+```text
+repo:joao-henrique@133373332/NOVA@1393500090:environment:development
+```
+
+The repository was created after July 15, 2026, so the trust policy uses GitHub's immutable owner/repository ID subject format. The GitHub `development` Environment must restrict deployments to branch `Joao`. Do not replace this subject with a name-only subject or remove the audience condition.
+
+#### One-time role provisioning
+
+Use an AWS CLI identity already authorized to create IAM OIDC providers and roles in account `760396521507`. From the repository root:
+
+```bash
+aws sts get-caller-identity
+bash scripts/bootstrap-github-oidc-role.sh CREATE_GITHUB_OIDC_ROLE
+```
+
+Review the displayed Terraform plan before applying. The stack creates the GitHub OIDC provider (or imports the existing provider into its dedicated local state) and a scoped role named `cloudstart-nova-github-actions-cd`. It does not create the application state bucket or modify the NOVA VPC/RDS/ECS stack. Keep `bootstrap/github-oidc/terraform.tfstate` private; it is ignored by Git.
+
+After the stack succeeds, publish its role ARN as a **repository Actions variable**:
+
+```bash
+gh variable set AWS_CD_ROLE_ARN \\
+  --repo joao-henrique/NOVA \\
+  --body "$(terraform -chdir=bootstrap/github-oidc output -raw github_actions_cd_role_arn)"
+```
+
+The GitHub CLI identity needs repository Variables write permission. The linked automation connection used for code changes cannot write this repository variable. Never place the ARN in tracked source files.
+
+The role deliberately does not have permission to create the Terraform state bucket. Prepare/verify the canonical bucket separately before enabling CD. The GitHub workflow calls `scripts/ensure-terraform-state.sh --verify-only`; local `make deploy` retains the separate state-bootstrap capability.
+
+The role policy scopes state object access to `cloudstart/dev/terraform.tfstate` and its lock file, ECR pushes to the two NOVA development repositories, Secrets Manager access to the three named application secrets, ECS actions to the NOVA cluster/services/task definitions, and PassRole to the named ECS roles for `ecs-tasks.amazonaws.com`. It also limits security-group, application autoscaling, and CloudWatch log mutations to project resources. It intentionally does not grant account-wide administrator access, S3 bucket creation/deletion, VPC/RDS/ALB mutation, IAM user/key administration, or infrastructure destruction.
+
+The `GRAFANA_ADMIN_PASSWORD` GitHub Environment secret must exist in `development`. Once the repository variable and Environment are configured, rerun Extreme Validation and confirm that its nine AWS checks execute rather than show `SKIP`.
+
+#### Destructive rebuild
+
+The manual rebuild workflow no longer uses `AWS_CD_ROLE_ARN`. It requires a separate `AWS_REBUILD_ROLE_ARN` repository variable and the `development-rebuild` Environment. Configure that Environment with branch restriction to `Joao` and required reviewers. The OIDC bootstrap stack above does not create this destructive role; keep its permissions separate from the normal CD role.
 
 ## Application deployment safety
 
