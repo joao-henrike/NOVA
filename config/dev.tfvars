@@ -17,10 +17,9 @@ backend_container_port     = 8000
 frontend_health_check_path = "/health"
 backend_health_check_path  = "/health"
 
-# Set this to the ARN of a Secrets Manager JSON secret before enabling the app.
-# The secret must contain AUTH_JWT_SECRET_KEY and all GOOGLE_/APPLE_ keys
-# listed in apps/backend/README.md. Do not put secret values in this file.
-# backend_auth_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:cloudstart-dev/backend-auth-xxxxxx"
+# Created/reused by scripts/provision-backend-auth-secret.sh.
+# The ARN is passed safely through TF_VAR_backend_auth_secret_arn at deploy time.
+# Never store JWT signing material or OAuth credentials in this file.
 
 frontend_task_cpu    = 256
 frontend_task_memory = 512

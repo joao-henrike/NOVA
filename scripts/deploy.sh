@@ -83,11 +83,22 @@ source "$SECRET_DIR/db-secret-arns.env"
 export TF_VAR_db_runtime_secret_arn="$DB_RUNTIME_SECRET_ARN"
 export TF_VAR_db_migrator_secret_arn="$DB_MIGRATOR_SECRET_ARN"
 
+log "Provisioning backend JWT and optional OAuth configuration"
+"$ROOT_DIR/scripts/provision-backend-auth-secret.sh"
+[ -s "$SECRET_DIR/backend-auth-secret-arn.env" ] || fatal "Backend authentication secret ARN was not written."
+# shellcheck disable=SC1090
+source "$SECRET_DIR/backend-auth-secret-arn.env"
+[ -n "${BACKEND_AUTH_SECRET_ARN:-}" ] || fatal "Backend authentication secret ARN is missing."
+export TF_VAR_backend_auth_secret_arn="$BACKEND_AUTH_SECRET_ARN"
+
 IMAGE_TAG="${DEPLOY_TAG:-$(git rev-parse --short=12 HEAD)}"
-[ -n "$IMAGE_TAG" ] || fatal "Could not determine deployment image tag."
+[[ "$IMAGE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]] || fatal "Invalid deployment image tag: $IMAGE_TAG."
 
 export TF_VAR_frontend_image_tag="$IMAGE_TAG"
 export TF_VAR_backend_image_tag="$IMAGE_TAG"
+
+log "Ensuring the protected Terraform state bucket exists"
+"$ROOT_DIR/scripts/ensure-terraform-state.sh"
 
 log "Initializing Terraform remote state"
 terraform init \
@@ -100,8 +111,15 @@ terraform init \
 
 APPLICATION_PLAN="/tmp/nova-application-$IMAGE_TAG.tfplan"
 APPLICATION_JSON="/tmp/nova-application-$IMAGE_TAG.json"
+state_file=""
+state_error=""
+frontend_repo=""
+backend_repo=""
 cleanup() {
-  rm -f "$state_file" "$state_error" "$APPLICATION_PLAN" "$APPLICATION_JSON" /tmp/nova-baseline-$IMAGE_TAG.tfplan /tmp/nova-baseline-$IMAGE_TAG.json
+  local files=("$APPLICATION_PLAN" "$APPLICATION_JSON" "/tmp/nova-baseline-$IMAGE_TAG.tfplan" "/tmp/nova-baseline-$IMAGE_TAG.json")
+  [ -z "${state_file:-}" ] || files+=("$state_file")
+  [ -z "${state_error:-}" ] || files+=("$state_error")
+  rm -f -- "${files[@]}"
   if [ "${KEEP_LOCAL_IMAGES:-0}" != "1" ]; then
     [ -n "${frontend_repo:-}" ] && docker image rm "$frontend_repo:$IMAGE_TAG" >/dev/null 2>&1 || true
     [ -n "${backend_repo:-}" ] && docker image rm "$backend_repo:$IMAGE_TAG" >/dev/null 2>&1 || true
@@ -116,13 +134,11 @@ rm -f "$state_file" "$state_error"
 if terraform state list >"$state_file" 2>"$state_error"; then
   if [ -s "$state_file" ]; then
     log "Existing Terraform state detected; skipping fresh infrastructure baseline"
-    FRESH_DEPLOYMENT=false
   else
     fatal "Terraform state command succeeded but returned no resources."
   fi
 else
   if grep -q "No state file was found" "$state_error"; then
-    FRESH_DEPLOYMENT=true
     log "No Terraform resources found; creating a fresh infrastructure baseline"
 
     BASELINE_PLAN="/tmp/nova-baseline-$IMAGE_TAG.tfplan"
@@ -268,8 +284,8 @@ run_one_off_database_task \
   "post-migration runtime grants"
 
 log "Running ALB smoke tests"
-alb_dns="$(terraform output -raw alb_dns_name)"
-base_url="http://$alb_dns"
+base_url="$(terraform output -raw alb_application_url)"
+base_url="${base_url%/}"
 
 curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/" >/dev/null
 curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/api/health" >/dev/null

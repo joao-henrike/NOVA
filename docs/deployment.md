@@ -30,9 +30,11 @@ For a fresh development deployment, the preferred command is:
 make deploy
 ```
 
-The deployment automation verifies branch `Joao` and the expected AWS account, provisions the two restricted database secrets, initializes the dedicated state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, activates ECS, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests.
+The deployment automation verifies branch `Joao` and the expected AWS account, creates the protected remote-state bucket when it is missing, provisions the restricted database secrets and backend authentication secret, initializes the canonical state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, activates ECS, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests. The local Makefile deployment and both GitHub workflows use the same provisioning scripts.
 
 The Grafana administrator password is generated locally by `scripts/deploy.sh` on first use and stored under `.deploy/`. This directory is ignored by Git. The database provisioner stores generated runtime/migrator password values only in AWS Secrets Manager; its local `.deploy/db-secret-arns.env` file contains ARNs only. The RDS master password remains managed by RDS and is injected only into the one-off role-bootstrap task.
+
+The backend authentication secret is created once in AWS Secrets Manager. A strong JWT signing key is generated automatically; existing JWT material is preserved on later deploys. Google and Apple OAuth values are optional and can be supplied through matching environment variables locally or as secrets in the GitHub `development` Environment. Configure every field for a provider or leave that provider unused. The provisioner never prints secret values or writes them to the repository.
 
 The automation does not authenticate GitHub or store GitHub credentials.
 
@@ -149,18 +151,18 @@ The standard CI workflow performs these static validation steps automatically fo
 
 ## 6. Bootstrap the remote state
 
-Create a local bootstrap variable file from the example:
+The normal deployment path runs `scripts/ensure-terraform-state.sh` automatically. It verifies the AWS account and bucket owner, reuses an existing bucket in the expected region, and creates the protected bootstrap resources only when the bucket is genuinely missing. It refuses to create resources when bucket ownership or access cannot be verified.
+
+For manual recovery, copy the example variable file:
 
 ```bash
 cp bootstrap/terraform.tfvars.example bootstrap/terraform.tfvars
 ```
 
-Set a globally unique S3 bucket name in `bootstrap/terraform.tfvars`.
-
-Then:
+Set a globally unique bucket name matching `TF_STATE_BUCKET` in `config/dev.env`, then run:
 
 ```bash
-terraform -chdir=bootstrap init
+terraform -chdir=bootstrap init -backend=false
 terraform -chdir=bootstrap validate
 terraform -chdir=bootstrap plan
 terraform -chdir=bootstrap apply
@@ -177,7 +179,7 @@ The bootstrap stack uses local state by design.
 
 ## 7. Initialize the root backend
 
-After the bootstrap succeeds:
+After the bucket exists (the deployment script also performs this initialization automatically):
 
 ```bash
 terraform init \
@@ -325,7 +327,7 @@ alb_domain_name     = "app.example.com"
 
 The ACM certificate must already be issued in the same region as the ALB and cover `alb_domain_name`. Configure the DNS provider to point that hostname to the ALB DNS name returned by `terraform output -raw alb_dns_name`; DNS records and certificate issuance are intentionally outside this stack.
 
-With both values configured, port 443 serves the frontend, backend API, and Grafana, while port 80 redirects to HTTPS. With both empty, the current HTTP-only development listener is retained and port 443 remains closed.
+With both values configured, port 443 serves the frontend, backend API, and Grafana, while port 80 redirects to HTTPS. With both empty, the HTTP-only development listener is retained and port 443 remains closed. The backend sets `AUTH_COOKIE_SECURE=true` when HTTPS is enabled (and always for `prod`); it uses `false` for the HTTP development listener so browser session cookies work in that non-production environment. Hosted OAuth requires registered callback URLs; Apple web sign-in requires HTTPS.
 
 Validate the configured public path:
 
@@ -571,7 +573,10 @@ Required GitHub configuration:
 ```text
 development environment
 AWS_CD_ROLE_ARN variable
+GRAFANA_ADMIN_PASSWORD secret (for normal application CD)
 ```
+
+Optional provider secrets in the same GitHub Environment are `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, and `APPLE_REDIRECT_URI`. Configure all fields for a provider or leave that provider unused. `TF_STATE_BUCKET` may be set as a repository variable; otherwise the workflow uses the development bucket name in the repository. The OIDC role must be allowed to create the state bucket/bootstrap resources when missing and to create/read/update the three database and backend-auth Secrets Manager secrets.
 
 The workflow generates a temporary Grafana administrator password during the rebuild and passes it to Terraform as a sensitive variable. The generated value is stored by the application stack in AWS Secrets Manager and is not printed into the workflow logs.
 
@@ -579,7 +584,7 @@ The workflow generates a temporary Grafana administrator password during the reb
 
 Pushes to the `Joao` branch that change application code trigger `.github/workflows/deploy-dev.yml`.
 
-Before enabling the deployment job, configure `AWS_CD_ROLE_ARN` and `TF_STATE_BUCKET` as repository variables and configure the `GRAFANA_ADMIN_PASSWORD` secret in the `development` GitHub Environment.
+Before enabling the deployment job, configure `AWS_CD_ROLE_ARN` as a repository variable and `GRAFANA_ADMIN_PASSWORD` as a secret in the `development` GitHub Environment. `TF_STATE_BUCKET` is optional because the workflow has a committed development default. Optional Google/Apple provider secrets are listed in the rebuild section above. The CD workflow passes `config/dev.tfvars` and explicit activation overrides to Terraform.
 
 AWS authentication uses GitHub OIDC. The CD workflow rejects an AWS account other than `760396521507`.
 
@@ -587,7 +592,7 @@ The extreme validation workflow that performs live AWS checks is not triggered b
 
 The workflow applies only a previously generated Terraform plan whose non-no-op resources are limited to the frontend/backend ECS task definitions and services. Any unrelated resource change or destructive action stops the release.
 
-The workflow provisions/reuses the runtime and migrator Secrets Manager values before planning. The AWS CD role therefore needs `secretsmanager:DescribeSecret`, `GetSecretValue`, `CreateSecret`, and `PutSecretValue` limited to the two database credential secrets.
+The workflow provisions/reuses the runtime, migrator, and backend JWT/OAuth Secrets Manager values before planning. The AWS CD role therefore needs `secretsmanager:DescribeSecret`, `GetSecretValue`, `CreateSecret`, and `PutSecretValue` scoped to those three development secrets. Existing JWT signing material is preserved; supplied non-empty OAuth fields are merged without deleting saved values.
 
 All ECS task stdout/stderr is sent to CloudWatch Logs through Terraform-managed groups. Retention is 7 days in development and 30 days in production; each ECS execution role can create streams and write events only to its workload's group.
 

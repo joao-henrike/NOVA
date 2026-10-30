@@ -17,8 +17,6 @@ on:
       - "apps/frontend/.dockerignore"
       - "apps/frontend/nginx.conf"
       - "docker-compose.yml"
-      - "scripts/provision-db-credentials.sh"
-      - ".github/workflows/deploy-dev.yml"
   workflow_dispatch:
 
 permissions:
@@ -33,11 +31,13 @@ env:
   PROJECT_NAME: cloudstart
   DEPLOY_ENVIRONMENT: dev
   EXPECTED_AWS_ACCOUNT_ID: "760396521507"
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'cloudstart-nova-terraform-state-760396521507' }}
+  TF_STATE_KEY: cloudstart/dev/terraform.tfstate
 
 jobs:
   deploy:
     name: Build Verify and Deploy Development
-    if: vars.AWS_CD_ROLE_ARN != '' && vars.TF_STATE_BUCKET != ''
+    if: github.ref == 'refs/heads/Joao' && vars.AWS_CD_ROLE_ARN != ''
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -101,6 +101,23 @@ jobs:
             echo "TF_VAR_db_migrator_secret_arn=$DB_MIGRATOR_SECRET_ARN"
           } >> "$GITHUB_ENV"
 
+      - name: Provision backend JWT and optional OAuth configuration
+        shell: bash
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
+          APPLE_CLIENT_ID: ${{ secrets.APPLE_CLIENT_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_KEY_ID: ${{ secrets.APPLE_KEY_ID }}
+          APPLE_PRIVATE_KEY: ${{ secrets.APPLE_PRIVATE_KEY }}
+          APPLE_REDIRECT_URI: ${{ secrets.APPLE_REDIRECT_URI }}
+        run: |
+          set -euo pipefail
+          scripts/provision-backend-auth-secret.sh
+          source .deploy/backend-auth-secret-arn.env
+          echo "TF_VAR_backend_auth_secret_arn=$BACKEND_AUTH_SECRET_ARN" >> "$GITHUB_ENV"
+
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
         with:
@@ -163,8 +180,11 @@ jobs:
           terraform_version: "1.16.4"
           terraform_wrapper: false
 
+      - name: Ensure remote Terraform state bucket
+        run: scripts/ensure-terraform-state.sh
+
       - name: Terraform init
-        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="region=${{ env.AWS_REGION }}" -backend-config="key=cloudstart/dev/terraform.tfstate" -reconfigure -input=false -no-color
+        run: terraform init -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION" -backend-config="key=$TF_STATE_KEY" -reconfigure -input=false -no-color
 
       - name: Require Grafana secret
         env:
@@ -180,7 +200,7 @@ jobs:
           TF_VAR_frontend_image_tag: ${{ github.sha }}
           TF_VAR_backend_image_tag: ${{ github.sha }}
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-        run: terraform plan -refresh=true -lock=true -input=false -out=cd.tfplan -no-color
+        run: terraform plan -refresh=true -lock=true -input=false -var-file=config/dev.tfvars -var='deploy_application=true' -var="frontend_image_tag=$GITHUB_SHA" -var="backend_image_tag=$GITHUB_SHA" -out=cd.tfplan -no-color
 
       - name: Guard application-only plan
         run: |
@@ -268,8 +288,8 @@ jobs:
       - name: Development smoke tests
         run: |
           set -euo pipefail
-          alb_dns="$(terraform output -raw alb_dns_name)"
-          base_url="http://$alb_dns"
+          base_url="$(terraform output -raw alb_application_url)"
+          base_url="${base_url%/}"
           curl --fail --silent --show-error --retry 10 --retry-delay 5 "$base_url/" >/dev/null
           curl --fail --silent --show-error --retry 10 --retry-delay 5 "$base_url/api/health" >/dev/null
           curl --fail --silent --show-error --retry 10 --retry-delay 5 "$base_url/api/info" >/dev/null

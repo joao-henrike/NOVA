@@ -140,6 +140,10 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name  = "DB_USER"
           value = var.deploy_application ? var.db_runtime_username : var.db_username
+        },
+        {
+          name  = "AUTH_COOKIE_SECURE"
+          value = tostring(var.environment == "prod" || var.acm_certificate_arn != "")
         }
       ]
 

@@ -79,7 +79,15 @@ ensure_password_secret() {
     --secret-id "$name" \
     --region "$AWS_REGION" \
     --query ARN \
-    --output text 2>/dev/null)"; then
+    --output text 2>"$error_file")"; then
+    case "$arn" in
+      "arn:aws:secretsmanager:$AWS_REGION:$actual_account:secret:"*) ;;
+      *)
+        echo "AWS returned an unexpected Secrets Manager ARN for $name." >&2
+        return 1
+        ;;
+    esac
+
     if aws secretsmanager get-secret-value \
       --secret-id "$arn" \
       --region "$AWS_REGION" \
@@ -115,6 +123,13 @@ ensure_password_secret() {
     fi
     rm -f "$secret_file"
   else
+    if ! grep -q "ResourceNotFoundException" "$error_file"; then
+      cat "$error_file" >&2
+      echo "Could not determine whether secret $name exists." >&2
+      rm -f "$current_file" "$error_file"
+      return 1
+    fi
+
     secret_file="$(new_secret_file)"
     tmp_files+=("$secret_file")
     if ! arn="$(aws secretsmanager create-secret \
