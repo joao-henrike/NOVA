@@ -196,7 +196,7 @@ resource "aws_ecs_task_definition" "db_bootstrap" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
   memory                   = 512
-  execution_role_arn = aws_iam_role.ecs_db_bootstrap_execution.arn
+  execution_role_arn       = aws_iam_role.ecs_db_bootstrap_execution.arn
 
   # Intentionally omit task_role_arn: the process receives no AWS task credentials.
   # ECR pulls, logs, and startup secret injection are handled by the execution role.
@@ -284,7 +284,7 @@ resource "aws_ecs_task_definition" "db_migration" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
   memory                   = 512
-  execution_role_arn = aws_iam_role.ecs_migration_execution.arn
+  execution_role_arn       = aws_iam_role.ecs_migration_execution.arn
 
   # Intentionally omit task_role_arn: Alembic needs database access, not AWS API credentials.
 
