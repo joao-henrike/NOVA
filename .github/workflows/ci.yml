@@ -295,8 +295,7 @@ jobs:
           bad=0
           while IFS= read -r line; do
             ref="$(printf '%s' "$line" | sed 's/.*@//')"
-            if ! printf '%s' "$ref" | grep -Eq '^[0-9a-f]{40}
-; then
+            if ! printf '%s' "$ref" | grep -qxE '[0-9a-f]{40}'; then
               echo "Unpinned action: $line"
               bad=1
             fi
