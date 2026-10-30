@@ -50,10 +50,35 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
     migrator_password = "migrator-test-" + uuid4().hex + uuid4().hex
     schema_name = f"nova_test_{uuid4().hex[:16]}"
 
+    provisioner_role = f"nova_pr_{uuid4().hex[:16]}"
+    provisioner_password = "provisioner-test-" + uuid4().hex + uuid4().hex
     admin_conninfo = _connection_info(user=admin_user, password=admin_password)
+    provisioner_conninfo = _connection_info(
+        user=provisioner_role,
+        password=provisioner_password,
+    )
 
     try:
+        # Simulate the RDS master-user capability boundary: this identity can
+        # create roles but is not a PostgreSQL superuser.
         with psycopg.connect(admin_conninfo) as connection:
+            connection.execute(
+                sql.SQL("CREATE ROLE {} WITH LOGIN CREATEROLE PASSWORD {}").format(
+                    sql.Identifier(provisioner_role),
+                    sql.Literal(provisioner_password),
+                )
+            )
+            connection.execute(
+                sql.SQL(
+                    "GRANT CONNECT, CREATE ON DATABASE {} TO {} WITH GRANT OPTION"
+                ).format(sql.Identifier(database_name), sql.Identifier(provisioner_role))
+            )
+
+        with psycopg.connect(provisioner_conninfo) as connection:
+            provisioner_attributes = connection.execute(
+                "SELECT rolsuper, rolcreaterole FROM pg_roles WHERE rolname = current_user"
+            ).fetchone()
+            assert provisioner_attributes == (False, True)
             connection.execute(
                 sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema_name))
             )
@@ -131,6 +156,22 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 "SELECT pg_has_role(%s, 'pg_write_all_data', 'MEMBER')",
                 (migrator_role,),
             ).fetchone()[0]
+            assert not connection.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_auth_members AS membership
+                    JOIN pg_roles AS granted_role
+                      ON granted_role.oid = membership.roleid
+                    JOIN pg_roles AS member_role
+                      ON member_role.oid = membership.member
+                    WHERE granted_role.rolname = %s
+                      AND member_role.rolname = current_user
+                      AND membership.set_option
+                )
+                """,
+                (migrator_role,),
+            ).fetchone()[0]
 
             owner = connection.execute(
                 """
@@ -196,7 +237,22 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
 
         # Simulate privilege drift from an earlier deployment. The second
         # bootstrap must remove these excess grants, not merely add DML grants.
-        with psycopg.connect(admin_conninfo) as connection:
+        with psycopg.connect(provisioner_conninfo) as connection:
+            connection.execute(
+                sql.SQL("GRANT CREATE ON SCHEMA {} TO {}").format(
+                    sql.Identifier(schema_name), sql.Identifier(runtime_role)
+                )
+            )
+            # Recreate the temporary SET capability to inject excess table and
+            # sequence grants as their actual owner, then return to the admin.
+            connection.execute(
+                sql.SQL("GRANT {} TO CURRENT_USER WITH SET TRUE, INHERIT FALSE").format(
+                    sql.Identifier(migrator_role)
+                )
+            )
+            connection.execute(
+                sql.SQL("SET ROLE {}").format(sql.Identifier(migrator_role))
+            )
             connection.execute(
                 sql.SQL(
                     "GRANT TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA {} TO {}"
@@ -207,11 +263,7 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                     "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {} TO {}"
                 ).format(sql.Identifier(schema_name), sql.Identifier(runtime_role))
             )
-            connection.execute(
-                sql.SQL("GRANT CREATE ON SCHEMA {} TO {}").format(
-                    sql.Identifier(schema_name), sql.Identifier(runtime_role)
-                )
-            )
+            connection.execute("RESET ROLE")
 
             provision_database_roles(
                 connection,
@@ -268,39 +320,41 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
             ).fetchone()
             assert row == ("runtime-after-migration",)
 
-        with psycopg.connect(admin_conninfo) as connection:
+        with psycopg.connect(provisioner_conninfo) as connection:
             connection.execute(
                 sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema_name))
             )
-            for role in (runtime_role, migrator_role):
-                if connection.execute(
-                    "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                    (role,),
-                ).fetchone():
-                    connection.execute(
-                        sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role))
-                    )
-                    connection.execute(
-                        sql.SQL("DROP ROLE {}").format(sql.Identifier(role))
-                    )
-    except Exception:
-        # Best-effort cleanup keeps random test roles/schemas out of the shared
-        # PostgreSQL service even when an assertion exposes a privilege defect.
+            connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(runtime_role)))
+            connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(migrator_role)))
         with psycopg.connect(admin_conninfo) as connection:
-            connection.execute(
-                sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                    sql.Identifier(schema_name)
+            connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(provisioner_role)))
+    except Exception:
+        # Best-effort cleanup keeps random test objects out of the shared
+        # PostgreSQL service even when an assertion exposes a privilege defect.
+        try:
+            with psycopg.connect(provisioner_conninfo) as connection:
+                connection.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(schema_name)
+                    )
                 )
-            )
-            for role in (runtime_role, migrator_role):
+                for role in (runtime_role, migrator_role):
+                    if connection.execute(
+                        "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                        (role,),
+                    ).fetchone():
+                        connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
+        except Exception:
+            pass
+        try:
+            with psycopg.connect(admin_conninfo) as connection:
                 if connection.execute(
                     "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                    (role,),
+                    (provisioner_role,),
                 ).fetchone():
                     connection.execute(
-                        sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role))
+                        sql.SQL("DROP ROLE {}").format(sql.Identifier(provisioner_role))
                     )
-                    connection.execute(
-                        sql.SQL("DROP ROLE {}").format(sql.Identifier(role))
-                    )
+        except Exception:
+            pass
         raise
