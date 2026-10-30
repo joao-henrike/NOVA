@@ -226,6 +226,52 @@ class ApplicationApiTest(unittest.TestCase):
         self.assertEqual(owner_read.status_code, 200)
         self.assertEqual(owner_read.json()["name"], "Private owner item")
 
+    def test_item_input_cannot_assign_or_change_owner(self) -> None:
+        with self.session_factory() as session:
+            other_user = User(
+                email=f"mass-assignment-{uuid4()}@example.com",
+                name="Other User",
+                email_verified=True,
+            )
+            session.add(other_user)
+            session.commit()
+            session.refresh(other_user)
+            other_user_id = other_user.id
+
+        owner_headers = self._auth_headers()
+        forged_create = self.client.post(
+            "/api/items",
+            json={"name": "Forged owner", "user_id": str(other_user_id)},
+            headers=owner_headers,
+        )
+        self.assertEqual(forged_create.status_code, 422)
+
+        created = self.client.post(
+            "/api/items",
+            json={"name": "Owner-controlled item"},
+            headers=owner_headers,
+        )
+        self.assertEqual(created.status_code, 201)
+        item_id = created.json()["id"]
+
+        forged_update = self.client.patch(
+            f"/api/items/{item_id}",
+            json={"user_id": str(other_user_id)},
+            headers=owner_headers,
+        )
+        self.assertEqual(forged_update.status_code, 422)
+
+        owner_read = self.client.get(
+            f"/api/items/{item_id}",
+            headers=owner_headers,
+        )
+        other_read = self.client.get(
+            f"/api/items/{item_id}",
+            headers=self._auth_headers(other_user_id),
+        )
+        self.assertEqual(owner_read.status_code, 200)
+        self.assertEqual(other_read.status_code, 404)
+
     def test_refresh_rotates_token_and_reuse_revokes_family(self) -> None:
         original_token = self._issue_refresh_token()
 
