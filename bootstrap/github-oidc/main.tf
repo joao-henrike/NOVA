@@ -1,9 +1,9 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  name                = "${var.project_name}-${var.environment}"
-  github_oidc_subject = "repo:joao-henrike@${var.github_owner_id}/NOVA@${var.github_repository_id}:environment:${var.github_environment}"
-  state_bucket_arn    = "arn:aws:s3:::${var.state_bucket_name}"
+  name                  = "${var.project_name}-${var.environment}"
+  github_oidc_subject   = "repo:joao-henrike@${var.github_owner_id}/NOVA@${var.github_repository_id}:environment:${var.github_environment}"
+  state_bucket_arn      = "arn:aws:s3:::${var.state_bucket_name}"
   state_object_arn      = "${local.state_bucket_arn}/${var.state_key}"
   state_lock_object_arn = "${local.state_bucket_arn}/${var.state_key}.tflock"
   ecr_repository_arns = [
@@ -47,10 +47,10 @@ locals {
     "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-backend-task",
     "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-monitoring-task",
   ])
-  log_group_arn       = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${local.name}/*:*"
-  security_group_arn  = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/*"
+  log_group_arn           = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${local.name}/*:*"
+  security_group_arn      = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/*"
   security_group_rule_arn = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group-rule/*"
-  scalable_target_arn = "arn:aws:application-autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:scalable-target/service/${local.name}-cluster/${local.name}-*"
+  scalable_target_arn     = "arn:aws:application-autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:scalable-target/service/${local.name}-cluster/${local.name}-*"
 }
 
 locals {
@@ -63,9 +63,9 @@ locals {
     var.existing_github_oidc_provider_arn == ""
     ? true
     : contains(
-        data.aws_iam_openid_connect_provider.existing_github[0].client_id_list,
-        "sts.amazonaws.com",
-      )
+      data.aws_iam_openid_connect_provider.existing_github[0].client_id_list,
+      "sts.amazonaws.com",
+    )
   )
 }
 
