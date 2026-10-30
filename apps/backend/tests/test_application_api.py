@@ -126,6 +126,9 @@ class ApplicationApiTest(unittest.TestCase):
             headers=headers,
         )
         self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.headers["cache-control"], "no-store")
+        self.assertEqual(created.headers["x-content-type-options"], "nosniff")
+        self.assertEqual(created.headers["referrer-policy"], "no-referrer")
         item = created.json()
         item_id = item["id"]
         self.assertEqual(item["status"], "active")
@@ -217,6 +220,8 @@ class ApplicationApiTest(unittest.TestCase):
             json={"refresh_token": original_token},
         )
         self.assertEqual(rotated.status_code, 200)
+        self.assertEqual(rotated.headers["cache-control"], "no-store")
+        self.assertEqual(rotated.headers["pragma"], "no-cache")
         replacement_token = rotated.cookies.get("nova_refresh_token")
         self.assertIsNotNone(replacement_token)
         self.assertNotEqual(replacement_token, original_token)
@@ -495,26 +500,32 @@ class ApplicationApiTest(unittest.TestCase):
                     "app.api.routes.auth.verify_apple_id_token",
                     return_value={
                         "sub": "apple-subject",
-                        "email": "apple@example.com",
-                        "email_verified": True,
                     },
                 ),
             ):
                 callback = self.client.post(
                     "/api/auth/apple/callback",
-                    data={"code": "oauth-code", "state": state},
+                    data={
+                        "code": "oauth-code",
+                        "state": state,
+                        "user": (
+                            '{"email":"victim@example.com",'
+                            '"name":{"firstName":"Apple","lastName":"User"}}'
+                        ),
+                    },
                 )
 
             self.assertEqual(callback.status_code, 200)
             payload = callback.json()
             self.assertIn("access_token", payload)
-            self.assertEqual(
-                self.client.get(
-                    "/api/auth/me",
-                    headers={"Authorization": f"Bearer {payload['access_token']}"},
-                ).status_code,
-                200,
+            me = self.client.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {payload['access_token']}"},
             )
+            self.assertEqual(me.status_code, 200)
+            self.assertIsNone(me.json()["email"])
+            self.assertEqual(me.json()["name"], "Apple User")
+            self.assertEqual(me.headers["cache-control"], "no-store")
         finally:
             for name, value in original.items():
                 setattr(settings, name, value)
