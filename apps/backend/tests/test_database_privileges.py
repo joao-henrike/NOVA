@@ -63,6 +63,16 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 ).format(sql.Identifier(schema_name))
             )
             connection.execute(
+                sql.SQL(
+                    "CREATE TABLE {}.alembic_version (version_num varchar(32) NOT NULL)"
+                ).format(sql.Identifier(schema_name))
+            )
+            connection.execute(
+                sql.SQL(
+                    "INSERT INTO {}.alembic_version (version_num) VALUES ('test_revision')"
+                ).format(sql.Identifier(schema_name))
+            )
+            connection.execute(
                 sql.SQL("INSERT INTO {}.items (id, name) VALUES (1, 'before')")
                 .format(sql.Identifier(schema_name))
             )
@@ -121,6 +131,14 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                         sql.Identifier(schema_name)
                     )
                 )
+
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            with psycopg.connect(runtime_conninfo) as connection:
+                connection.execute(
+                    sql.SQL(
+                        "SELECT version_num FROM {}.alembic_version"
+                    ).format(sql.Identifier(schema_name))
+                ).fetchone()
 
         migrator_conninfo = _connection_info(
             user=migrator_role,

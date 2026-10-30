@@ -225,6 +225,26 @@ def provision_database_roles(
             sql.Identifier(runtime_role),
         )
     )
+
+    # Alembic metadata is deployment control-plane state, not application data.
+    # Runtime must not be able to alter migration history or use it as a schema
+    # discovery oracle; the migrator retains ownership and full schema access.
+    alembic_version_exists = connection.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = %s AND table_name = 'alembic_version'
+        """,
+        (schema_name,),
+    ).fetchone()
+    if alembic_version_exists is not None:
+        connection.execute(
+            sql.SQL("REVOKE ALL ON TABLE {}.alembic_version FROM {}").format(
+                sql.Identifier(schema_name),
+                sql.Identifier(runtime_role),
+            )
+        )
+
     connection.execute(
         sql.SQL(
             "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA {} TO {}"
