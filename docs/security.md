@@ -247,7 +247,7 @@ Session-family revocation
 Immediate rejection of access tokens after family revocation
 ```
 
-Apple's browser-posted `user` object is not a signed identity assertion. The backend reads only its optional display name and never uses its email field; account email is accepted only from the provider's verified ID-token claim. Unverified addresses do not reserve the unique account email. Successful token responses use `Cache-Control: no-store` and `Pragma: no-cache`.
+Apple's browser-posted `user` object is not a signed identity assertion. The backend reads only its optional display name and never uses its email field; account email is accepted only from the provider's verified ID-token claim. Unverified addresses do not reserve the unique account email. All `/api/*` responses use `Cache-Control: no-store`, `Pragma: no-cache`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`, including user-scoped item data and health responses. This prevents private API responses from being cached by browsers or intermediaries.
 
 The current backend still does not implement:
 
