@@ -73,6 +73,16 @@ password_length="$(wc -c < "$SECRET_FILE")"
 export TF_VAR_grafana_admin_password="$GRAFANA_ADMIN_PASSWORD"
 unset GRAFANA_ADMIN_PASSWORD
 
+log "Provisioning separate PostgreSQL runtime and migrator credentials"
+"$ROOT_DIR/scripts/provision-db-credentials.sh"
+[ -s "$SECRET_DIR/db-secret-arns.env" ] || fatal "Database credential ARNs were not written."
+# shellcheck disable=SC1090
+source "$SECRET_DIR/db-secret-arns.env"
+[ -n "${DB_RUNTIME_SECRET_ARN:-}" ] || fatal "Runtime database secret ARN is missing."
+[ -n "${DB_MIGRATOR_SECRET_ARN:-}" ] || fatal "Migration database secret ARN is missing."
+export TF_VAR_db_runtime_secret_arn="$DB_RUNTIME_SECRET_ARN"
+export TF_VAR_db_migrator_secret_arn="$DB_MIGRATOR_SECRET_ARN"
+
 IMAGE_TAG="${DEPLOY_TAG:-$(git rev-parse --short=12 HEAD)}"
 [ -n "$IMAGE_TAG" ] || fatal "Could not determine deployment image tag."
 
@@ -175,7 +185,7 @@ terraform plan \
 terraform show -json "$APPLICATION_PLAN" > "$APPLICATION_JSON"
 
 APP_DELETES="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(any(.change.actions[]?; . == "delete"))] | length' "$APPLICATION_JSON")"
-APP_UNEXPECTED="$(jq '[.resource_changes[]? | select(.change.actions != ["no-op"]) | select(.address | test("^(aws_ecs_task_definition\\.frontend|aws_ecs_task_definition\\.backend|aws_ecs_service\\.frontend|aws_ecs_service\\.backend|aws_appautoscaling_target\\.frontend|aws_appautoscaling_target\\.backend)$") | not) | .address] | length' "$APPLICATION_JSON")"
+APP_UNEXPECTED="$(jq '[.resource_changes[]? | select(.change.actions != ["no-op"]) | select(.address | test("^(aws_ecs_task_definition\\.frontend|aws_ecs_task_definition\\.backend|aws_ecs_task_definition\\.db_bootstrap|aws_ecs_task_definition\\.db_migration|aws_ecs_service\\.frontend|aws_ecs_service\\.backend|aws_appautoscaling_target\\.frontend|aws_appautoscaling_target\\.backend|aws_iam_role\\.ecs_backend_execution|aws_iam_role\\.ecs_migration_execution|aws_iam_role\\.ecs_db_bootstrap_execution|aws_iam_role_policy\\.ecs_execution|aws_iam_role_policy\\.ecs_backend_execution|aws_iam_role_policy\\.ecs_migration_execution|aws_iam_role_policy\\.ecs_db_bootstrap_execution)$") | not) | .address] | length' "$APPLICATION_JSON")"
 
 [ "$APP_DELETES" -eq 0 ] || fatal "Application activation plan contains deletions."
 [ "$APP_UNEXPECTED" -eq 0 ] || fatal "Application activation plan modifies resources outside the application ECS scope."
@@ -194,38 +204,68 @@ aws ecs wait services-stable \
   --services "$frontend_service" "$backend_service" "$monitoring_service" \
   --region "$AWS_REGION"
 
-log "Running Alembic migrations in a private Fargate task"
-backend_task_definition="$(terraform output -raw backend_task_definition_arn)"
+run_one_off_database_task() {
+  local task_definition="$1"
+  local container_name="$2"
+  local label="$3"
+  local task_arn
+  local exit_code
+
+  log "Starting $label as a private Fargate task"
+  task_arn="$(aws ecs run-task \
+    --cluster "$cluster" \
+    --task-definition "$task_definition" \
+    --launch-type FARGATE \
+    --network-configuration "$network_config" \
+    --region "$AWS_REGION" \
+    --query "tasks[0].taskArn" \
+    --output text)"
+
+  [ -n "$task_arn" ] && [ "$task_arn" != "None" ] || fatal "Failed to start $label task."
+
+  aws ecs wait tasks-stopped \
+    --cluster "$cluster" \
+    --tasks "$task_arn" \
+    --region "$AWS_REGION"
+
+  exit_code="$(aws ecs describe-tasks \
+    --cluster "$cluster" \
+    --tasks "$task_arn" \
+    --region "$AWS_REGION" \
+    --query "tasks[0].containers[?name=='$container_name'].exitCode | [0]" \
+    --output text)"
+
+  if [ "$exit_code" != "0" ]; then
+    aws ecs describe-tasks \
+      --cluster "$cluster" \
+      --tasks "$task_arn" \
+      --region "$AWS_REGION" \
+      --query "tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,exitCode:exitCode,reason:reason}}" \
+      --output json >&2
+    fatal "$label task failed with exit code $exit_code."
+  fi
+}
+
 backend_sg="$(terraform output -raw backend_security_group_id)"
 subnets="$(terraform output -json private_app_subnet_ids | jq -c '[.[]]')"
 network_config="$(jq -nc --argjson subnets "$subnets" --arg sg "$backend_sg" '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"DISABLED"}}')"
-overrides="$(jq -nc '{containerOverrides:[{name:"backend",command:["alembic","upgrade","head"]}]}')"
 
-task_arn="$(aws ecs run-task \
-  --cluster "$cluster" \
-  --task-definition "$backend_task_definition" \
-  --launch-type FARGATE \
-  --network-configuration "$network_config" \
-  --overrides "$overrides" \
-  --region "$AWS_REGION" \
-  --query "tasks[0].taskArn" \
-  --output text)"
+run_one_off_database_task \
+  "$(terraform output -raw db_bootstrap_task_definition_arn)" \
+  "db-bootstrap" \
+  "database role bootstrap"
 
-[ -n "$task_arn" ] && [ "$task_arn" != "None" ] || fatal "Failed to start migration task."
+run_one_off_database_task \
+  "$(terraform output -raw db_migration_task_definition_arn)" \
+  "db-migration" \
+  "Alembic migrations"
 
-aws ecs wait tasks-stopped \
-  --cluster "$cluster" \
-  --tasks "$task_arn" \
-  --region "$AWS_REGION"
-
-exit_code="$(aws ecs describe-tasks \
-  --cluster "$cluster" \
-  --tasks "$task_arn" \
-  --region "$AWS_REGION" \
-  --query "tasks[0].containers[?name=='backend'].exitCode | [0]" \
-  --output text)"
-
-[ "$exit_code" = "0" ] || fatal "Migration task failed with exit code $exit_code."
+# The bootstrap runs again after Alembic so the DML-only runtime role receives
+# grants on any tables/sequences introduced by the just-applied migrations.
+run_one_off_database_task \
+  "$(terraform output -raw db_bootstrap_task_definition_arn)" \
+  "db-bootstrap" \
+  "post-migration runtime grants"
 
 log "Running ALB smoke tests"
 alb_dns="$(terraform output -raw alb_dns_name)"
