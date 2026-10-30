@@ -62,8 +62,13 @@ finish_checks() {
   echo "TOTAL SKIPPED CHECKS: $skipped"
   if [ "$skipped" -gt 0 ]; then
     echo "VALIDATION COVERAGE: PARTIAL ($skipped checks were not executed)"
+    echo "A partial validation is blocking; every configured check must execute."
   else
     echo "VALIDATION COVERAGE: COMPLETE (all recorded checks were executed)"
   fi
-  return "$failures"
+
+  if [ "$failures" -gt 0 ] || [ "$skipped" -gt 0 ]; then
+    return 1
+  fi
+  return 0
 }

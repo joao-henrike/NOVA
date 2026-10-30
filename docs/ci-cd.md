@@ -117,7 +117,7 @@ Live AWS Terraform plan
 
 Every check writes its own log under the runner temporary directory. The workflow uploads the collected logs and result table as a GitHub Actions artifact even when the final verdict is failure.
 
-The final verdict is blocking: a single failed check makes the extreme validation workflow fail, but the workflow still attempts the remaining independent checks first.
+The final verdict is blocking: a single failed check or skipped check makes the extreme validation workflow fail. The workflow still attempts the remaining independent checks and uploads the complete evidence report. A successful job therefore means every recorded check actually executed and passed.
 
 The extreme validation workflow runs on pushes to `Joao` and manual dispatch only; it does not run on pull requests because its job has `id-token: write` for an optional live, read-only AWS plan. Standard CI remains the PR gate. Extreme validation does not destroy or apply AWS infrastructure. Destructive end-to-end reconstruction remains isolated to `rebuild-dev.yml` and requires explicit `REBUILD` confirmation.
 

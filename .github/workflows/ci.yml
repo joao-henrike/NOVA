@@ -323,6 +323,8 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Actionlint
         run: actionlint -ignore 'SC2016:'
+      - name: Extreme validation helper behavior
+        run: bash scripts/test-extreme-checks.sh
 
       - name: Verify actions are pinned
         shell: bash
