@@ -38,6 +38,11 @@ record_external_result() {
 ' "$name" "$rc" >> "$RESULTS_FILE"
 }
 
+record_skipped_check() {
+  local name="$1"
+  printf '%s\\tSKIP\\n' "$name" >> "$RESULTS_FILE"
+}
+
 finish_checks() {
   echo
   echo "========== DOMAIN VERDICT =========="
@@ -46,10 +51,10 @@ finish_checks() {
     return 1
   fi
 
-  awk -F '\t' '{printf "%-45s %s\n", $1, ($2 == 0 ? "PASS" : "FAIL (" $2 ")")}' "$RESULTS_FILE"
+  awk -F '\\t' '{status = ($2 == "SKIP" ? "SKIP" : ($2 == 0 ? "PASS" : "FAIL (" $2 ")")); printf "%-45s %s\\n", $1, status}' "$RESULTS_FILE"
 
   local failures
-  failures="$(awk -F '\t' '$2 != 0 {count++} END {print count+0}' "$RESULTS_FILE")"
+  failures="$(awk -F '\\t' '$2 != 0 && $2 != "SKIP" {count++} END {print count+0}' "$RESULTS_FILE")"
   echo
   echo "TOTAL FAILED CHECKS: $failures"
   return "$failures"

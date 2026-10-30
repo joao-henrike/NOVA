@@ -165,23 +165,29 @@ class ProviderSettingsTest(unittest.TestCase):
     def test_apple_id_token_rejects_wrong_nonce(self) -> None:
         token, public_key = self._apple_token(nonce="different-nonce")
 
-        with self._mock_apple_jwks(public_key):
-            with self.assertRaisesRegex(ProviderAuthenticationError, "nonce"):
-                verify_apple_id_token(token, "expected-nonce")
+        with (
+            self._mock_apple_jwks(public_key),
+            self.assertRaisesRegex(ProviderAuthenticationError, "nonce"),
+        ):
+            verify_apple_id_token(token, "expected-nonce")
 
     def test_apple_id_token_rejects_wrong_audience(self) -> None:
         token, public_key = self._apple_token(audience="another-client-id")
 
-        with self._mock_apple_jwks(public_key):
-            with self.assertRaises(ProviderAuthenticationError):
-                verify_apple_id_token(token, "expected-nonce")
+        with (
+            self._mock_apple_jwks(public_key),
+            self.assertRaises(ProviderAuthenticationError),
+        ):
+            verify_apple_id_token(token, "expected-nonce")
 
     def test_apple_id_token_rejects_wrong_issuer(self) -> None:
         token, public_key = self._apple_token(issuer="https://attacker.example")
 
-        with self._mock_apple_jwks(public_key):
-            with self.assertRaises(ProviderAuthenticationError):
-                verify_apple_id_token(token, "expected-nonce")
+        with (
+            self._mock_apple_jwks(public_key),
+            self.assertRaises(ProviderAuthenticationError),
+        ):
+            verify_apple_id_token(token, "expected-nonce")
 
     def test_redirect_uri_requires_https_outside_localhost_development(self) -> None:
         settings.app_env = "dev"

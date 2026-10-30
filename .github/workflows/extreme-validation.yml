@@ -267,6 +267,7 @@ jobs:
 
       - name: Configure AWS OIDC
         id: aws_oidc
+        if: env.AWS_CD_ROLE_ARN != ''
         continue-on-error: true
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
@@ -283,6 +284,14 @@ jobs:
         run: |
           # shellcheck disable=SC2016
           source scripts/extreme-checks.sh
+          if [ -z "$AWS_CD_ROLE_ARN" ] || [ -z "$TF_STATE_BUCKET" ]; then
+            echo "Skipping live AWS checks: AWS_CD_ROLE_ARN or TF_STATE_BUCKET is not configured."
+            for check in aws_oidc aws_role_present aws_state_bucket_present aws_expected_account aws_grafana_secret_present aws_identity aws_state_bucket_access aws_terraform_init aws_terraform_plan; do
+              record_skipped_check "$check"
+            done
+            finish_checks
+            exit $?
+          fi
           if [ "$OIDC_OUTCOME" != "success" ]; then
             record_external_result aws_oidc 1
             finish_checks
@@ -309,7 +318,7 @@ jobs:
             echo
             echo "| Check | Result |"
             echo "|---|---|"
-            awk -F '\t' '{printf "| %s | %s |\\n", $1, ($2 == 0 ? "PASS" : "FAIL (" $2 ")")}' "$RESULTS_FILE"
+            awk -F '\\t' '{status = ($2 == "SKIP" ? "SKIP" : ($2 == 0 ? "PASS" : "FAIL (" $2 ")")); printf "| %s | %s |\\\\n", $1, status}' "$RESULTS_FILE"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
           finish_checks

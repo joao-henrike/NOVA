@@ -124,21 +124,25 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 .format(sql.Identifier(schema_name))
             )
 
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
-            with psycopg.connect(runtime_conninfo) as connection:
-                connection.execute(
-                    sql.SQL("CREATE TABLE {}.runtime_created (id integer)").format(
-                        sql.Identifier(schema_name)
-                    )
+        with (
+            pytest.raises(psycopg.errors.InsufficientPrivilege),
+            psycopg.connect(runtime_conninfo) as connection,
+        ):
+            connection.execute(
+                sql.SQL("CREATE TABLE {}.runtime_created (id integer)").format(
+                    sql.Identifier(schema_name)
                 )
+            )
 
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
-            with psycopg.connect(runtime_conninfo) as connection:
-                connection.execute(
-                    sql.SQL(
-                        "SELECT version_num FROM {}.alembic_version"
-                    ).format(sql.Identifier(schema_name))
-                ).fetchone()
+        with (
+            pytest.raises(psycopg.errors.InsufficientPrivilege),
+            psycopg.connect(runtime_conninfo) as connection,
+        ):
+            connection.execute(
+                sql.SQL(
+                    "SELECT version_num FROM {}.alembic_version"
+                ).format(sql.Identifier(schema_name))
+            ).fetchone()
 
         migrator_conninfo = _connection_info(
             user=migrator_role,
