@@ -22,13 +22,18 @@ def _database_url():
     return url
 
 
-def _connection_info(*, user: str, password: str) -> str:
+def _connection_info(
+    *,
+    user: str,
+    password: str,
+    database: str | None = None,
+) -> str:
     url = _database_url()
 
     return make_conninfo(
         host=url.host,
         port=url.port or 5432,
-        dbname=url.database,
+        dbname=database or url.database,
         user=user,
         password=password,
         connect_timeout=10,
@@ -43,11 +48,12 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
     if not admin_user or not admin_password:
         pytest.skip("The PostgreSQL master connection is required for this integration test.")
 
-    database_name = admin_url.database
+    database_name = f"nova_priv_{uuid4().hex[:12]}"
     runtime_role = f"nova_rt_{uuid4().hex[:16]}"
     migrator_role = f"nova_mg_{uuid4().hex[:16]}"
     runtime_inherited_role = f"nova_rti_{uuid4().hex[:14]}"
     migrator_inherited_role = f"nova_mgi_{uuid4().hex[:14]}"
+    guest_role = f"nova_guest_{uuid4().hex[:14]}"
     runtime_password = "runtime-test-" + uuid4().hex + uuid4().hex
     migrator_password = "migrator-test-" + uuid4().hex + uuid4().hex
     schema_name = f"nova_test_{uuid4().hex[:16]}"
@@ -58,22 +64,31 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
     provisioner_conninfo = _connection_info(
         user=provisioner_role,
         password=provisioner_password,
+        database=database_name,
     )
 
     try:
         # Simulate the RDS master-user capability boundary: this identity can
         # create roles but is not a PostgreSQL superuser.
-        with psycopg.connect(admin_conninfo) as connection:
+        with psycopg.connect(admin_conninfo, autocommit=True) as connection:
             connection.execute(
                 sql.SQL("CREATE ROLE {} WITH LOGIN CREATEROLE PASSWORD {}").format(
                     sql.Identifier(provisioner_role),
                     sql.Literal(provisioner_password),
                 )
             )
+            # CREATEROLE administrators receive ADMIN but not SET by default.
+            # Enable SET temporarily so the new identity can own its isolated DB.
             connection.execute(
-                sql.SQL(
-                    "GRANT CONNECT, CREATE ON DATABASE {} TO {} WITH GRANT OPTION"
-                ).format(sql.Identifier(database_name), sql.Identifier(provisioner_role))
+                sql.SQL("GRANT {} TO CURRENT_USER WITH SET TRUE, INHERIT FALSE").format(
+                    sql.Identifier(provisioner_role)
+                )
+            )
+            connection.execute(
+                sql.SQL("CREATE DATABASE {} OWNER {}").format(
+                    sql.Identifier(database_name),
+                    sql.Identifier(provisioner_role),
+                )
             )
 
         with psycopg.connect(provisioner_conninfo) as connection:
@@ -81,6 +96,9 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 "SELECT rolsuper, rolcreaterole FROM pg_roles WHERE rolname = current_user"
             ).fetchone()
             assert provisioner_attributes == (False, True)
+            connection.execute(
+                sql.SQL("CREATE ROLE {} NOLOGIN").format(sql.Identifier(guest_role))
+            )
             connection.execute(
                 sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema_name))
             )
@@ -185,6 +203,22 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 (runtime_role,),
             ).fetchone()
             assert role_attributes == (False, False, False, False, False)
+            assert connection.execute(
+                "SELECT has_database_privilege(%s, %s, 'CONNECT')",
+                (runtime_role, database_name),
+            ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT has_database_privilege(%s, %s, 'TEMP')",
+                (runtime_role, database_name),
+            ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT has_database_privilege(%s, %s, 'CONNECT')",
+                (guest_role, database_name),
+            ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT has_database_privilege(%s, %s, 'TEMP')",
+                (guest_role, database_name),
+            ).fetchone()[0]
 
             assert not connection.execute(
                 "SELECT pg_has_role(%s, %s, 'MEMBER')",
@@ -247,6 +281,7 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
         runtime_conninfo = _connection_info(
             user=runtime_role,
             password=runtime_password,
+            database=database_name,
         )
         with psycopg.connect(runtime_conninfo) as connection:
             selected = connection.execute(
@@ -275,6 +310,12 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
             pytest.raises(psycopg.errors.InsufficientPrivilege),
             psycopg.connect(runtime_conninfo) as connection,
         ):
+            connection.execute("CREATE TEMP TABLE runtime_temp (id integer)")
+
+        with (
+            pytest.raises(psycopg.errors.InsufficientPrivilege),
+            psycopg.connect(runtime_conninfo) as connection,
+        ):
             connection.execute(
                 sql.SQL(
                     "SELECT version_num FROM {}.alembic_version"
@@ -284,6 +325,7 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
         migrator_conninfo = _connection_info(
             user=migrator_role,
             password=migrator_password,
+            database=database_name,
         )
         with psycopg.connect(migrator_conninfo) as connection:
             connection.execute(
@@ -444,66 +486,72 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 )
             ).fetchone()
 
-        with psycopg.connect(provisioner_conninfo) as connection:
+        with psycopg.connect(admin_conninfo, autocommit=True) as connection:
+            # The provisioner owns the disposable database and created all test
+            # roles. Drop the database first so its objects/default ACLs vanish.
             connection.execute(
-                sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema_name))
+                sql.SQL("SET ROLE {}").format(sql.Identifier(provisioner_role))
             )
-
-        # DROP OWNED also removes the migrator's default-privilege catalog
-        # entries, which otherwise prevent DROP ROLE after ALTER DEFAULT PRIVILEGES.
-        with psycopg.connect(admin_conninfo) as connection:
+            connection.execute(
+                sql.SQL("DROP DATABASE {}").format(sql.Identifier(database_name))
+            )
             for role in (
                 runtime_role,
                 migrator_role,
                 runtime_inherited_role,
                 migrator_inherited_role,
-                provisioner_role,
-            ):
-                connection.execute(
-                    sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role))
-                )
-            for role in (
-                runtime_role,
-                migrator_role,
-                runtime_inherited_role,
-                migrator_inherited_role,
-                provisioner_role,
+                guest_role,
             ):
                 connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
+            connection.execute("RESET ROLE")
+            connection.execute(
+                sql.SQL("REVOKE {} FROM CURRENT_USER").format(
+                    sql.Identifier(provisioner_role)
+                )
+            )
+            connection.execute(
+                sql.SQL("DROP ROLE {}").format(sql.Identifier(provisioner_role))
+            )
     except Exception:
         # Best-effort cleanup keeps random test objects out of the shared
         # PostgreSQL service even when an assertion exposes a privilege defect.
         try:
-            with psycopg.connect(provisioner_conninfo) as connection:
-                connection.execute(
-                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                        sql.Identifier(schema_name)
-                    )
-                )
-        except Exception:
-            pass
-        try:
-            with psycopg.connect(admin_conninfo) as connection:
-                cleanup_roles = (
-                    runtime_role,
-                    migrator_role,
-                    runtime_inherited_role,
-                    migrator_inherited_role,
-                    provisioner_role,
-                )
-                existing_roles = []
-                for role in cleanup_roles:
-                    if connection.execute(
-                        "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                        (role,),
-                    ).fetchone():
-                        existing_roles.append(role)
-                        connection.execute(
-                            sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role))
-                        )
-                for role in existing_roles:
+            with psycopg.connect(admin_conninfo, autocommit=True) as connection:
+                provisioner_exists = connection.execute(
+                    "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                    (provisioner_role,),
+                ).fetchone()
+                if provisioner_exists:
                     connection.execute(
-                        sql.SQL("DROP ROLE {}").format(sql.Identifier(role))
+                        sql.SQL("SET ROLE {}").format(sql.Identifier(provisioner_role))
+                    )
+                    connection.execute(
+                        sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
+                            sql.Identifier(database_name)
+                        )
+                    )
+                    for role in (
+                        runtime_role,
+                        migrator_role,
+                        runtime_inherited_role,
+                        migrator_inherited_role,
+                        guest_role,
+                    ):
+                        if connection.execute(
+                            "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                            (role,),
+                        ).fetchone():
+                            connection.execute(
+                                sql.SQL("DROP ROLE {}").format(sql.Identifier(role))
+                            )
+                    connection.execute("RESET ROLE")
+                    connection.execute(
+                        sql.SQL("REVOKE {} FROM CURRENT_USER").format(
+                            sql.Identifier(provisioner_role)
+                        )
+                    )
+                    connection.execute(
+                        sql.SQL("DROP ROLE {}").format(sql.Identifier(provisioner_role))
                     )
         except Exception:
             pass
