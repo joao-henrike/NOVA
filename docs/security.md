@@ -151,9 +151,13 @@ The RDS resource sets:
 manage_master_user_password = true
 ```
 
-The backend receives the RDS password through ECS secret injection.
+The RDS master password is injected only into the one-off database role-bootstrap task. It is not present in the normal backend HTTP task definition.
 
-JWT and Google/Apple OAuth settings are injected from a separate Secrets Manager JSON secret when backend_auth_secret_arn is configured. Terraform stores only that secret ARN, not its value. The backend deployment guard requires the ARN when deploy_application = true; the JSON secret must be populated before ECS tasks start.
+The normal backend task uses the dedicated `cloudstart_runtime` PostgreSQL login. Its password comes from the external Secrets Manager secret referenced by `db_runtime_secret_arn`. The Alembic task uses `cloudstart_migrator`, with a different secret referenced by `db_migrator_secret_arn`. Terraform stores only these ARNs, never the secret values.
+
+The bootstrap task has a separate ECS execution role and is the only application task permitted to read the RDS-managed master secret. It creates/updates the restricted PostgreSQL roles and transfers existing application schema object ownership to the migrator. The deployment process runs bootstrap, Alembic, then bootstrap again to grant runtime DML privileges on newly-created tables and sequences.
+
+JWT and Google/Apple OAuth settings remain injected from a separate Secrets Manager JSON secret when `backend_auth_secret_arn` is configured. The backend deployment guard requires all three application secret ARNs when `deploy_application = true`.
 
 No application password or OAuth credential is hardcoded in the backend source.
 
@@ -161,18 +165,10 @@ The repository's local Compose file does contain a development-only password lit
 
 ## 9. IAM model
 
-The monitoring workload has a separate ECS execution role from the application workloads. The application role can read only the application RDS-managed secret, while the monitoring execution role reads the monitoring database secret and the Grafana administrator secret.
+The frontend ECS execution role is ECR-pull-only. The normal backend execution role reads only its runtime database secret and backend authentication secret. The migration execution role reads only the migrator secret. The one-off database bootstrap execution role reads the RDS master secret plus the runtime/migrator password secrets. The monitoring execution role reads only the monitoring database and Grafana administrator secrets.
 
 
-The ECS execution role has only the permissions needed for the current task startup/runtime integration:
-
-```text
-ECR image pull
-Zabbix/Grafana log write
-Secrets Manager secret read
-```
-
-Frontend and backend task roles are separate but empty of application permissions.
+The application task roles are separate from task execution roles and remain empty of application AWS permissions. Secrets Manager access is granted to ECS task execution roles only for startup-time secret injection, not to the running application role.
 
 This means the current MVP does not grant the application arbitrary AWS APIs.
 

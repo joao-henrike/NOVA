@@ -235,6 +235,28 @@ alembic revision --autogenerate -m "describe change"
 
 Always review generated migrations before applying them.
 
+### AWS database identities
+
+The deployed ECS stack uses three PostgreSQL identities with distinct purposes:
+
+| Identity | Where it is used | Permissions |
+|---|---|---|
+| `cloudstart_runtime` | Normal backend HTTP service | `SELECT`, `INSERT`, `UPDATE`, `DELETE`, and sequence usage |
+| `cloudstart_migrator` | One-off Alembic Fargate task | Owns application schema objects and can create/alter them |
+| RDS master (`cloudstart_admin`) | One-off role-bootstrap Fargate task only | Provisions the two restricted roles and reapplies runtime grants |
+
+The runtime role cannot create or alter schema objects and has no superuser, role-management, database-creation, replication, or RLS-bypass attributes. The migration role is never injected into the normal HTTP service. The RDS master password is not injected into the normal backend task.
+
+The bootstrap command is explicit and idempotent:
+
+```bash
+python -m app.db.bootstrap_roles
+```
+
+It transfers existing application tables/sequences/views to the migrator and reapplies DML grants to the runtime role. Run it once before migrations and again after migrations so new objects receive runtime grants. The repository's ECS deployment workflows perform this order automatically.
+
+Local Compose development continues to use its explicitly development-only database account; the AWS role separation is applied to ECS/RDS deployment tasks.
+
 Current migrations include:
 
 ```text
@@ -296,7 +318,9 @@ http://localhost:8000/docs
 
 ### AWS ECS / Secrets Manager
 
-The ECS backend task reads authentication settings from one Secrets Manager secret using JSON-key references. Terraform accepts only the secret ARN through backend_auth_secret_arn; it never receives or stores the secret values.
+The normal backend ECS task reads its runtime database password from a dedicated Secrets Manager JSON secret and reads authentication settings from a separate JSON secret. Terraform accepts only their ARNs through `db_runtime_secret_arn` and `backend_auth_secret_arn`; it never receives or stores password values.
+
+The Alembic task reads a separate migrator password through `db_migrator_secret_arn`. A one-off bootstrap task is the only ECS task definition allowed to inject the RDS-managed master password.
 
 The JSON secret must contain all of these keys. Values for an unused provider may be empty strings, but the keys must exist:
 
@@ -314,7 +338,18 @@ The JSON secret must contain all of these keys. Values for an unused provider ma
 }
 ```
 
-Create the secret in the target AWS account and region, populate it with this JSON using real values, then pass its ARN through backend_auth_secret_arn (or TF_VAR_backend_auth_secret_arn). Keep the JSON file outside the repository, protect it with restrictive filesystem permissions, and never pass secret values as Terraform variables.
+Create the secret in the target AWS account and region, populate it with this JSON using real values, then pass its ARN through `backend_auth_secret_arn` (or `TF_VAR_backend_auth_secret_arn`). Keep the JSON file outside the repository, protect it with restrictive filesystem permissions, and never pass secret values as Terraform variables.
+
+The development deployment automation also calls `scripts/provision-db-credentials.sh`. It creates or reuses these Secrets Manager JSON secrets:
+
+```text
+cloudstart-dev/database/runtime
+cloudstart-dev/database/migrator
+```
+
+Each contains only a `password` field. The provisioner generates high-entropy values on first creation, never prints them, and writes only the secret ARNs to the ignored local file `.deploy/db-secret-arns.env`. The normal backend task receives only the runtime secret. The migration task receives only the migrator secret. The bootstrap task receives both plus the RDS-managed master secret, under a dedicated ECS execution role.
+
+The development GitHub OIDC role must permit `secretsmanager:DescribeSecret`, `GetSecretValue`, `CreateSecret`, and `PutSecretValue` for the two `cloudstart-dev/database/*` secrets so the workflow can provision/reuse them. ECS execution roles have narrower read access scoped to each task's required secret.
 
 Create an empty secret container first:
 
@@ -331,7 +366,7 @@ aws secretsmanager put-secret-value --secret-id cloudstart-dev/backend-auth --se
 
 Use the ARN returned by create-secret in config/dev.tfvars. The app deployment guard requires the ARN whenever deploy_application = true. The secret value must be populated before starting ECS tasks, because ECS resolves these JSON keys during task startup.
 
-The ECS execution role receives secretsmanager:GetSecretValue for this secret ARN only. The application task role does not receive Secrets Manager permissions.
+The backend ECS execution role receives `GetSecretValue` only for the runtime database and backend authentication secrets. The migration execution role reads only the migrator secret. The bootstrap execution role reads the RDS master secret and the two application-role password secrets. The application task role itself receives no Secrets Manager permissions.
 
 This configures credential delivery; it does not create Google/Apple OAuth client registrations. Apple web sign-in also remains dependent on an HTTPS callback domain and an Apple-registered Service ID. The current HTTP-only ALB is not sufficient for production OAuth callbacks.
 

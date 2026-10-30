@@ -487,25 +487,20 @@ The ALB target group checks:
 
 ## 11. Backend database flow
 
-The backend receives:
+The normal backend service receives:
 
 ```text
 APP_ENV
 DB_HOST
 DB_PORT
 DB_NAME
-DB_USER
+DB_USER=cloudstart_runtime
+DB_PASSWORD (runtime secret)
 ```
 
-through ECS environment variables.
+It does not receive the RDS master password or the migration password. Its PostgreSQL grants are DML-only: SELECT, INSERT, UPDATE, DELETE, and sequence usage.
 
-The database password is injected from Secrets Manager:
-
-```text
-DB_PASSWORD
-```
-
-The application does not contain the database password in source code.
+The one-off database migration task uses `cloudstart_migrator` and a separate Secrets Manager password. The one-off bootstrap task alone receives the RDS-managed master secret to create/update both roles and reapply grants after Alembic. The migration task and bootstrap task use separate ECS execution roles; the running app task role has no Secrets Manager permission.
 
 Database flow:
 
@@ -1051,7 +1046,9 @@ The current monitoring secret is:
 cloudstart-dev/monitoring/grafana-admin
 ```
 
-RDS master credentials are also managed through AWS/RDS Secrets Manager integration.
+RDS master credentials are managed through AWS/RDS Secrets Manager integration and injected only into the one-off database role-bootstrap task. Separate Secrets Manager secrets hold the PostgreSQL runtime and migration login passwords; only their ARNs are passed to Terraform.
+
+The deployment automation writes those ARNs to the ignored local file `.deploy/db-secret-arns.env`. Password values never enter Terraform variables or state, Git, or workflow environment outputs.
 
 The repository must never contain production secret values.
 
@@ -2826,7 +2823,7 @@ The Grafana administrator password is generated locally on first deployment and 
 .deploy/grafana-admin-password
 ```
 
-That path is ignored by Git. AWS RDS master credentials remain managed by RDS and Secrets Manager.
+The database provisioner stores only secret ARNs locally at `.deploy/db-secret-arns.env`; runtime and migrator password values live in AWS Secrets Manager. Both paths are ignored by Git. The RDS master credential remains managed by RDS and is used only by the one-off role-bootstrap task.
 
 The automation never authenticates to GitHub and never writes credentials to the repository.
 

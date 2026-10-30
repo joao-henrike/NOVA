@@ -30,9 +30,9 @@ For a fresh development deployment, the preferred command is:
 make deploy
 ```
 
-The deployment automation verifies branch `Joao` and the expected AWS account, initializes the dedicated state key, creates the full infrastructure baseline, builds and pushes immutable frontend/backend images, activates ECS, runs migrations, waits for all ECS services, and performs ALB/API/database/Grafana smoke tests.
+The deployment automation verifies branch `Joao` and the expected AWS account, provisions the two restricted database secrets, initializes the dedicated state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, activates ECS, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests.
 
-The Grafana administrator password is generated locally by `scripts/deploy.sh` on first use and stored under `.deploy/`. This directory is ignored by Git. AWS RDS master passwords remain managed by RDS and Secrets Manager.
+The Grafana administrator password is generated locally by `scripts/deploy.sh` on first use and stored under `.deploy/`. This directory is ignored by Git. The database provisioner stores generated runtime/migrator password values only in AWS Secrets Manager; its local `.deploy/db-secret-arns.env` file contains ARNs only. The RDS master password remains managed by RDS and is injected only into the one-off role-bootstrap task.
 
 The automation does not authenticate GitHub or store GitHub credentials.
 
@@ -583,6 +583,8 @@ AWS authentication uses GitHub OIDC. The CD workflow rejects an AWS account othe
 
 The workflow applies only a previously generated Terraform plan whose non-no-op resources are limited to the frontend/backend ECS task definitions and services. Any unrelated resource change or destructive action stops the release.
 
-The pipeline runs Alembic migrations as a one-off private Fargate task and performs ALB smoke tests after the ECS services stabilize.
+The workflow provisions/reuses the runtime and migrator Secrets Manager values before planning. The AWS CD role therefore needs `secretsmanager:DescribeSecret`, `GetSecretValue`, `CreateSecret`, and `PutSecretValue` limited to the two database credential secrets.
+
+After ECS activation it runs three private Fargate tasks in order: database role bootstrap (master login), Alembic migrations (migrator login), then database role bootstrap again (to grant runtime DML access on all post-migration objects). The normal HTTP backend task receives only the runtime login. The CD plan guard explicitly allows the database bootstrap/migration task definitions and their dedicated execution roles/policies, while still rejecting unrelated resource changes and deletes.
 
 No production deployment is implied by this development workflow.
