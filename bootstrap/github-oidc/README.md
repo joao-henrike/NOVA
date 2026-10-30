@@ -34,7 +34,7 @@ The inline policy is designed for the existing `deploy-dev.yml` workflow and the
 - PassRole only for the NOVA ECS task roles and only to `ecs-tasks.amazonaws.com`.
 - IAM role/policy changes only for the named NOVA ECS execution roles.
 - CloudWatch log-group changes only under `/ecs/cloudstart-dev/`.
-- Security-group changes only for Project=cloudstart, Environment=dev resources; SG rule permissions require the corresponding resource tags and the fixed project tag-key allowlist.
+- Security-group creation is restricted to CloudStart development VPCs; ingress/egress rule changes require the parent group's Project/Environment tags and use a separate tagged security-group-rule permission. Existing resource tags cannot change the Project or Environment ownership keys.
 - Application Auto Scaling changes only for NOVA ECS service desired-count targets.
 
 It does **not** grant general administrator access, broad RDS/VPC/ALB mutation, IAM user/key management, account/billing administration, or infrastructure destruction. The state-bucket bootstrap remains a separate one-time administrative operation.

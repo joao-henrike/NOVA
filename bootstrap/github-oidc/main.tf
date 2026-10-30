@@ -50,6 +50,7 @@ locals {
   log_group_arn           = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${local.name}/*:*"
   security_group_arn      = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/*"
   security_group_rule_arn = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group-rule/*"
+  vpc_arn                = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:vpc/*"
   scalable_target_arn     = "arn:aws:application-autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:scalable-target/service/${local.name}-cluster/${local.name}-*"
 }
 
@@ -363,10 +364,11 @@ data "aws_iam_policy_document" "github_cd_permissions" {
   }
 
   statement {
+  statement {
     sid       = "CreateOnlyTaggedNOVADevelopmentSecurityGroups"
     effect    = "Allow"
     actions   = ["ec2:CreateSecurityGroup"]
-    resources = ["*"]
+    resources = [local.security_group_arn]
 
     condition {
       test     = "StringEquals"
@@ -378,6 +380,52 @@ data "aws_iam_policy_document" "github_cd_permissions" {
       test     = "StringEquals"
       variable = "aws:RequestTag/Environment"
       values   = [var.environment]
+    }
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "aws:TagKeys"
+      values = [
+        "Name",
+        "Project",
+        "Environment",
+        "ManagedBy",
+        "Repository",
+        "Owner",
+        "CostCenter",
+        "Component",
+      ]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:Region"
+      values   = [var.aws_region]
+    }
+  }
+
+  statement {
+    sid       = "CreateOnlyInTaggedNOVADevelopmentVPCs"
+    effect    = "Allow"
+    actions   = ["ec2:CreateSecurityGroup"]
+    resources = [local.vpc_arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Environment"
+      values   = [var.environment]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:Region"
+      values   = [var.aws_region]
     }
   }
 
@@ -426,12 +474,9 @@ data "aws_iam_policy_document" "github_cd_permissions" {
   }
 
   statement {
-    sid    = "ManageTagsOnlyOnOwnedNOVAResources"
-    effect = "Allow"
-    actions = [
-      "ec2:CreateTags",
-      "ec2:DeleteTags",
-    ]
+    sid       = "ManageNonOwnershipTagsOnlyOnOwnedNOVAResources"
+    effect    = "Allow"
+    actions   = ["ec2:CreateTags"]
     resources = [local.security_group_arn, local.security_group_rule_arn]
 
     condition {
@@ -451,8 +496,6 @@ data "aws_iam_policy_document" "github_cd_permissions" {
       variable = "aws:TagKeys"
       values = [
         "Name",
-        "Project",
-        "Environment",
         "ManagedBy",
         "Repository",
         "Owner",
@@ -541,7 +584,6 @@ data "aws_iam_policy_document" "github_cd_permissions" {
     }
   }
 
-  statement {
     sid    = "ActivateOnlyNOVADevelopmentECSAutoscalingTargets"
     effect = "Allow"
     actions = [
