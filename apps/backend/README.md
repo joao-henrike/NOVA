@@ -208,7 +208,7 @@ Listing accepts:
 /api/items?status=active
 ```
 
-The Item entity is intentionally technical. The repository does not yet define the final CloudStart business domain.
+The Item entity is intentionally technical. Every Item is owned by the authenticated user. List, read, update, and delete operations are scoped by that owner. A user who does not own an Item receives the same 404 response as an unknown Item.
 
 ## Database
 
@@ -239,6 +239,7 @@ Current migrations include:
 ```text
 0001_create_items
 0002_add_authentication
+0003_scope_items_to_users
 ```
 
 ## Required configuration
@@ -290,5 +291,46 @@ OpenAPI:
 ```text
 http://localhost:8000/docs
 ```
+
+### AWS ECS / Secrets Manager
+
+The ECS backend task reads authentication settings from one Secrets Manager secret using JSON-key references. Terraform accepts only the secret ARN through backend_auth_secret_arn; it never receives or stores the secret values.
+
+The JSON secret must contain all of these keys. Values for an unused provider may be empty strings, but the keys must exist:
+
+```json
+{
+  "AUTH_JWT_SECRET_KEY": "<at-least-32-random-characters>",
+  "GOOGLE_CLIENT_ID": "",
+  "GOOGLE_CLIENT_SECRET": "",
+  "GOOGLE_REDIRECT_URI": "",
+  "APPLE_CLIENT_ID": "",
+  "APPLE_TEAM_ID": "",
+  "APPLE_KEY_ID": "",
+  "APPLE_PRIVATE_KEY": "",
+  "APPLE_REDIRECT_URI": ""
+}
+```
+
+Create the secret in the target AWS account and region, populate it with this JSON using real values, then pass its ARN through backend_auth_secret_arn (or TF_VAR_backend_auth_secret_arn). Keep the JSON file outside the repository, protect it with restrictive filesystem permissions, and never pass secret values as Terraform variables.
+
+Create an empty secret container first:
+
+```bash
+aws secretsmanager create-secret --name cloudstart-dev/backend-auth --description "CloudStart backend JWT and OAuth configuration" --region us-east-1
+```
+
+Then populate it from a protected local JSON file:
+
+```bash
+chmod 600 backend-auth.json
+aws secretsmanager put-secret-value --secret-id cloudstart-dev/backend-auth --secret-string file://backend-auth.json --region us-east-1
+```
+
+Use the ARN returned by create-secret in config/dev.tfvars. The app deployment guard requires the ARN whenever deploy_application = true. The secret value must be populated before starting ECS tasks, because ECS resolves these JSON keys during task startup.
+
+The ECS execution role receives secretsmanager:GetSecretValue for this secret ARN only. The application task role does not receive Secrets Manager permissions.
+
+This configures credential delivery; it does not create Google/Apple OAuth client registrations. Apple web sign-in also remains dependent on an HTTPS callback domain and an Apple-registered Service ID. The current HTTP-only ALB is not sufficient for production OAuth callbacks.
 
 For production, provider credentials and the JWT signing secret must come from the secret-management layer rather than repository files.

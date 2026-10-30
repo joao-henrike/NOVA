@@ -168,8 +168,9 @@ A Terraform resource proves that the repository declares that resource. It does 
 | Task roles with business permissions | ❌ |
 | ECR pull permissions | ✅ |
 | Monitoring secret read permissions | ✅ |
-| Secrets Manager read permission | ✅ |
 | RDS-managed master secret | ✅ |
+| Backend authentication secret injection | ✅ Conditional on backend_auth_secret_arn; ARN only in Terraform |
+| JWT/Google/Apple secret values provisioned | 🟡 Operator-managed in Secrets Manager; never committed |
 | Application password in source | ❌ |
 | Human identity system | ✅ Google + Apple + local user/session model |
 | MFA | ❌ |
@@ -239,7 +240,7 @@ The frontend is a demonstration web page. It verifies that the backend is reacha
 
 ### Backend
 
-The backend exposes the existing health endpoints, implements Google/Apple authentication with CloudStart sessions, and includes a protected technical Item CRUD. It does not yet implement authorization/RBAC, payments, financial calculations, or the final business domain.
+The backend exposes the existing health endpoints, implements Google/Apple authentication with CloudStart sessions, and includes an owner-scoped technical Item CRUD. It does not yet implement role-based permissions, payments, financial calculations, or the final business domain. Runtime OAuth availability depends on the target environment's Secrets Manager values and HTTPS callback configuration.
 
 ### Database
 
@@ -262,7 +263,7 @@ The ECS tasks have no public IP addresses.
 
 The RDS instance is not publicly accessible.
 
-The backend password is delivered through ECS secret injection.
+The RDS password is delivered through ECS secret injection. Backend JWT/OAuth settings can be delivered through the optional Secrets Manager secret ARN; the actual values are populated out-of-band.
 
 ## 6. Current operational boundaries
 

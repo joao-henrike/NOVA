@@ -142,9 +142,11 @@ The RDS resource sets:
 manage_master_user_password = true
 ```
 
-The backend receives the password through ECS secret injection.
+The backend receives the RDS password through ECS secret injection.
 
-No application password is hardcoded in the backend source.
+JWT and Google/Apple OAuth settings are injected from a separate Secrets Manager JSON secret when backend_auth_secret_arn is configured. Terraform stores only that secret ARN, not its value. The backend deployment guard requires the ARN when deploy_application = true; the JSON secret must be populated before ECS tasks start.
+
+No application password or OAuth credential is hardcoded in the backend source.
 
 The repository's local Compose file does contain a development-only password literal. It is explicitly labeled as local development and is not wired into the AWS stack.
 
@@ -231,7 +233,7 @@ Session revocation
 The current backend still does not implement:
 
 ```text
-Authorization/RBAC
+RBAC/role permissions beyond owner-scoped Item access
 MFA
 Rate limiting
 Payment security controls
