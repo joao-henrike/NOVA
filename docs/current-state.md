@@ -76,20 +76,17 @@ A Terraform resource proves that the repository declares that resource. It does 
 
 ### 3.3 Load balancing
 
-| Item | Status |
-| --- | --- |
-| Application Load Balancer | ✅ |
-| Public ALB | ✅ |
-| ALB in public subnets | ✅ |
-| HTTP listener :80 | ✅ |
-| Default frontend route | ✅ |
-| `/api` backend rule | ✅ |
-| `/api/*` backend rule | ✅ |
-| HTTPS listener | ❌ |
-| ACM certificate | ❌ |
-| WAF | ❌ |
-| CloudFront | ❌ |
-| Route 53 | ❌ |
+| Item | Status | Boundary |
+| --- | --- | --- |
+| Application Load Balancer | ✅ | Public ALB |
+| HTTP listener :80 | ✅ | Default development entry point |
+| Default frontend route | ✅ | |
+| /api and /api/* backend rules | ✅ | |
+| HTTPS listener | 🟡 Optional | Created only when an existing ACM certificate ARN and matching hostname are supplied |
+| ACM certificate issuance/validation | ❌ | Not managed by this stack |
+| DNS / Route 53 records | ❌ | Operator-managed outside the stack |
+| WAF | ❌ | Not implemented |
+| CloudFront | ❌ | Not implemented |
 
 ### 3.4 ECS
 
@@ -115,31 +112,31 @@ A Terraform resource proves that the repository declares that resource. It does 
 
 ### 3.5 Containers
 
-| Item | Status |
-| --- | --- |
-| Frontend Dockerfile | ✅ |
-| Backend Dockerfile | ✅ |
-| Nginx frontend | ✅ |
-| FastAPI backend | ✅ |
-| Backend non-root user | ✅ |
-| Container health checks | ✅ |
-| Fixed application dependencies | ✅ |
-| Local Compose | ✅ |
-| SBOM generation | ❌ |
-| Image signing | ❌ |
-| Registry publication from CI | ❌ |
+| Item | Status | Evidence / boundary |
+| --- | --- | --- |
+| Frontend Dockerfile | ✅ | apps/frontend |
+| Backend Dockerfile | ✅ | apps/backend |
+| Nginx frontend | ✅ | Separate AWS and local configurations |
+| FastAPI backend | ✅ | |
+| Backend non-root user | ✅ | |
+| Container health checks | ✅ | Docker/ECS health checks |
+| Fixed application dependencies | ✅ | Requirements files |
+| Local Compose | ✅ | PostgreSQL 17.11, backend, frontend |
+| SBOM generation | ❌ | Not implemented |
+| Image signing | ❌ | Not implemented |
+| Development image build and ECR publication | ✅ | Guarded deploy-dev.yml workflow |
 
 ### 3.6 ECR
 
-| Item | Status |
-| --- | --- |
-| Frontend repository | ✅ |
-| Backend repository | ✅ |
-| Immutable tags | ✅ |
-| Scan on push | ✅ |
-| Lifecycle policy | ✅ |
-| 10-image retention policy | ✅ |
-| Automatic CI push | ❌ |
+| Item | Status | Evidence / boundary |
+| --- | --- | --- |
+| Frontend repository | ✅ | |
+| Backend repository | ✅ | |
+| Immutable tags | ✅ | Full Git SHA tags in development CD |
+| Scan on push | ✅ | |
+| Lifecycle policy | ✅ | Keeps 10 recent images |
+| Automatic development image publication | ✅ | deploy-dev.yml after CI succeeds |
+| Automatic production publication | ❌ | No production workflow |
 
 ### 3.7 Database
 
@@ -165,28 +162,25 @@ A Terraform resource proves that the repository declares that resource. It does 
 
 ### 3.8 Secrets/IAM
 
-| Item | Status |
-| --- | --- |
-| ECS application execution role | ✅ |
-| Monitoring execution role | ✅ |
-| Frontend task role | ✅ |
-| Backend task role | ✅ |
-| Monitoring task role | ✅ |
-| Task roles with business permissions | ❌ |
-| ECR pull permissions | ✅ |
-| Monitoring secret read permissions | ✅ |
-| RDS-managed master secret | ✅ |
-| PostgreSQL runtime role | ✅ `cloudstart_runtime`; DML-only, used by HTTP backend |
-| PostgreSQL migration role | ✅ `cloudstart_migrator`; owns application schema objects, used only by Alembic task |
-| RDS master identity | ✅ Bootstrap task only; not injected into normal backend service |
-| Separate ECS execution roles | ✅ Frontend, backend, migration, bootstrap, monitoring |
-| Backend authentication secret injection | ✅ Conditional on backend_auth_secret_arn; ARN only in Terraform |
-| JWT/Google/Apple secret values provisioned | 🟡 Operator-managed in Secrets Manager; never committed |
-| Application password in source | ❌ |
-| Human identity system | ✅ Google + Apple + local user/session model |
-| MFA | ❌ |
-| OIDC CI plan job definition | ✅ |
-| OIDC production deployment | ❌ |
+| Item | Status | Evidence / boundary |
+| --- | --- | --- |
+| Purpose-specific ECS execution roles | ✅ | Frontend, backend, bootstrap, migration, monitoring |
+| Frontend/backend/monitoring task roles | ✅ | No additional application AWS permissions |
+| Bootstrap/migration ECS task role | ❌ | task_role_arn is intentionally omitted |
+| Runtime PostgreSQL identity | ✅ | cloudstart_runtime; DML-only |
+| Migration PostgreSQL identity | ✅ | cloudstart_migrator; migration task only |
+| RDS master identity | ✅ | One-off bootstrap task only |
+| RDS-managed master secret | ✅ | Managed by RDS |
+| Runtime and migrator secret provisioning | ✅ | scripts/provision-db-credentials.sh |
+| Backend authentication secret provisioning | ✅ | scripts/provision-backend-auth-secret.sh |
+| JWT signing key | ✅ | Randomly generated on first auth-secret creation; preserved afterwards |
+| Google/Apple OAuth values | 🟡 | Optional operator-supplied values; each provider requires a complete set |
+| Grafana administrator secret | ✅ | Terraform-managed Secrets Manager secret |
+| Application password in source | ❌ | No production credential is committed |
+| Human identity system | ✅ | Google + Apple provider identity and local session model |
+| MFA | ❌ | Not implemented |
+| OIDC development deployment | ✅ | Guarded development workflow; AWS trust/policy configured outside repo |
+| OIDC production deployment | ❌ | Not implemented |
 
 ### 3.9 Observability / monitoring
 
@@ -209,42 +203,41 @@ A Terraform resource proves that the repository declares that resource. It does 
 
 ### 3.10 Terraform
 
-| Item | Status |
-| --- | --- |
-| Root Terraform configuration | ✅ |
-| Bootstrap Terraform configuration | ✅ |
-| Required Terraform version | ✅ |
-| AWS provider constraint | ✅ |
-| Dynamic AZ data source | ✅ |
-| Variable validations | ✅ |
-| Cross-variable checks | ✅ |
-| Global tags | ✅ |
-| Sensitive secret output | ✅ |
-| S3 remote backend | ✅ |
-| S3 lockfile | ✅ |
-| Bootstrap DynamoDB table | ✅ |
-| Root `.terraform.lock.hcl` committed | ✅ |
-| Automated apply | ❌ |
+| Item | Status | Evidence / boundary |
+| --- | --- | --- |
+| Root Terraform configuration | ✅ | |
+| Bootstrap Terraform configuration | ✅ | |
+| Required Terraform version | ✅ | >=1.16.4, <1.17.0 |
+| AWS provider constraint | ✅ | ~>6.62; exact selected version in .terraform.lock.hcl |
+| Dynamic AZ data source | ✅ | |
+| Variable validations | ✅ | |
+| Cross-variable checks | ✅ | |
+| Global tags | ✅ | |
+| Sensitive secret output | ✅ | RDS master secret ARN |
+| S3 remote backend | ✅ | Canonical development state key |
+| S3 lockfile | ✅ | Active root backend locking |
+| Bootstrap DynamoDB table | ✅ | Compatibility resource only; not used by root backend locking |
+| Root .terraform.lock.hcl committed | ✅ | |
+| Guarded development terraform apply | ✅ | Saved-plan allowlist in deploy/rebuild workflows |
+| General-purpose automatic infrastructure apply | ❌ | Infrastructure changes outside the CD allowlist need explicit operator review |
 
 ### 3.11 CI/CD
 
-| Item | Status |
-| --- | --- |
-| Terraform fmt | ✅ |
-| Terraform init/validate | ✅ |
-| Bootstrap validate | ✅ |
-| TFLint | ✅ |
-| terraform-docs generation check | ✅ |
-| Checkov | ✅ |
-| Trivy IaC scan | ✅ |
-| Gitleaks | ✅ |
-| Container build | ✅ |
-| Container Trivy scan | ✅ |
-| Compose validation | ✅ |
-| Terraform Plan via optional OIDC job | ✅ |
-| ECR image push | ✅ | `deploy-dev.yml`, gated development CD |
-| ECS deployment | ✅ | `deploy-dev.yml`, development only |
-| Deployment rollback pipeline | 🟡 | ECS deployment circuit breaker is enabled; workflow-level rollback automation is not separate |
+| Item | Status | Evidence / boundary |
+| --- | --- | --- |
+| Standard CI | ✅ | Backend tests, images/runtime smoke, Compose, Terraform and security checks |
+| Extreme validation | ✅ | Joao push/manual; optional read-only AWS checks with OIDC |
+| Terraform fmt/init/validate | ✅ | ci.yml |
+| TFLint | ✅ | ci.yml |
+| Checkov / Trivy / Gitleaks / ShellCheck / CodeQL | ✅ | CI security gate |
+| Compose validation | ✅ | ci.yml |
+| Development ECR image publication | ✅ | deploy-dev.yml; full Git SHA tags |
+| Guarded development ECS deployment | ✅ | Saved Terraform plan and resource allowlist |
+| Database migration deployment | ✅ | Bootstrap -> Alembic -> grants bootstrap |
+| Post-deployment smoke checks | ✅ | ALB, API, database, Grafana |
+| Destructive dev rebuild | ✅ | Manual-only; exact REBUILD confirmation |
+| Production deployment | ❌ | No production workflow |
+| Separate workflow-level rollback pipeline | 🟡 | ECS deployment circuit breaker/rollback is enabled; no separate release rollback orchestrator |
 
 ## 4. Current application behavior
 
@@ -312,7 +305,7 @@ Formal RTO/RPO implementation
 
 ### HTTP vs HTTPS
 
-The current ALB listener is HTTP on port 80. Documentation must not represent it as HTTPS.
+The committed development configuration leaves acm_certificate_arn and alb_domain_name empty, so HTTP on port 80 is active by default. Terraform supports an optional HTTPS listener and HTTP-to-HTTPS redirect when an already-issued ACM certificate in the target region and a matching hostname are supplied. Certificate issuance, domain validation, and DNS records are not managed by this stack.
 
 ### ECS capacity
 
@@ -328,67 +321,67 @@ Local Compose uses PostgreSQL 17; AWS RDS defaults to PostgreSQL 16.
 
 ### “RDS password in Secrets Manager”
 
-The RDS master password is managed by RDS and exposed through the managed secret. It is injected only into the one-off role-bootstrap task. The normal backend receives a separate DML-only runtime password; the migration task receives a separate migrator password. Those application passwords live in Secrets Manager and Terraform receives their ARNs only.
+The RDS master password is managed by RDS and exposed through its managed secret. It is injected only into the one-off role-bootstrap task. The normal backend receives a separate DML-only runtime password; the migration task receives a separate migrator password. The backend JWT/OAuth JSON secret is created/reused by the deployment provisioner. Terraform receives secret ARNs, not plaintext password or OAuth values.
 
 ## 8. Current non-components
 
-The following have no current implementation and must not be described as part of the MVP runtime:
+The following have no managed resource or application implementation in the current MVP:
 
 ```text
+ACM certificate issuance and DNS validation
+Route 53 records / managed DNS
 WAF
-ACM
-HTTPS
-Route 53
 CloudFront
+API Gateway
 Lambda
-EC2
-Redis/ElastiCache
-SQS
-SNS
-EventBridge
-Mobile
-Financial core
-PSP/payment integration
+EC2 / Auto Scaling Groups
+ElastiCache / Redis
+SQS / SNS / EventBridge
+Mobile application
+Financial core / payment processing
 Audit Fabric
-FinOps/Cost Intelligence
+FinOps / Cost Intelligence
 Distributed tracing
-Multi-account
-Hybrid connectivity
-On-premises infrastructure
+Multi-account organization
+Hybrid / on-premises connectivity
 Corporate AD/LDAP integration
 ```
+
+The ALB's optional HTTPS listener is implemented in Terraform; the ACM certificate itself and DNS mapping remain external prerequisites. This distinction is intentional.
 
 ## 9. File-to-capability traceability
 
 | Capability | Primary files |
 | --- | --- |
-| Provider/version | `providers.tf` |
-| Remote state | `backend.tf`, `bootstrap/*` |
-| VPC/network | `vpc.tf`, `locals.tf`, `variables.tf` |
-| Security groups | `security_groups.tf` |
-| ECS/ALB | `ecs.tf`, `ecs_services.tf` |
-| ECR | `ecr.tf` |
-| RDS | `rds.tf` |
-| IAM/secrets access | `iam.tf`, `ecs_services.tf` |
-| Zabbix/Grafana | `monitoring.tf`, `docker-compose.monitoring.yml` |
-| App frontend | `apps/frontend/*` |
-| App backend | `apps/backend/*` |
-| Local development | `docker-compose.yml`, `apps/frontend/nginx.conf` |
-| Terraform CI | `.github/workflows/terraform-lint.yml` |
-| Container CI | `.github/workflows/container-ci.yml` |
-| Dependency automation | `.github/dependabot.yml` |
-| PR governance | `.github/pull_request_template.md`, `.github/CODEOWNERS` |
+| Provider/version | providers.tf, .terraform.lock.hcl |
+| Root inputs and validations | variables.tf, main.tf, locals.tf |
+| Remote state | backend.tf, bootstrap/*, scripts/ensure-terraform-state.sh |
+| VPC/network | vpc.tf, locals.tf, variables.tf |
+| Security groups | security_groups.tf, monitoring.tf |
+| ECS/ALB | ecs.tf, ecs_services.tf |
+| ECR | ecr.tf |
+| RDS | rds.tf, monitoring.tf |
+| IAM/secrets access | iam.tf, ecs_services.tf |
+| Backend authentication | apps/backend/app, scripts/provision-backend-auth-secret.sh |
+| Database credentials | apps/backend/app/db, scripts/provision-db-credentials.sh |
+| Zabbix/Grafana | monitoring.tf, docker-compose.monitoring.yml, monitoring/README.md |
+| App frontend | apps/frontend/* |
+| App backend | apps/backend/* |
+| Local development | docker-compose.yml, docker-compose.monitoring.yml, Makefile |
+| Deployment scripts | scripts/deploy.sh, scripts/ensure-terraform-state.sh, scripts/provision-*.sh |
+| Standard CI | .github/workflows/ci.yml |
+| Extreme validation | .github/workflows/extreme-validation.yml |
+| Development CD | .github/workflows/deploy-dev.yml |
+| Manual development rebuild | .github/workflows/rebuild-dev.yml |
+| Configuration reference | docs/configuration-reference.md |
+| Architecture / security / operations | docs/architecture.md, docs/security.md, docs/deployment.md |
+| Dependency automation | .github/dependabot.yml |
+| PR governance | .github/pull_request_template.md, .github/CODEOWNERS |
 
 ## 10. Final current-state statement
 
-The repository currently implements a **Terraform-defined AWS foundation plus a minimal two-service web application baseline with guarded development continuous delivery**.
+The repository implements a Terraform-defined AWS foundation, a minimal two-service web application, a Zabbix/Grafana monitoring plane, and guarded continuous delivery for the development environment.
 
-It is not yet a complete production business application.
+It is not yet a complete production business application or a production-grade delivery platform. Production CD, high-availability database configuration, formal disaster recovery, full business authorization, financial processing, and enterprise security services remain outside the current implementation.
 
-It is not a production-grade continuous-delivery system; the automated path is intentionally limited to the development environment, while production deployment remains absent.
-
-It is not yet the P2 financial/mobile/security platform.
-
-It is not yet the P3 hybrid enterprise platform.
-
-That distinction is intentional and is now reflected across the documentation.
+The configuration reference in docs/configuration-reference.md records every root Terraform input, bootstrap input, secret name, GitHub variable, workflow entry point, and deployment boundary. It must be updated alongside the source whenever those interfaces change.
