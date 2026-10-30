@@ -203,7 +203,7 @@ class AuthServiceTest(unittest.TestCase):
             session.refresh(record)
             self.assertIsNotNone(record.revoked_at)
 
-    def test_expired_families_are_pruned_but_active_family_history_is_kept(self) -> None:
+    def test_expired_refresh_tokens_are_pruned_without_revoking_live_session(self) -> None:
         with self.session_factory() as session:
             user = User(
                 email=f"retention-{uuid4()}@example.com",
@@ -251,35 +251,31 @@ class AuthServiceTest(unittest.TestCase):
                 .count(),
                 0,
             )
-            retained_family = (
+            self.assertIsNone(
                 session.query(RefreshToken)
-                .filter_by(family_id=active_family_id)
-                .all()
-            )
-            self.assertEqual(len(retained_family), 2)
-            self.assertTrue(
-                any(
-                    row.token_hash == hash_refresh_token(expired_ancestor_token)
-                    for row in retained_family
-                )
+                .filter_by(token_hash=hash_refresh_token(expired_ancestor_token))
+                .one_or_none()
             )
 
-            # An expired ancestor remains a replay signal while a later token
-            # in the same family is still within its validity window.
+            # Replaying an already-expired credential is rejected, but cannot
+            # revoke a live descendant family or cause delayed logout.
             with self.assertRaises(AuthenticationError):
                 self.auth.rotate_refresh_token(
                     session,
                     refresh_token=expired_ancestor_token,
                 )
 
-            session.expire_all()
-            retained_family = (
-                session.query(RefreshToken)
-                .filter_by(family_id=active_family_id)
-                .all()
+            active_record = session.query(RefreshToken).filter_by(
+                token_hash=hash_refresh_token(current_token)
+            ).one()
+            self.assertIsNone(active_record.revoked_at)
+
+            rotated_user, _, replacement_token, _ = self.auth.rotate_refresh_token(
+                session,
+                refresh_token=current_token,
             )
-            self.assertTrue(retained_family)
-            self.assertTrue(all(row.revoked_at is not None for row in retained_family))
+            self.assertEqual(rotated_user.id, user.id)
+            self.assertTrue(replacement_token)
 
     def test_inactive_user_cannot_refresh(self) -> None:
         with self.session_factory() as session:
