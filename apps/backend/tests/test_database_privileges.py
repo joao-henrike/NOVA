@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import psycopg
@@ -9,7 +10,16 @@ from psycopg.conninfo import make_conninfo
 from sqlalchemy.engine import make_url
 
 from app.core.config import settings
-from app.db.bootstrap_roles import provision_database_roles
+from app.db.bootstrap_roles import (
+    _ensure_login_role,
+    _required_env,
+    _revoke_role_memberships,
+    _set_current_user_role_option,
+    _transfer_schema_objects,
+    _validate_role,
+    main as bootstrap_main,
+    provision_database_roles,
+)
 
 
 def _database_url():
@@ -676,3 +686,276 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
         except Exception:
             pass
         raise
+
+
+def test_required_environment_values_are_rejected_when_missing_or_blank(monkeypatch) -> None:
+    monkeypatch.delenv("NOVA_TEST_REQUIRED", raising=False)
+    with pytest.raises(RuntimeError, match="NOVA_TEST_REQUIRED"):
+        _required_env("NOVA_TEST_REQUIRED")
+
+    monkeypatch.setenv("NOVA_TEST_REQUIRED", "   ")
+    with pytest.raises(RuntimeError, match="NOVA_TEST_REQUIRED"):
+        _required_env("NOVA_TEST_REQUIRED")
+
+    monkeypatch.setenv("NOVA_TEST_REQUIRED", "configured-value")
+    assert _required_env("NOVA_TEST_REQUIRED") == "configured-value"
+
+
+def test_role_validation_rejects_invalid_names_and_weak_passwords() -> None:
+    with pytest.raises(RuntimeError, match="valid PostgreSQL role"):
+        _validate_role("invalid-role", "x" * 32, env_name="DB_RUNTIME_USER")
+
+    with pytest.raises(RuntimeError, match="DB_MIGRATOR_PASSWORD"):
+        _validate_role("valid_role", "short", env_name="DB_MIGRATOR_USER")
+
+    _validate_role("valid_role_2", "x" * 32, env_name="DB_RUNTIME_USER")
+
+
+def test_ensure_login_role_creates_and_rotates_least_privilege_roles() -> None:
+    def run(existing):
+        first = Mock()
+        first.fetchone.return_value = existing
+        attributes = Mock()
+        attributes.fetchone.return_value = (False, False, False, False, False)
+        connection = Mock()
+        connection.execute.side_effect = [first, Mock(), attributes]
+
+        _ensure_login_role(
+            connection,
+            role_name="nova_runtime",
+            password="r" * 32,
+        )
+        assert connection.execute.call_count == 3
+        statement = str(connection.execute.call_args_list[1].args[0])
+        if existing:
+            assert "ALTER ROLE" in statement
+        else:
+            assert "CREATE ROLE" in statement
+            assert "NOBYPASSRLS" in statement
+
+    run(None)
+    run(("nova_runtime",))
+
+
+def test_ensure_login_role_fails_closed_when_role_attributes_are_unsafe() -> None:
+    first = Mock()
+    first.fetchone.return_value = None
+    attributes = Mock()
+    attributes.fetchone.return_value = (True, False, False, False, False)
+    connection = Mock()
+    connection.execute.side_effect = [first, Mock(), attributes]
+
+    with pytest.raises(RuntimeError, match="elevated attributes"):
+        _ensure_login_role(
+            connection,
+            role_name="nova_runtime",
+            password="r" * 32,
+        )
+
+
+def test_revoke_role_memberships_removes_inherited_roles_and_verifies_result() -> None:
+    memberships = Mock()
+    memberships.fetchall.return_value = [("inherited_role",)]
+    remaining = Mock()
+    remaining.fetchone.return_value = (False,)
+    connection = Mock()
+    connection.execute.side_effect = [memberships, Mock(), remaining]
+
+    _revoke_role_memberships(connection, role_name="nova_runtime")
+    assert connection.execute.call_count == 3
+
+    no_memberships = Mock()
+    no_memberships.fetchall.return_value = []
+    no_remaining = Mock()
+    no_remaining.fetchone.return_value = (False,)
+    clean_connection = Mock()
+    clean_connection.execute.side_effect = [no_memberships, no_remaining]
+    _revoke_role_memberships(clean_connection, role_name="nova_runtime")
+
+
+def test_revoke_role_memberships_fails_when_inherited_access_remains() -> None:
+    memberships = Mock()
+    memberships.fetchall.return_value = []
+    remaining = Mock()
+    remaining.fetchone.return_value = (True,)
+    connection = Mock()
+    connection.execute.side_effect = [memberships, remaining]
+
+    with pytest.raises(RuntimeError, match="Unable to remove"):
+        _revoke_role_memberships(connection, role_name="nova_runtime")
+
+
+@pytest.mark.parametrize("can_set", [True, False])
+def test_current_user_role_option_is_verified_for_both_states(can_set) -> None:
+    membership = Mock()
+    membership.fetchone.return_value = (True,)
+    connection = Mock()
+    connection.execute.side_effect = [Mock(), membership]
+
+    _set_current_user_role_option(
+        connection,
+        role_name="nova_migrator",
+        can_set=can_set,
+    )
+    assert connection.execute.call_count == 2
+
+
+def test_current_user_role_option_fails_when_membership_does_not_match() -> None:
+    membership = Mock()
+    membership.fetchone.return_value = (False,)
+    connection = Mock()
+    connection.execute.side_effect = [Mock(), membership]
+
+    with pytest.raises(RuntimeError, match="Unable to ensure SET ROLE"):
+        _set_current_user_role_option(
+            connection,
+            role_name="nova_migrator",
+            can_set=True,
+        )
+
+
+def test_transfer_schema_objects_skips_owned_objects_and_transfers_legacy_objects() -> None:
+    rows = (
+        [("owned_table", "nova_migrator"), ("legacy_table", "admin")],
+        [("owned_sequence", "nova_migrator"), ("legacy_sequence", "admin")],
+        [("owned_view", "nova_migrator"), ("legacy_view", "admin")],
+        [("owned_matview", "nova_migrator"), ("legacy_matview", "admin")],
+        [
+            ("FUNCTION", "public.owned_function()", "nova_migrator"),
+            ("FUNCTION", "public.legacy_function()", "admin"),
+        ],
+    )
+    query_results = []
+    for result_rows in rows:
+        result = Mock()
+        result.fetchall.return_value = result_rows
+        query_results.append(result)
+
+    connection = Mock()
+    connection.execute.side_effect = query_results + [Mock(), Mock(), Mock(), Mock()]
+
+    _transfer_schema_objects(
+        connection,
+        schema_name="public",
+        owner_role="nova_migrator",
+    )
+
+    assert connection.execute.call_count == 9
+    transfer_statements = [
+        str(call.args[0])
+        for call in connection.execute.call_args_list[5:]
+    ]
+    assert any("ALTER TABLE" in statement for statement in transfer_statements)
+    assert any("ALTER SEQUENCE" in statement for statement in transfer_statements)
+    assert any("ALTER VIEW" in statement for statement in transfer_statements)
+    assert any("ALTER MATERIALIZED VIEW" in statement for statement in transfer_statements)
+
+
+def test_role_provisioning_rejects_invalid_inputs_before_database_changes() -> None:
+    connection = Mock()
+    password = "p" * 32
+    common = {
+        "database_name": "nova",
+        "runtime_password": password,
+        "migrator_password": password,
+    }
+
+    with pytest.raises(RuntimeError, match="must be different"):
+        provision_database_roles(
+            connection,
+            runtime_role="same_role",
+            migrator_role="same_role",
+            **common,
+        )
+
+    with pytest.raises(RuntimeError, match="schema identifier"):
+        provision_database_roles(
+            connection,
+            runtime_role="runtime_role",
+            migrator_role="migrator_role",
+            schema_name="invalid-schema",
+            **common,
+        )
+
+    connection.execute.return_value.fetchone.return_value = None
+    with pytest.raises(RuntimeError, match="Unable to determine"):
+        provision_database_roles(
+            connection,
+            runtime_role="runtime_role",
+            migrator_role="migrator_role",
+            **common,
+        )
+
+    connection.reset_mock()
+    connection.execute.return_value.fetchone.return_value = ("another_database",)
+    with pytest.raises(RuntimeError, match="does not match DB_NAME"):
+        provision_database_roles(
+            connection,
+            runtime_role="runtime_role",
+            migrator_role="migrator_role",
+            **common,
+        )
+
+
+def test_bootstrap_main_builds_connection_from_environment(monkeypatch) -> None:
+    values = {
+        "DB_HOST": "db.example",
+        "DB_NAME": "nova",
+        "DB_ADMIN_USER": "db_admin",
+        "DB_ADMIN_PASSWORD": "a" * 32,
+        "DB_RUNTIME_USER": "runtime_role",
+        "DB_RUNTIME_PASSWORD": "r" * 32,
+        "DB_MIGRATOR_USER": "migrator_role",
+        "DB_MIGRATOR_PASSWORD": "m" * 32,
+    }
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("DB_PORT", raising=False)
+    monkeypatch.delenv("DB_SCHEMA_NAME", raising=False)
+    monkeypatch.delenv("DB_SSLMODE", raising=False)
+
+    connection = Mock()
+    connection_context = Mock()
+    connection_context.__enter__.return_value = connection
+    connect = Mock(return_value=connection_context)
+
+    with (
+        patch("app.db.bootstrap_roles.psycopg.connect", connect),
+        patch("app.db.bootstrap_roles.provision_database_roles") as provision,
+    ):
+        bootstrap_main()
+
+    conninfo = connect.call_args.args[0]
+    assert "host=db.example" in conninfo
+    assert "port=5432" in conninfo
+    assert "dbname=nova" in conninfo
+    assert "sslmode=prefer" in conninfo
+    provision.assert_called_once_with(
+        connection,
+        database_name="nova",
+        runtime_role="runtime_role",
+        runtime_password="r" * 32,
+        migrator_role="migrator_role",
+        migrator_password="m" * 32,
+        schema_name="public",
+    )
+
+
+def test_bootstrap_main_rejects_admin_as_application_role(monkeypatch) -> None:
+    values = {
+        "DB_HOST": "db.example",
+        "DB_NAME": "nova",
+        "DB_ADMIN_USER": "runtime_role",
+        "DB_ADMIN_PASSWORD": "a" * 32,
+        "DB_RUNTIME_USER": "runtime_role",
+        "DB_RUNTIME_PASSWORD": "r" * 32,
+        "DB_MIGRATOR_USER": "migrator_role",
+        "DB_MIGRATOR_PASSWORD": "m" * 32,
+    }
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+
+    with pytest.raises(RuntimeError, match="RDS master identity"):
+        bootstrap_main()
+
+
