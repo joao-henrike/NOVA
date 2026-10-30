@@ -318,7 +318,7 @@ jobs:
             echo
             echo "| Check | Result |"
             echo "|---|---|"
-            awk -F '\\t' '{status = ($2 == "SKIP" ? "SKIP" : ($2 == 0 ? "PASS" : "FAIL (" $2 ")")); printf "| %s | %s |\\\\n", $1, status}' "$RESULTS_FILE"
+            awk -F '\t' '{status = ($2 == "SKIP" ? "SKIP" : ($2 == 0 ? "PASS" : "FAIL (" $2 ")")); printf "| %s | %s |\n", $1, status}' "$RESULTS_FILE"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
           finish_checks
