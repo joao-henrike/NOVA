@@ -211,6 +211,8 @@ repo:joao-henrike@133373332/NOVA@1393500090:environment:development
 
 The repository was created after July 15, 2026, so the trust policy uses GitHub's immutable owner/repository ID subject format. The GitHub `development` Environment must restrict deployments to branch `Joao`. Do not replace this subject with a name-only subject or remove the audience condition.
 
+In GitHub, open **Settings → Environments → development → Deployment branches and tags**, select **Selected branches and tags**, and allow only `Joao`. Keep the `GRAFANA_ADMIN_PASSWORD` secret in this Environment. The OIDC subject authenticates the Environment rather than embedding the branch name, so this branch restriction is part of the trust boundary.
+
 #### One-time role provisioning
 
 Use an AWS CLI identity already authorized to create IAM OIDC providers and roles in account `760396521507`. From the repository root:

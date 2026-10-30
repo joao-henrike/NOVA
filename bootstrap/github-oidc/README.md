@@ -21,6 +21,8 @@ repo:joao-henrike@133373332/NOVA@1393500090:environment:development
 
 The repository was created after July 15, 2026, so its default OIDC subject contains immutable owner/repository IDs. The role must not be configured with the older name-only subject. The GitHub `development` Environment should also restrict deployment branches to `Joao`.
 
+Configure that restriction in GitHub before using the role: open **Settings → Environments → development → Deployment branches and tags**, select **Selected branches and tags**, and allow only `Joao`. Add the `GRAFANA_ADMIN_PASSWORD` secret to this same `development` Environment. Do not leave the Environment set to all branches; the OIDC subject identifies the Environment, so the branch gate is provided by GitHub's Environment protection rules.
+
 ## Permission scope
 
 The inline policy is designed for the existing `deploy-dev.yml` workflow and the read-only AWS validation in `extreme-validation.yml`. It grants:
