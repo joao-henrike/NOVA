@@ -119,7 +119,7 @@ Every check writes its own log under the runner temporary directory. The workflo
 
 The final verdict is blocking: a single failed check makes the extreme validation workflow fail, but the workflow still attempts the remaining independent checks first.
 
-The extreme validation workflow does not destroy or apply AWS infrastructure. Destructive end-to-end reconstruction remains isolated to `rebuild-dev.yml` and requires explicit `REBUILD` confirmation.
+The extreme validation workflow runs on pushes to `Joao` and manual dispatch only; it does not run on pull requests because its job has `id-token: write` for an optional live, read-only AWS plan. Standard CI remains the PR gate. Extreme validation does not destroy or apply AWS infrastructure. Destructive end-to-end reconstruction remains isolated to `rebuild-dev.yml` and requires explicit `REBUILD` confirmation.
 
 ## CD — Development
 
@@ -158,13 +158,19 @@ Terraform plan scope guard
 terraform apply exact saved plan
       |
       v
-wait for ECS services
+wait for frontend/backend/monitoring ECS services
       |
       v
-run Alembic migration task
+database bootstrap (RDS master identity)
       |
       v
-ALB smoke tests
+Alembic migration (migrator identity)
+      |
+      v
+database bootstrap again (runtime grants)
+      |
+      v
+ALB / API / Grafana smoke tests
 ```
 
 ### AWS authentication
@@ -200,18 +206,7 @@ GRAFANA_ADMIN_PASSWORD
 
 The development CD pipeline does not blindly apply every Terraform difference.
 
-It creates a saved plan and allows only these resources:
-
-```text
-aws_ecs_task_definition.frontend
-aws_ecs_task_definition.backend
-aws_ecs_service.frontend
-aws_ecs_service.backend
-aws_appautoscaling_target.frontend
-aws_appautoscaling_target.backend
-```
-
-Any other resource change or any delete action stops the deployment. This preserves a hard boundary between application release changes and unrelated infrastructure changes.
+It creates a saved plan and allows only the known application/monitoring task definitions and services, frontend/backend autoscaling targets, purpose-specific ECS execution roles/policies, the dedicated no-ingress database-task security group/rules, and the five CloudWatch log groups. It rejects every unlisted resource change and every delete action. The local deploy script and manual rebuild workflow enforce the same explicit allowlist.
 
 Infrastructure drift or unrelated infrastructure changes must be resolved through the infrastructure workflow rather than hidden inside an application release.
 
@@ -230,13 +225,13 @@ The ECR repositories are configured with immutable tags.
 
 ## Database migrations
 
-Migrations are executed as a one-off Fargate task using the newly deployed backend task definition:
+Migrations run as one-off private Fargate tasks using separate task definitions and identities:
 
-```bash
-alembic upgrade head
-```
+1. Database bootstrap: uses the RDS master secret only to create/update `cloudstart_runtime` and `cloudstart_migrator`.
+2. Alembic: uses only the migrator secret and runs `alembic upgrade head`.
+3. Post-migration bootstrap: reapplies DML/sequence grants to new objects.
 
-The migration task uses the private application subnets and backend security group.
+These tasks use the dedicated `database_tasks` security group, which has no ingress and only HTTPS plus TCP 5432 egress to application RDS. The normal backend task uses only the runtime credential and cannot read `alembic_version` or perform DDL.
 
 ## Post-deployment acceptance
 
@@ -247,6 +242,7 @@ The development CD pipeline checks:
 /api/health
 /api/info
 /api/health/db
+/grafana/api/health
 ```
 
 It also verifies that `GET /api/items` returns `401 Unauthorized`.
@@ -295,6 +291,7 @@ RDS Multi-AZ/IAM auth/performance/enhanced monitoring/deletion protection pendin
 RDS/Secrets Manager KMS CMK and secret rotation pending
 S3 logging/replication/KMS/notification controls for the Terraform state MVP
 ECR customer-managed KMS encryption pending
+CloudWatch log groups use AWS-owned encryption and cost-bounded 7-day dev / 30-day prod retention
 VPC Flow Logs pending
 development-only public ALB HTTP ingress
 ```

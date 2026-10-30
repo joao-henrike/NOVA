@@ -370,10 +370,12 @@ Verify:
 
 ```text
 available state
-Multi-AZ configuration
-backup retention
-storage
+dev baseline: Single-AZ (multi_az=false)
+backup retention (1 day by default)
+storage and autoscaling
 ```
+
+Multi-AZ is a production hardening target, not enabled in the current low-cost dev configuration.
 
 ### Zabbix/Grafana
 

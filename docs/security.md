@@ -133,13 +133,13 @@ RDS is configured with:
 
 - private subnets;
 - `publicly_accessible = false`;
-- Multi-AZ;
+- Single-AZ in the current low-cost environment (`multi_az = false`);
 - storage encryption;
 - automated backups;
 - storage autoscaling;
 - automatic minor version upgrades.
 
-The RDS security group accepts PostgreSQL 5432 only from the backend security group.
+The application RDS security group accepts PostgreSQL 5432 from the backend HTTP security group and the dedicated database-task security group. The monitoring RDS accepts 5432 only from the monitoring security group. Both RDS instances are Single-AZ in the current low-cost configuration.
 
 The current code does not define a customer-managed KMS key for RDS.
 
@@ -263,7 +263,7 @@ The monitoring plane is now Zabbix + Grafana, both containerized. Grafana is the
 
 The Zabbix database has a dedicated security group and private RDS placement. Application RDS access is not granted to the monitoring task as part of the current MVP; end-to-end database health is observed through the backend `/api/health/db` path.
 
-The former `awslogs`/CloudWatch logging path is removed. Zabbix/Grafana are the monitoring and visualization plane, not a centralized immutable application-log archive. This MVP therefore makes no claim of durable centralized application-log retention.
+Zabbix/Grafana provide monitoring and visualization. ECS container stdout/stderr is separately centralized in five Terraform-managed CloudWatch log groups using the `awslogs` driver. The monitoring task's three containers share one group with distinct stream prefixes. Retention is 7 days in development and 30 days in production; CloudWatch Logs uses its AWS-owned encryption key. This is short-retention operational logging, not a long-term immutable audit archive.
 
 ## 15. Security controls that are intentionally not claimed
 
