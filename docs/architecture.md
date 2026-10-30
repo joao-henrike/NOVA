@@ -218,29 +218,30 @@ Current default:
 
 ```text
 PostgreSQL 16
-Multi-AZ: true
+Multi-AZ: false (Single-AZ for current cost profile)
 Publicly accessible: false
-Storage: gp3
+Storage: encrypted gp3
 20 GiB -> autoscaling up to 100 GiB
-Backup retention: 7 days
+Backup retention: 1 day by default
 ```
 
-The RDS security group accepts TCP 5432 from the backend security group.
+The application RDS security group accepts TCP 5432 from the backend HTTP security group and from the dedicated no-ingress database-tasks security group. The separate monitoring RDS accepts TCP 5432 only from the monitoring security group. Both RDS groups have no declared egress rules; security groups are stateful.
 
 ## 11. Security-group model
 
 The network boundary is explicit:
 
 ```text
-Internet -> ALB SG :80
+Internet -> ALB SG :80 (443 only when ACM is configured)
 ALB SG   -> Frontend SG :80
 ALB SG   -> Backend SG :8000
 ALB SG   -> Monitoring SG :3000
-Backend  -> RDS SG :5432
+Backend HTTP SG -> Application RDS SG :5432
+Database-tasks SG -> Application RDS SG :5432
 Monitoring SG -> Monitoring DB SG :5432
 ```
 
-The current resource definitions also permit TCP 443 outbound from the frontend/backend security groups and all outbound traffic from the RDS security group.
+Only the backend, monitoring, and one-off database-task security groups have declared HTTPS egress. The database-task SG has no ingress and only two egress paths: HTTPS and TCP 5432 to application RDS. Frontend and both RDS security groups have no declared egress rules. Return traffic is allowed by stateful security-group behavior.
 
 No component is assigned a public IP at the ECS task level.
 
@@ -248,18 +249,33 @@ No component is assigned a public IP at the ECS task level.
 
 ### ECS execution identities
 
-The application ECS execution role can:
+Each ECS task purpose has its own execution policy:
 
-```text
-Pull application images from the two ECR repositories
-Read the application RDS-managed secret
-```
+| Task | ECR scope | Secret access | CloudWatch Logs |
+|---|---|---|---|
+| Frontend | Frontend repository | None | Frontend log group only |
+| Backend HTTP | Backend repository | Runtime DB + backend auth JSON | Backend log group only |
+| DB bootstrap | Backend repository | RDS master + runtime + migrator secrets | Bootstrap log group only |
+| DB migration | Backend repository | Migrator secret only | Migration log group only |
+| Monitoring | Public monitoring images | Monitoring DB + Grafana admin | Monitoring log group only |
 
-A separate monitoring execution role can read only the monitoring RDS-managed secret and the Grafana administrator secret. This keeps application and monitoring credentials separated.
+Execution roles receive only `logs:CreateLogStream` and `logs:PutLogEvents` for their own log group; containers do not receive CloudWatch Logs read access. Task roles remain separate and empty of application AWS permissions.
 
 ### Task identities
 
-Separate frontend and backend task roles exist with no additional permissions in the current implementation.
+Separate frontend, backend, and monitoring task roles exist with no additional permissions in the current implementation. One-off bootstrap and migration tasks use the backend task role, which has no extra AWS permissions; their narrowly scoped startup secret access is on their separate execution roles.
+
+### PostgreSQL identities
+
+Three database identities are used in AWS:
+
+| Identity | Use | Privilege boundary |
+|---|---|---|
+| `cloudstart_runtime` | Normal backend HTTP requests | DML and sequence usage only; cannot create/alter schema or read `alembic_version` |
+| `cloudstart_migrator` | One-off Alembic task | Owns application schema objects and performs schema changes |
+| RDS master (`cloudstart_admin`) | One-off bootstrap task only | Creates/updates the two restricted identities and reapplies runtime grants |
+
+Deployment order is bootstrap → Alembic migration → bootstrap again, so new tables/sequences receive runtime DML grants. The normal backend never receives the RDS master or migration credentials.
 
 ### Database password
 
@@ -301,7 +317,7 @@ Development CD publishes immutable SHA-tagged application images to ECR.
 
 ## 14. Monitoring and observability
 
-The current MVP uses a Dockerized Zabbix + Grafana monitoring plane instead of project-managed CloudWatch alarms, dashboard, log groups, and Container Insights.
+The current MVP separates operational telemetry from container logs: Zabbix + Grafana provide availability/monitoring views, while CloudWatch Logs centrally retains stdout/stderr from all ECS containers. Project-managed CloudWatch alarms and dashboards are not provisioned; ECS Container Insights is enabled at cluster level.
 
 ### Monitoring service
 
@@ -322,7 +338,7 @@ Grafana is the only monitoring UI exposed by the public ALB, through `/grafana/*
 
 Zabbix configuration/history is stored in a dedicated private PostgreSQL RDS instance. It is deliberately separate from the application RDS to preserve fault and access boundaries between the monitoring plane and the application data plane.
 
-The monitoring RDS instance is Multi-AZ, encrypted, backed up, and protected by a dedicated security group.
+The monitoring RDS instance is Single-AZ, encrypted, backed up with the current one-day default retention, and protected by a dedicated security group.
 
 ### What Zabbix can observe in the MVP
 
@@ -346,7 +362,7 @@ Grafana is configured to serve from the `/grafana/` subpath so it can sit behind
 
 ### Logging boundary
 
-The former ECS `awslogs` configuration and CloudWatch log groups are removed. Zabbix/Grafana are being used as the monitoring/visualization plane, not as a general-purpose centralized log archive. Application logs remain a separate concern and are not claimed as centrally retained by this MVP.
+All seven ECS containers use the `awslogs` driver and write to five Terraform-managed CloudWatch log groups: frontend, backend, bootstrap, migration, and monitoring. The three monitoring containers share the monitoring group with distinct stream prefixes. Retention is 7 days in development and 30 days in production. CloudWatch Logs uses its AWS-owned encryption key by default; no customer-managed KMS key or long-term S3 archive is configured. Zabbix/Grafana remain a separate metrics/availability plane, not the central log store.
 
 ### Kubernetes boundary
 
@@ -450,23 +466,27 @@ The bootstrap stack intentionally has no remote backend of its own.
 ```text
 Pull Request / main push
            |
-           +--------------------------+
-           |                          |
-           v                          v
- Terraform CI                 Container CI
-           |                          |
-   +-------+-------+           +------+------+
-   |       |       |           |     |      |
- fmt   validate  security    build scan  compose
-   |       |       |           |     |
-   +-------+-------+           +------+------+
+           v
+ Standard CI (tests, Terraform, scanners, Compose, containers)
+           |
+           +--> PR validation (no AWS OIDC)
+
+Push to Joao / manual dispatch
            |
            v
-     optional OIDC
-      Terraform plan
-```
+ Extreme validation (full local system + read-only AWS plan when OIDC is available)
 
-The repository currently has CI, not a complete CD pipeline.
+Push to Joao with runtime-artifact changes
+           |
+           v
+ Guarded Development CD (OIDC, saved-plan allowlist, migrations, 3-service wait, smoke tests)
+
+Manual rebuild (exact REBUILD confirmation)
+           |
+           v
+ Destructive dev teardown + rebuild
+
+The extreme workflow deliberately does not trigger on pull requests because its job needs `id-token: write` for live AWS validation. Standard CI remains the PR gate. There is no production deployment pipeline.
 
 ## 18. Local Compose topology
 
@@ -549,14 +569,16 @@ Distributed tracing
 | Application services | Frontend + Backend |
 | App networking | Private subnets |
 | Public network resources | ALB + NAT |
-| Database | RDS PostgreSQL Multi-AZ |
+| Database | RDS PostgreSQL Single-AZ (dev cost profile) |
 | Database network | Private DB subnets |
 | Container registry | ECR |
 | Monitoring | Zabbix + Grafana containers |
-| Container metrics | Zabbix/Grafana monitoring containers |
-| Alarms | Zabbix/Grafana |
-| Secrets | RDS-managed Secrets Manager secret |
-| IAM | ECS execution + two empty task roles |
+| ECS logs | Five CloudWatch log groups; 7d dev / 30d prod |
+| Container metrics | ECS Container Insights + Zabbix/Grafana |
+| Alarms | Zabbix/Grafana; no project-managed CloudWatch alarms |
+| Database identities | Runtime DML role + migrator role + RDS master bootstrap |
+| Secrets | RDS-managed master + separate runtime/migrator/backend-auth/Grafana secrets |
+| IAM | Purpose-specific ECS execution roles + empty task roles |
 | IaC | Terraform |
 | Remote state | S3 + S3 lockfile + bootstrap DynamoDB |
 | CI | GitHub Actions |

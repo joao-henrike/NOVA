@@ -55,15 +55,22 @@ A Terraform resource proves that the repository declares that resource. It does 
 | --- | --- |
 | ALB SG | ✅ |
 | Frontend SG | ✅ |
-| Backend SG | ✅ |
-| RDS SG | ✅ |
-| Internet → ALB TCP 80 | ✅ |
+| Backend HTTP SG | ✅ |
+| One-off database-tasks SG (no ingress) | ✅ |
+| Monitoring SG | ✅ |
+| Application RDS SG | ✅ |
+| Monitoring RDS SG | ✅ |
+| Internet → ALB TCP 80 (443 only when ACM is enabled) | ✅ |
 | ALB → Frontend TCP 80 | ✅ |
 | ALB → Backend TCP 8000 | ✅ |
-| Backend → RDS TCP 5432 | ✅ |
-| Frontend outbound TCP 443 | ✅ |
-| Backend outbound TCP 443 | ✅ |
-| RDS all outbound | ✅ |
+| ALB → Grafana TCP 3000 | ✅ |
+| Backend → Application RDS TCP 5432 | ✅ |
+| Database tasks → Application RDS TCP 5432 | ✅ |
+| Monitoring → Monitoring RDS TCP 5432 | ✅ |
+| Backend / monitoring / database-task outbound TCP 443 | ✅ |
+| Frontend egress | ❌ (no declared egress) |
+| Application and monitoring RDS egress | ❌ (no declared egress) |
+| Database-task ingress from ALB or Internet | ❌ |
 | IP-based internal workload allowlist | ❌ |
 | Private task public IPs | ❌ |
 
@@ -141,7 +148,7 @@ A Terraform resource proves that the repository declares that resource. It does 
 | RDS | ✅ |
 | PostgreSQL | ✅ |
 | PostgreSQL 16 default | ✅ |
-| Multi-AZ | ✅ |
+| Multi-AZ | ❌ (intentionally Single-AZ for current cost profile) |
 | Private subnets | ✅ |
 | Public accessibility disabled | ✅ |
 | Storage encryption | ✅ |
@@ -169,6 +176,10 @@ A Terraform resource proves that the repository declares that resource. It does 
 | ECR pull permissions | ✅ |
 | Monitoring secret read permissions | ✅ |
 | RDS-managed master secret | ✅ |
+| PostgreSQL runtime role | ✅ `cloudstart_runtime`; DML-only, used by HTTP backend |
+| PostgreSQL migration role | ✅ `cloudstart_migrator`; owns application schema objects, used only by Alembic task |
+| RDS master identity | ✅ Bootstrap task only; not injected into normal backend service |
+| Separate ECS execution roles | ✅ Frontend, backend, migration, bootstrap, monitoring |
 | Backend authentication secret injection | ✅ Conditional on backend_auth_secret_arn; ARN only in Terraform |
 | JWT/Google/Apple secret values provisioned | 🟡 Operator-managed in Secrets Manager; never committed |
 | Application password in source | ❌ |
@@ -185,12 +196,15 @@ A Terraform resource proves that the repository declares that resource. It does 
 | Zabbix web container | ✅ | `monitoring.tf` / Docker Compose |
 | Grafana container | ✅ | `monitoring.tf` / Docker Compose |
 | Grafana Zabbix plugin | ✅ | `alexanderzobnin-zabbix-app@6.8.0` |
-| Monitoring RDS | ✅ | Dedicated PostgreSQL instance, Multi-AZ |
+| Monitoring RDS | ✅ | Dedicated PostgreSQL instance, encrypted, Single-AZ |
 | Grafana through ALB | ✅ | `/grafana/*` listener rule |
-| CloudWatch monitoring resources | ❌ | Removed by design; replaced by Zabbix/Grafana |
-| CloudWatch log groups | ❌ | Removed by design |
-| ECS Container Insights | ✅ | `ecs.tf`; enabled at cluster level in addition to the Zabbix/Grafana monitoring plane |
-| Centralized application log archive | ❌ | Not provided by Zabbix/Grafana alone |
+| Zabbix/Grafana monitoring plane | ✅ | Health/availability and monitoring database |
+| CloudWatch alarms / project dashboards | ❌ | No project-managed alarm/dashboard resources |
+| CloudWatch log groups | ✅ | Five Terraform-managed groups for frontend, backend, bootstrap, migration, monitoring |
+| ECS container stdout/stderr | ✅ | `awslogs` driver; monitoring containers use separate stream prefixes |
+| Log retention | ✅ | 7 days dev / 30 days prod; AWS-owned key encryption |
+| Long-term centralized log archive | ❌ | Retention is intentionally short; no separate archive/S3 export |
+| ECS Container Insights | ✅ | `ecs.tf`; enabled at cluster level |
 | Kubernetes monitoring | ❌ | Kubernetes is not in the current MVP |
 
 ### 3.10 Terraform
@@ -244,7 +258,7 @@ The backend exposes the existing health endpoints, implements Google/Apple authe
 
 ### Database
 
-RDS is present as infrastructure and the backend can validate connectivity. No business schema is created by the repository.
+RDS is present as infrastructure and the backend can validate connectivity. The repository creates authentication/session tables, the technical `items` table, and supporting rate-limit/OAuth-state tables; the final business domain is not defined.
 
 ## 5. Current security boundaries
 
@@ -261,9 +275,9 @@ ALB SG
 
 The ECS tasks have no public IP addresses.
 
-The RDS instance is not publicly accessible.
+Both application and monitoring RDS instances are Single-AZ and not publicly accessible. The database-task security group has no ingress rules and permits only HTTPS egress plus PostgreSQL toward the application RDS security group.
 
-The RDS password is delivered through ECS secret injection. Backend JWT/OAuth settings can be delivered through the optional Secrets Manager secret ARN; the actual values are populated out-of-band.
+The normal backend task uses `cloudstart_runtime` and receives only the runtime Secrets Manager password. The Alembic task uses `cloudstart_migrator`; the one-off bootstrap task alone receives the RDS-managed master secret. JWT/OAuth settings use a separate optional Secrets Manager JSON secret; values are populated out-of-band.
 
 ## 6. Current operational boundaries
 
@@ -275,10 +289,10 @@ Infrastructure validation
 Container validation
 Image vulnerability scanning
 Secret scanning
-Basic runtime observability
+Zabbix/Grafana availability monitoring
+CloudWatch ECS container logs (7-day dev / 30-day prod retention)
 Deployment circuit breaker
-RDS backups
-Multi-AZ runtime architecture
+Single-AZ RDS backups
 ```
 
 ### Does not exist
@@ -306,7 +320,7 @@ Terraform defines a resilient target of two tasks when deployment is enabled, bu
 
 ### CI vs CD
 
-The repository contains CI plus a guarded development CD path that publishes immutable application images to ECR and updates only the application ECS resources.
+The repository contains standard CI, an extreme full-system validation workflow, and a guarded development CD path. Development CD publishes immutable application images and allows only the explicitly enumerated frontend/backend/monitoring task/service, scoped IAM, database-task network, and CloudWatch log-group changes. It waits for all three services and checks Grafana health. Production CD remains absent.
 
 ### Local vs AWS PostgreSQL
 
@@ -314,7 +328,7 @@ Local Compose uses PostgreSQL 17; AWS RDS defaults to PostgreSQL 16.
 
 ### “RDS password in Secrets Manager”
 
-The password is managed by RDS and exposed through the managed secret. It is not stored in Terraform source.
+The RDS master password is managed by RDS and exposed through the managed secret. It is injected only into the one-off role-bootstrap task. The normal backend receives a separate DML-only runtime password; the migration task receives a separate migrator password. Those application passwords live in Secrets Manager and Terraform receives their ARNs only.
 
 ## 8. Current non-components
 

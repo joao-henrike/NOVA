@@ -2,7 +2,7 @@
 
 This file documents the current infrastructure security exceptions for **Checkov** and **Trivy**.
 
-Checkov exceptions are maintained centrally in `.checkov.yaml`. Trivy exceptions are kept at the **resource level** with inline `#trivy:ignore:<ID>` directives so they remain scoped to the exact development resource that intentionally requires the exception.
+Baseline Checkov exceptions are maintained in `.checkov.yaml`. The CloudWatch log groups also carry resource-scoped Checkov skips for `CKV_AWS_158` and `CKV_AWS_338`, with rationale directly beside each resource. Trivy exceptions are kept at the **resource level** with inline `#trivy:ignore:<ID>` directives so they remain scoped to the exact resource that intentionally requires the exception.
 
 These are explicit MVP decisions, not a blanket suppression. A newly introduced Checkov control that is not listed remains blocking in CI.
 
@@ -13,7 +13,9 @@ These are explicit MVP decisions, not a blanket suppression. A newly introduced 
 | CKV_AWS_150 | Deletion protection disabled for development | Enable in staging/prod |
 | CKV2_AWS_28 | WAF not installed | Protect public edge with WAF |
 | CKV_AWS_353 / CKV_AWS_118 / CKV_AWS_129 | RDS observability controls deferred | Centralized DB monitoring/logging |
-| CKV_AWS_157 | Multi-AZ constrained by current MVP cost/free-tier profile | Enable for production |
+| CKV_AWS_157 | Application and monitoring RDS instances are deliberately Single-AZ for the low-cost MVP | Enable Multi-AZ for production |
+| CKV_AWS_158 | CloudWatch log groups use AWS-owned encryption by default; no customer-managed KMS CMK is configured | Add a CMK if customer key ownership/separation is required |
+| CKV_AWS_338 | CloudWatch log retention is deliberately 7 days in dev / 30 days in prod to cap cost | Increase to >=365 days only when budget/compliance requires it |
 | CKV_AWS_161 | IAM DB authentication not needed by current app | Re-evaluate with production auth design |
 | CKV_AWS_293 | RDS deletion protection disabled for development | Enable in staging/prod |
 | CKV_AWS_149 / CKV_AWS_145 / CKV_AWS_136 / CKV_AWS_119 | Customer-managed KMS encryption deferred | Introduce managed CMKs and key policy |
