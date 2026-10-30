@@ -241,6 +241,49 @@ def _transfer_schema_objects(
             )
         )
 
+    # SECURITY DEFINER routines must not remain owned by the bootstrap
+    # identity. Transfer application functions/procedures to the restricted
+    # migrator, but leave extension-owned routines under extension control.
+    routines = connection.execute(
+        """
+        SELECT
+            CASE p.prokind
+                WHEN 'p' THEN 'PROCEDURE'
+                WHEN 'a' THEN 'AGGREGATE'
+                ELSE 'FUNCTION'
+            END,
+            format(
+                '%I.%I(%s)',
+                n.nspname,
+                p.proname,
+                pg_get_function_identity_arguments(p.oid)
+            ),
+            pg_get_userbyid(p.proowner)
+        FROM pg_proc AS p
+        JOIN pg_namespace AS n ON n.oid = p.pronamespace
+        WHERE n.nspname = %s
+          AND p.prokind IN ('f', 'w', 'p', 'a')
+          AND NOT EXISTS (
+              SELECT 1
+              FROM pg_depend AS dependency
+              WHERE dependency.classid = 'pg_proc'::regclass
+                AND dependency.objid = p.oid
+                AND dependency.deptype = 'e'
+          )
+        """,
+        (schema_name,),
+    ).fetchall()
+    for routine_kind, routine_signature, current_owner in routines:
+        if current_owner == owner_role:
+            continue
+        connection.execute(
+            sql.SQL("ALTER {} {} OWNER TO {}").format(
+                sql.SQL(routine_kind),
+                sql.SQL(routine_signature),
+                sql.Identifier(owner_role),
+            )
+        )
+
 
 def provision_database_roles(
     connection: psycopg.Connection,
@@ -309,10 +352,10 @@ def provision_database_roles(
         )
     )
 
-    # PostgreSQL 15+ revokes CREATE on public by default; keep that boundary
-    # explicit, including databases upgraded from older defaults.
+    # PUBLIC must not retain schema discovery or object-creation rights.
+    # Application identities receive only the schema access granted below.
     connection.execute(
-        sql.SQL("REVOKE CREATE ON SCHEMA {} FROM PUBLIC").format(
+        sql.SQL("REVOKE ALL PRIVILEGES ON SCHEMA {} FROM PUBLIC").format(
             sql.Identifier(schema_name)
         )
     )
@@ -351,9 +394,24 @@ def provision_database_roles(
         sql.SQL("SET ROLE {}").format(sql.Identifier(migrator_role))
     )
 
-    # Remove stale direct ACLs before granting the exact runtime privilege set.
-    # This prevents a prior TRUNCATE/REFERENCES/TRIGGER/sequence UPDATE grant
-    # from surviving an otherwise idempotent bootstrap run.
+    # Remove stale PUBLIC and direct runtime grants before applying the exact
+    # application ACL. PUBLIC function EXECUTE is especially sensitive for
+    # SECURITY DEFINER routines, so it is revoked from existing and future code.
+    connection.execute(
+        sql.SQL("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA {} FROM PUBLIC").format(
+            sql.Identifier(schema_name)
+        )
+    )
+    connection.execute(
+        sql.SQL("REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {} FROM PUBLIC").format(
+            sql.Identifier(schema_name)
+        )
+    )
+    connection.execute(
+        sql.SQL("REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA {} FROM PUBLIC").format(
+            sql.Identifier(schema_name)
+        )
+    )
     connection.execute(
         sql.SQL("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA {} FROM {}").format(
             sql.Identifier(schema_name),
@@ -365,6 +423,15 @@ def provision_database_roles(
             sql.Identifier(schema_name),
             sql.Identifier(runtime_role),
         )
+    )
+    connection.execute(
+        sql.SQL("REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA {} FROM {}").format(
+            sql.Identifier(schema_name),
+            sql.Identifier(runtime_role),
+        )
+    )
+    connection.execute(
+        "ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC"
     )
     connection.execute(
         sql.SQL(
