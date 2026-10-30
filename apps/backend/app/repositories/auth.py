@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import delete, exists, select, update
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy import delete, select, update
+from sqlalchemy.orm import Session
 
 from app.models.auth import AuthIdentity, AuthProvider, OAuthState, RefreshToken
 from app.models.user import User
@@ -126,7 +126,7 @@ class AuthRepository:
         session.commit()
         return record
 
-    def prune_expired_refresh_families(
+    def prune_expired_refresh_tokens(
         self,
         session: Session,
         *,
@@ -136,26 +136,14 @@ class AuthRepository:
         if batch_size < 1:
             raise ValueError("Refresh-token cleanup batch size must be positive.")
 
-        expired_token = aliased(RefreshToken)
-        unexpired_token = aliased(RefreshToken)
-        expired_families = (
-            select(expired_token.family_id)
-            .where(expired_token.expires_at <= now)
-            .where(
-                ~exists(
-                    select(1).where(
-                        unexpired_token.family_id == expired_token.family_id,
-                        unexpired_token.expires_at > now,
-                    )
-                )
-            )
-            .distinct()
+        expired_token_ids = (
+            select(RefreshToken.id)
+            .where(RefreshToken.expires_at <= now)
+            .order_by(RefreshToken.expires_at, RefreshToken.id)
             .limit(batch_size)
         )
         session.execute(
-            delete(RefreshToken).where(
-                RefreshToken.family_id.in_(expired_families)
-            )
+            delete(RefreshToken).where(RefreshToken.id.in_(expired_token_ids))
         )
 
     def create_refresh_token(
@@ -168,10 +156,10 @@ class AuthRepository:
         expires_at: datetime,
         replaced_by_hash: str | None = None,
     ) -> RefreshToken:
-        # Keep replay-detection history while any token in a family can still
-        # be presented. Once every token has expired, the whole family is safe
-        # to remove. Batching bounds the work on login and refresh requests.
-        self.prune_expired_refresh_families(
+        # Retain revoked-token hashes only through each token's own validity
+        # window. Expired credentials can no longer prove a useful replay, and
+        # pruning them individually keeps long-lived families bounded.
+        self.prune_expired_refresh_tokens(
             session,
             now=datetime.now(UTC),
         )
