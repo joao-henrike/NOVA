@@ -145,9 +145,12 @@ jobs:
           run_check terraform_root_validate terraform validate -no-color
           run_check terraform_bootstrap_init terraform -chdir=bootstrap init -backend=false -input=false -no-color
           run_check terraform_bootstrap_validate terraform -chdir=bootstrap validate -no-color
+          run_check terraform_github_oidc_init terraform -chdir=bootstrap/github-oidc init -backend=false -input=false -no-color
+          run_check terraform_github_oidc_validate terraform -chdir=bootstrap/github-oidc validate -no-color
           run_check terraform_tflint_init tflint --init --config .tflint.hcl
           run_check terraform_tflint_root tflint --config .tflint.hcl --format compact
           run_check terraform_tflint_bootstrap bash -c 'cd bootstrap && tflint --config ../.tflint.hcl --format compact'
+          run_check terraform_tflint_github_oidc bash -c 'cd bootstrap/github-oidc && tflint --config ../../.tflint.hcl --format compact'
           run_check terraform_graph_setup bash -c 'rm -rf "$RUNNER_TEMP/tf-graph" && mkdir -p "$RUNNER_TEMP/tf-graph" && rsync -a --exclude=.git --exclude=.terraform --exclude=backend.tf ./ "$RUNNER_TEMP/tf-graph/" && terraform -chdir="$RUNNER_TEMP/tf-graph" init -backend=false -input=false -no-color'
           run_check terraform_graph bash -c 'terraform -chdir="$RUNNER_TEMP/tf-graph" graph'
           run_check terraform_dev_tfvars test -s config/dev.tfvars
@@ -160,7 +163,7 @@ jobs:
           run_check security_git_diff git diff --check
 
           echo "### REPOSITORY CONTRACT"
-          run_check repository_expected_files bash -c 'for f in Makefile README.md docs/README.md docs/configuration-reference.md apps/frontend/README.md apps/backend/README.md bootstrap/README.md scripts/README.md scripts/activate-application-services.sh scripts/ensure-terraform-state.sh scripts/provision-db-credentials.sh scripts/provision-backend-auth-secret.sh .terraform.lock.hcl .tflint.hcl .checkov.yaml backend.tf providers.tf variables.tf locals.tf main.tf vpc.tf security_groups.tf ecr.tf ecs.tf ecs_services.tf iam.tf rds.tf monitoring.tf outputs.tf config/dev.env config/dev.tfvars terraform.tfvars.example cloudwatch_logs.tf bootstrap/main.tf bootstrap/variables.tf bootstrap/providers.tf bootstrap/outputs.tf .github/workflows/ci.yml .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml .github/workflows/extreme-validation.yml; do test -f "$f" || { echo "missing: $f"; exit 1; }; done'
+          run_check repository_expected_files bash -c 'for f in Makefile README.md docs/README.md docs/configuration-reference.md apps/frontend/README.md apps/backend/README.md bootstrap/README.md scripts/README.md scripts/activate-application-services.sh scripts/bootstrap-github-oidc-role.sh scripts/ensure-terraform-state.sh scripts/provision-db-credentials.sh scripts/provision-backend-auth-secret.sh .terraform.lock.hcl .tflint.hcl .checkov.yaml backend.tf providers.tf variables.tf locals.tf main.tf vpc.tf security_groups.tf ecr.tf ecs.tf ecs_services.tf iam.tf rds.tf monitoring.tf outputs.tf config/dev.env config/dev.tfvars terraform.tfvars.example cloudwatch_logs.tf bootstrap/main.tf bootstrap/variables.tf bootstrap/providers.tf bootstrap/outputs.tf bootstrap/github-oidc/main.tf bootstrap/github-oidc/variables.tf bootstrap/github-oidc/providers.tf bootstrap/github-oidc/outputs.tf bootstrap/github-oidc/README.md bootstrap/github-oidc/.terraform.lock.hcl .github/workflows/ci.yml .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml .github/workflows/extreme-validation.yml; do test -f "$f" || { echo "missing: $f"; exit 1; }; done'
           run_check repository_no_private_keys bash -c '! git grep -nE "BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY|aws_secret_access_key|AWS_SECRET_ACCESS_KEY|ghp_[A-Za-z0-9]{20,}" -- . ":!.github/workflows/extreme-validation.yml"'
           run_check repository_dev_tfvars_no_secrets bash -c '! grep -nEi "^[[:space:]]*(password|secret|token|private_key|access_key)[[:space:]]*=" config/dev.tfvars'
           run_check repository_canonical_state bash -c 'grep -q "cloudstart/dev/terraform.tfstate" backend.tf config/dev.env .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml'
@@ -175,11 +178,16 @@ jobs:
           run_check workflow_ci_branch_policy bash -c 'grep -q "branches: \\[main, Joao\\]" .github/workflows/ci.yml'
           run_check workflow_deploy_branch_policy bash -c 'grep -q "branches: \\[Joao\\]" .github/workflows/deploy-dev.yml'
           run_check workflow_destructive_confirmation bash -c 'grep -q "CONFIRMATION" .github/workflows/rebuild-dev.yml && grep -q "REBUILD" .github/workflows/rebuild-dev.yml'
+          run_check workflow_rebuild_separate_role bash -c 'grep -q "AWS_REBUILD_ROLE_ARN" .github/workflows/rebuild-dev.yml && grep -q "development-rebuild" .github/workflows/rebuild-dev.yml'
+          run_check workflow_cd_role_not_used_for_rebuild bash -c '! grep -q "AWS_CD_ROLE_ARN" .github/workflows/rebuild-dev.yml'
+          run_check workflow_cd_state_verify_only bash -c 'grep -q "scripts/ensure-terraform-state.sh --verify-only" .github/workflows/deploy-dev.yml'
           run_check workflow_permissions_present bash -c 'grep -RIn "permissions:" .github/workflows/*.yml >/dev/null'
 
           echo "### LOCAL AUTOMATION CONTRACT"
           run_check deploy_script_syntax bash -n scripts/deploy.sh
           run_check service_activation_script_syntax bash -n scripts/activate-application-services.sh
+          run_check github_oidc_bootstrap_script_syntax bash -n scripts/bootstrap-github-oidc-role.sh
+          run_check github_oidc_bootstrap_script_shellcheck shellcheck --severity=error -x scripts/bootstrap-github-oidc-role.sh
           run_check deploy_script_shellcheck shellcheck --severity=error -x scripts/deploy.sh
           run_check state_bootstrap_syntax bash -n scripts/ensure-terraform-state.sh
           run_check backend_auth_provisioner_syntax bash -n scripts/provision-backend-auth-secret.sh
