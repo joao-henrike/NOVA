@@ -99,7 +99,20 @@ echo
 echo "GitHub Actions deployment role created:"
 echo "$role_arn"
 echo
-echo "Set the GitHub repository variable with:"
-printf 'gh variable set AWS_CD_ROLE_ARN --repo joao-henrike/NOVA --body "%s"\n' "$role_arn"
-echo
-echo "The GitHub CLI identity must have repository Variables write permission."
+if command -v gh >/dev/null 2>&1 && gh auth status --hostname github.com >/dev/null 2>&1; then
+  current_role_arn="$(gh variable get AWS_CD_ROLE_ARN --repo joao-henrike/NOVA 2>/dev/null || true)"
+  if [ "$current_role_arn" = "$role_arn" ]; then
+    echo "GitHub repository variable AWS_CD_ROLE_ARN already matches the created role."
+  elif [ -n "$current_role_arn" ]; then
+    echo "AWS_CD_ROLE_ARN already contains a different value; refusing to overwrite it automatically." >&2
+    printf 'Review and update it with: gh variable set AWS_CD_ROLE_ARN --repo joao-henrike/NOVA --body "%s"\n' "$role_arn"
+  elif gh variable set AWS_CD_ROLE_ARN --repo joao-henrike/NOVA --body "$role_arn"; then
+    echo "GitHub repository variable AWS_CD_ROLE_ARN was published successfully."
+  else
+    echo "The IAM role was created, but GitHub rejected the variable update." >&2
+    printf 'Set it manually with: gh variable set AWS_CD_ROLE_ARN --repo joao-henrike/NOVA --body "%s"\n' "$role_arn"
+  fi
+else
+  echo "GitHub CLI is unavailable or not authenticated with repository Variables write permission."
+  printf 'After authenticating gh, set it with: gh variable set AWS_CD_ROLE_ARN --repo joao-henrike/NOVA --body "%s"\n' "$role_arn"
+fi

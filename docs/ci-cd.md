@@ -220,9 +220,9 @@ aws sts get-caller-identity
 bash scripts/bootstrap-github-oidc-role.sh CREATE_GITHUB_OIDC_ROLE
 ```
 
-Review the displayed Terraform plan before applying. The stack creates the GitHub OIDC provider (or imports the existing provider into its dedicated local state) and a scoped role named `cloudstart-nova-github-actions-cd`. It does not create the application state bucket or modify the NOVA VPC/RDS/ECS stack. Keep `bootstrap/github-oidc/terraform.tfstate` private; it is ignored by Git.
+Review the displayed Terraform plan before applying. The stack reuses an existing GitHub OIDC provider read-only (or creates one only when absent) and creates a scoped role named `cloudstart-nova-github-actions-cd`. It never imports or modifies a shared provider. It does not create the application state bucket or modify the NOVA VPC/RDS/ECS stack. Keep `bootstrap/github-oidc/terraform.tfstate` private; it is ignored by Git.
 
-After the stack succeeds, publish its role ARN as a **repository Actions variable**:
+The bootstrap script publishes the role ARN as a **repository Actions variable** when `gh` is authenticated and has Variables write permission. It refuses to overwrite a different existing value. If it cannot publish automatically, use:
 
 ```bash
 gh variable set AWS_CD_ROLE_ARN \\
@@ -230,7 +230,7 @@ gh variable set AWS_CD_ROLE_ARN \\
   --body "$(terraform -chdir=bootstrap/github-oidc output -raw github_actions_cd_role_arn)"
 ```
 
-The GitHub CLI identity needs repository Variables write permission. The linked automation connection used for code changes cannot write this repository variable. Never place the ARN in tracked source files.
+Verify it with `gh variable get AWS_CD_ROLE_ARN --repo joao-henrike/NOVA`. Never place the ARN in tracked source files.
 
 The role deliberately does not have permission to create the Terraform state bucket. Prepare/verify the canonical bucket separately before enabling CD. The GitHub workflow calls `scripts/ensure-terraform-state.sh --verify-only`; local `make deploy` retains the separate state-bootstrap capability.
 

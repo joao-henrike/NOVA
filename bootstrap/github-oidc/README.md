@@ -52,7 +52,7 @@ bash scripts/bootstrap-github-oidc-role.sh CREATE_GITHUB_OIDC_ROLE
 
 The script verifies the AWS account, initializes and validates this stack, and looks for an existing GitHub OIDC provider. If one exists, it reads the provider and reuses its ARN as a Terraform data source; it does not import, update, or retag a shared provider. It creates the provider only if absent. It then displays the exact role plan and requires the explicit confirmation phrase before applying.
 
-After the apply, set the repository Actions variable using the output ARN:
+After the apply, the script publishes the repository Actions variable automatically when `gh` is installed, authenticated to GitHub, and has repository Variables write permission. It does not overwrite a different existing value automatically. Otherwise, it prints the exact command to use:
 
 ```bash
 gh variable set AWS_CD_ROLE_ARN \
@@ -60,7 +60,7 @@ gh variable set AWS_CD_ROLE_ARN \
   --body "$(terraform -chdir=bootstrap/github-oidc output -raw github_actions_cd_role_arn)"
 ```
 
-The GitHub CLI identity needs repository Variables write permission. This value is a repository variable, not a secret. Do not put it in a tracked file.
+Verify the result with `gh variable get AWS_CD_ROLE_ARN --repo joao-henrike/NOVA`. This value is a repository variable, not a secret. Do not put it in a tracked file.
 
 Also verify that the GitHub Environment `development` allows deployment from branch `Joao` only and contains the `GRAFANA_ADMIN_PASSWORD` environment secret.
 
