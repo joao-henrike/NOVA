@@ -77,6 +77,19 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 .format(sql.Identifier(schema_name))
             )
 
+            # These built-in memberships grant cluster-wide table access and
+            # must not survive reconciliation of the application logins.
+            connection.execute(
+                sql.SQL("GRANT pg_read_all_data TO {}").format(
+                    sql.Identifier(runtime_role)
+                )
+            )
+            connection.execute(
+                sql.SQL("GRANT pg_write_all_data TO {}").format(
+                    sql.Identifier(migrator_role)
+                )
+            )
+
             provision_database_roles(
                 connection,
                 database_name=database_name,
@@ -96,6 +109,15 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 (runtime_role,),
             ).fetchone()
             assert role_attributes == (False, False, False, False, False)
+
+            assert not connection.execute(
+                "SELECT pg_has_role(%s, 'pg_read_all_data', 'MEMBER')",
+                (runtime_role,),
+            ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT pg_has_role(%s, 'pg_write_all_data', 'MEMBER')",
+                (migrator_role,),
+            ).fetchone()[0]
 
             owner = connection.execute(
                 """
