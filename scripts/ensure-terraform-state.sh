@@ -6,6 +6,13 @@ umask 077
 : "${EXPECTED_AWS_ACCOUNT_ID:?EXPECTED_AWS_ACCOUNT_ID is required}"
 : "${TF_STATE_BUCKET:?TF_STATE_BUCKET is required}"
 
+VERIFY_ONLY=false
+case "${1:-}" in
+  "") ;;
+  --verify-only) VERIFY_ONLY=true ;;
+  *) echo "Usage: $0 [--verify-only]" >&2; exit 2 ;;
+esac
+
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BOOTSTRAP_DATA_DIR="$ROOT_DIR/.deploy/terraform-bootstrap-data"
 
@@ -50,6 +57,11 @@ fi
 if ! grep -Eq 'NoSuchBucket|404|Not Found' "$error_file"; then
   cat "$error_file" >&2
   echo "Could not verify ownership/access to Terraform state bucket $TF_STATE_BUCKET; refusing to create it." >&2
+  exit 1
+fi
+
+if [ "$VERIFY_ONLY" = true ]; then
+  echo "Terraform state bucket $TF_STATE_BUCKET is missing; verify-only mode will not create AWS resources." >&2
   exit 1
 fi
 
