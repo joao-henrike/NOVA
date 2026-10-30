@@ -50,4 +50,15 @@ The other four groups are for frontend, backend, database bootstrap, and databas
 
 CloudWatch Logs provides centralized short-retention container logs, not a long-term audit archive. Zabbix + Grafana provide availability/metrics views and are not a replacement for the log pipeline.
 
-> Monitoring image choices were aligned with the current Zabbix 8.0 container documentation and Grafana documentation available at the time of this update.
+## Pinned container versions
+
+The current Terraform and local Compose defaults use:
+
+| Component | Image/version |
+| --- | --- |
+| Zabbix Server | zabbix/zabbix-server-pgsql:alpine-7.4.15 |
+| Zabbix Web | zabbix/zabbix-web-nginx-pgsql:alpine-7.4.15 |
+| Grafana | grafana/grafana:13.2.3 |
+| Grafana plugin | alexanderzobnin-zabbix-app@6.8.0 |
+
+The Zabbix host/items/triggers and Grafana dashboards are not provisioned automatically in this MVP. Container health and plugin installation do not imply a configured monitoring inventory.
