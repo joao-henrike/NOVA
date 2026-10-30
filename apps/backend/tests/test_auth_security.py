@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from uuid import uuid4
 
@@ -155,6 +156,61 @@ class AuthSecurityTest(unittest.TestCase):
 
         configuration.apple_private_key = "test-private-key"
         configuration.require_apple_config()
+
+
+    def test_database_url_supports_explicit_url_and_escaped_credentials(self) -> None:
+        explicit = Settings(database_url="postgresql+psycopg://db.example/nova")
+        self.assertEqual(
+            explicit.sqlalchemy_database_url,
+            "postgresql+psycopg://db.example/nova",
+        )
+
+        composed = Settings(
+            db_host="db.example",
+            db_port=5433,
+            db_name="nova",
+            db_user="user name",
+            db_password="p@ss/word",
+        )
+        self.assertEqual(
+            composed.sqlalchemy_database_url,
+            "postgresql+psycopg://user+name:p%40ss%2Fword@db.example:5433/nova",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "configuration is incomplete"):
+            Settings().sqlalchemy_database_url
+
+    def test_provider_and_signing_configuration_validation(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "Google authentication is not configured"):
+            Settings().require_google_config()
+        Settings(
+            google_client_id="client",
+            google_client_secret="secret",
+            google_redirect_uri="https://example.com/callback",
+        ).require_google_config()
+
+        with self.assertRaisesRegex(RuntimeError, "at least 32 characters"):
+            Settings(auth_jwt_secret_key="too-short").require_auth_signing_key()
+        self.assertEqual(
+            Settings(auth_jwt_secret_key="x" * 32).require_auth_signing_key(),
+            "x" * 32,
+        )
+
+    def test_apple_private_key_supports_inline_and_file_sources(self) -> None:
+        inline = Settings(apple_private_key="line-one\\nline-two")
+        self.assertEqual(inline.get_apple_private_key(), "line-one\nline-two")
+
+        with tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8") as key_file:
+            key_file.write("test-private-key-from-file")
+            key_file.flush()
+            from_file = Settings(apple_private_key_path=key_file.name)
+            self.assertEqual(
+                from_file.get_apple_private_key(),
+                "test-private-key-from-file",
+            )
+
+        with self.assertRaisesRegex(RuntimeError, "not configured"):
+            Settings().get_apple_private_key()
 
     def test_unverified_provider_email_does_not_reserve_account_address(self) -> None:
         subject, email, verified, _ = claims_to_identity(

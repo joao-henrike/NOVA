@@ -71,6 +71,64 @@ class AuthServiceTest(unittest.TestCase):
             self.assertEqual(len(identities), 1)
             self.assertEqual(identities[0].provider_subject, "google-subject")
 
+
+    def test_existing_provider_identity_fills_missing_profile_fields(self) -> None:
+        with self.session_factory() as session:
+            user = User(email=None, name=None, email_verified=False)
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            session.add(
+                AuthIdentity(
+                    user_id=user.id,
+                    provider=AuthProvider.GOOGLE,
+                    provider_subject="profile-backfill-subject",
+                )
+            )
+            session.commit()
+
+            updated = self.auth.sign_in_from_claims(
+                session,
+                provider=AuthProvider.GOOGLE,
+                claims={
+                    "sub": "profile-backfill-subject",
+                    "email": "USER@example.com",
+                    "email_verified": True,
+                    "name": "Profile Backfill",
+                },
+            )
+
+            self.assertEqual(updated.id, user.id)
+            self.assertEqual(updated.email, "user@example.com")
+            self.assertTrue(updated.email_verified)
+            self.assertEqual(updated.name, "Profile Backfill")
+
+    def test_existing_provider_identity_rejects_inactive_user(self) -> None:
+        with self.session_factory() as session:
+            user = User(email=None, name=None, is_active=False)
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            session.add(
+                AuthIdentity(
+                    user_id=user.id,
+                    provider=AuthProvider.APPLE,
+                    provider_subject="inactive-provider-subject",
+                )
+            )
+            session.commit()
+
+            with self.assertRaisesRegex(AuthenticationError, "inactive"):
+                self.auth.sign_in_from_claims(
+                    session,
+                    provider=AuthProvider.APPLE,
+                    claims={"sub": "inactive-provider-subject"},
+                )
+
+    def test_logout_without_refresh_token_is_idempotent(self) -> None:
+        with self.session_factory() as session:
+            self.auth.logout(session, None)
+
     def test_same_email_does_not_implicitly_link_accounts(self) -> None:
         with self.session_factory() as session:
             session.add(
