@@ -123,84 +123,81 @@ The extreme validation workflow runs on pushes to `Joao` and manual dispatch onl
 
 ## CD — Development
 
-`deploy-dev.yml` is restricted to the `Joao` branch and the GitHub `development` environment. The job is additionally guarded by the presence of `AWS_CD_ROLE_ARN` and `TF_STATE_BUCKET`; when those repository variables are absent, the CD job is skipped.
+deploy-dev.yml is restricted to branch Joao and the GitHub development Environment. The job is guarded by the presence of the AWS_CD_ROLE_ARN repository variable. TF_STATE_BUCKET is optional because the workflow has a committed development default.
+
+The push trigger is intentionally narrow. It includes application runtime assets, backend source/migrations and Docker build inputs, frontend public assets/Nginx configuration and Docker build inputs, and docker-compose.yml. A change to documentation, Terraform, deployment scripts, or workflow definitions alone does not trigger a push deployment. workflow_dispatch can be used for an explicit manual development deployment.
 
 The sequence is:
 
 ```text
-Git push to Joao
+Joao app/runtime-artifact push or manual dispatch
       |
       v
-AWS OIDC authentication
+Wait for successful standard CI
+      |
+      v
+GitHub OIDC authentication
+      |
+      v
+Provision/reuse runtime and migrator DB secrets
+      |
+      v
+Provision/reuse backend JWT and optional OAuth secret
       |
       v
 Build frontend/backend images
       |
       v
-Trivy scan
+Trivy scan + local container smoke
       |
       v
-Container runtime smoke test
+Push immutable full Git-SHA image tags to ECR
       |
       v
-Push immutable SHA-tagged images to ECR
+Ensure remote S3 state and terraform init
       |
       v
-terraform init against remote S3 state
+terraform plan + resource allowlist guard
       |
       v
-terraform plan
+Apply the exact saved plan
       |
       v
-Terraform plan scope guard
+Wait for frontend/backend/monitoring ECS services
       |
       v
-terraform apply exact saved plan
+DB bootstrap -> Alembic migration -> runtime grants bootstrap
       |
       v
-wait for frontend/backend/monitoring ECS services
-      |
-      v
-database bootstrap (RDS master identity)
-      |
-      v
-Alembic migration (migrator identity)
-      |
-      v
-database bootstrap again (runtime grants)
-      |
-      v
-ALB / API / Grafana smoke tests
+ALB / API / DB / Grafana smoke tests
 ```
 
-### AWS authentication
+### AWS authentication and GitHub configuration
 
-The workflow uses GitHub OIDC with `id-token: write` instead of long-lived AWS access keys.
+The workflow uses GitHub OIDC with id-token: write instead of long-lived AWS access keys. It rejects any AWS account other than 760396521507.
 
-The workflow also requires the AWS account to be exactly:
-
-```text
-760396521507
-```
-
-Required repository variables:
+Required repository variable:
 
 ```text
 AWS_CD_ROLE_ARN
-TF_STATE_BUCKET
 ```
 
-Optional repository variable:
+Optional repository variables:
 
 ```text
-TERRAFORM_AWS_REGION
+TF_STATE_BUCKET       (default: cloudstart-nova-terraform-state-760396521507)
+TERRAFORM_AWS_REGION  (default: us-east-1; deploy-dev.yml only)
 ```
 
-Required GitHub Environment secret:
+Required GitHub Environment secret for normal CD:
 
 ```text
 GRAFANA_ADMIN_PASSWORD
 ```
+
+Optional Google/Apple OAuth secrets are listed in docs/configuration-reference.md. Supply every field for a provider or leave that provider unused. The deployment creates/reuses the backend authentication JSON secret and keeps its JWT signing key stable.
+
+The AWS OIDC role is configured outside this repository. It must be able to verify the account and state bucket, bootstrap missing remote-state resources, provision the three application Secrets Manager entries, and perform the scoped Terraform/ECR/ECS operations. Secret provisioning requires DescribeSecret, GetSecretValue, CreateSecret, and PutSecretValue on the runtime DB, migrator DB, and backend authentication secrets. Do not grant account-wide administrator permissions merely to satisfy the workflow.
 
 ## Application deployment safety
 
