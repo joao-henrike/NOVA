@@ -11,53 +11,41 @@
 
 ## 1. What this repository is
 
-CloudStart is the AWS application-infrastructure baseline inside the `NOVA` repository.
+CloudStart is the AWS application-infrastructure baseline inside the NOVA repository.
 
 The current implementation combines a small two-service web application with an AWS foundation built as Terraform and a dedicated monitoring runtime based on Zabbix and Grafana.
 
 The current MVP contains:
 
-* one custom VPC;
-* dynamically discovered Availability Zones, two by default;
+* one custom VPC with dynamically discovered Availability Zones (two by default);
 * public, private application, and private database subnets;
 * one NAT Gateway per selected Availability Zone;
-* one public Application Load Balancer;
+* one public Application Load Balancer, HTTP by default with an optional ACM-backed HTTPS mode;
 * one ECS cluster using Fargate services;
 * one frontend service, one backend service, and one monitoring service;
 * two private ECR repositories;
-* one private PostgreSQL RDS instance for the application;
-* one separate private PostgreSQL RDS instance for Zabbix monitoring state/history;
-* Zabbix Server, Zabbix Web, and Grafana running as containers in the monitoring ECS task;
-* Grafana exposed through the ALB;
-* IAM roles for ECS execution and application tasks;
-* RDS-managed master passwords through Secrets Manager;
-* a Terraform remote-state bootstrap using S3 and a bootstrap locking resource;
-* root Terraform backend locking using the S3 lockfile mechanism;
-* GitHub Actions for Terraform, IaC, secret, and container validation;
+* one private PostgreSQL RDS instance for the application and one separate private PostgreSQL RDS instance for Zabbix;
+* Zabbix Server, Zabbix Web, and Grafana running in the monitoring ECS task;
+* purpose-specific IAM execution roles and application task roles;
+* RDS-managed master credentials plus separate runtime, migration, backend-authentication, and Grafana secrets;
+* an S3 remote-state bootstrap with versioning, encryption, public-access blocking, ownership controls, secure-transport policy, and lifecycle configuration;
+* root Terraform state locking with the S3 lockfile mechanism; the bootstrap also retains a DynamoDB compatibility table;
+* GitHub Actions for CI, extreme validation, guarded development CD, and explicitly confirmed destructive development rebuild;
 * local Docker Compose development for frontend, backend, and PostgreSQL.
 
 The current MVP does **not** implement:
 
-* financial core;
-* double-entry ledger;
-* payment orchestration;
-* reconciliation engine;
-* mobile application;
-* Audit Fabric;
-* Cost Intelligence / FinOps engine;
-* enterprise hybrid integration;
-* multi-account landing zone;
-* multi-region deployment;
-* Kubernetes/EKS;
-* service mesh;
-* WAF;
-* ACM/TLS termination;
-* enterprise Zero Trust;
-* automated disaster-recovery environment.
+* financial core, double-entry ledger, payment orchestration, or reconciliation;
+* mobile application, Audit Fabric, or Cost Intelligence / FinOps engine;
+* enterprise hybrid integration, multi-account landing zone, or multi-region deployment;
+* Kubernetes/EKS, service mesh, WAF, or managed ACM certificate issuance;
+* enterprise Zero Trust or automated disaster-recovery environment.
+
+Terraform can attach an already-issued ACM certificate to the ALB, but the committed development configuration leaves HTTPS disabled. Certificate issuance, domain validation, and DNS records remain operator-managed.
 
 Future capabilities remain outside the current implementation boundary.
 
----
+**Operational documentation:** [Deployment guide](docs/deployment.md) · [CI/CD](docs/ci-cd.md) · [Architecture](docs/architecture.md) · [Security model](docs/security.md) · [Current-state inventory](docs/current-state.md) · [Configuration reference](docs/configuration-reference.md) · [Local development](docs/local-development.md).
 
 ## 2. Repository source of truth
 
@@ -141,9 +129,9 @@ Security reviewed
 
 ---
 
-## 4. Current `Joao` branch deployment defaults
+## 4. Current Joao branch deployment defaults
 
-The repository keeps the application disabled by default so infrastructure validation and bootstrap do not implicitly start ECS workloads. The development CD workflow enables application deployment explicitly and replaces the image tags with the current immutable Git SHA.
+The repository keeps application workloads disabled by default. The development CD workflow enables them explicitly and replaces the Terraform default image tags with the full Git commit SHA.
 
 Repository defaults:
 
@@ -153,69 +141,31 @@ frontend_image_tag = "v0.1.1"
 backend_image_tag  = "v0.1.0"
 ```
 
-Initial desired task counts:
-
-```text
-Frontend = 2
-Backend  = 2
-```
-
-Default autoscaling range:
+With deploy_application = false, frontend and backend desired/minimum task counts are evaluated as zero. When deployment is enabled, the configured capacity is:
 
 ```text
 Frontend: min 2 / desired 2 / max 6
 Backend:  min 2 / desired 2 / max 6
 ```
 
-Target tracking defaults:
+Target tracking defaults are CPU 60% and memory 70%. The validated utilization range is 20–90%.
+
+The version tags above are Terraform defaults, not proof that those tags are currently deployed. Automated development releases use immutable full Git SHA tags. Temporary TF_VAR overrides used during recovery must not be treated as permanent repository configuration.
+
+## 5. Application image tags
+
+Terraform default tags are:
 
 ```text
-CPU:
-  60%
-
-Memory:
-  70%
+Frontend: v0.1.1
+Backend:  v0.1.0
 ```
 
-The previous invalid memory defaults of `10` were removed. The Terraform variable validation allows:
+These defaults preserve a known baseline in config/dev.tfvars. They do not identify the currently running ECS task revision.
 
-```text
-20 <= target <= 90
-```
+The development CD and rebuild workflows build and publish images using an immutable full Git commit SHA. The deployed image must therefore be checked from the ECS task definition or the ECR repository; do not infer the live version from the Terraform defaults alone.
 
-Temporary `TF_VAR_*` overrides used during recovery must not be treated as permanent repository configuration.
-
----
-
-## 5. Application image versions
-
-The current application image versions are intentionally different because the frontend required an AWS-specific Nginx correction.
-
-```text
-Frontend:
-v0.1.1
-
-Backend:
-v0.1.0
-```
-
-The frontend `v0.1.1` image contains the corrected AWS-facing Nginx configuration and no longer depends on the Docker Compose service name:
-
-```text
-backend:8000
-```
-
-inside the production image.
-
-The backend remains on:
-
-```text
-v0.1.0
-```
-
-until a new backend release is intentionally created.
-
----
+The frontend AWS Nginx configuration is separate from the local Compose configuration. The AWS image must not depend on the Compose-only DNS name backend:8000.
 
 ## 6. Architecture at a glance
 
@@ -804,49 +754,20 @@ Terraform deliberately ignores ECS `desired_count` changes after the service has
 
 ## 20. Monitoring architecture
 
-The monitoring service runs as one stateful ECS service.
+The monitoring service runs as one stateful ECS service with desired count 1. Zabbix Server, Zabbix Web, and Grafana share one Fargate task and a dedicated private PostgreSQL RDS instance.
 
-The monitoring task contains:
-
-```text
-Zabbix Server
-Zabbix Web
-Grafana
-```
-
-The monitoring service has:
+### Pinned monitoring images
 
 ```text
-Desired = 1
+Zabbix Server: zabbix/zabbix-server-pgsql:alpine-7.4.15
+Zabbix Web:    zabbix/zabbix-web-nginx-pgsql:alpine-7.4.15
+Grafana:       grafana/grafana:13.2.3
+Plugin:        alexanderzobnin-zabbix-app@6.8.0
 ```
 
-because the current MVP keeps the Zabbix Server stateful inside the monitoring task.
+The task is stateful because Zabbix Server runs inside it; the current configuration intentionally supports one task. The Terraform and local Compose configurations pin the same Zabbix and Grafana image versions.
 
-### Monitoring images
-
-Current Zabbix images:
-
-```text
-zabbix/zabbix-server-pgsql:alpine-7.4-latest
-zabbix/zabbix-web-nginx-pgsql:alpine-7.4-latest
-```
-
-Grafana:
-
-```text
-grafana/grafana:13.2.3
-```
-
-The previous `8.0` image references were invalid and caused:
-
-```text
-CannotPullContainerError
-manifest unknown
-```
-
-They were replaced with the working `7.4` image family.
-
----
+Provisioning the containers does not automatically create Zabbix hosts, items, triggers, or Grafana dashboards. Those monitoring objects still need explicit configuration after the services are healthy.
 
 ## 21. Grafana
 
@@ -1046,17 +967,21 @@ RDS is not directly exposed through the public ALB.
 
 ## 26. Secrets Manager
 
-The current monitoring secret is:
+The current application uses these secret classes:
 
-```text
-cloudstart-dev/monitoring/grafana-admin
-```
+| Secret | Owner / provisioner | Purpose |
+| --- | --- | --- |
+| RDS-managed master secret | AWS RDS | One-off database role-bootstrap task only. |
+| cloudstart-dev/database/runtime | scripts/provision-db-credentials.sh | DML-only password for the normal backend task. |
+| cloudstart-dev/database/migrator | scripts/provision-db-credentials.sh | Password for the one-off Alembic task. |
+| cloudstart-dev/backend/authentication | scripts/provision-backend-auth-secret.sh | JWT signing key and optional Google/Apple OAuth configuration. |
+| cloudstart-dev/monitoring/grafana-admin | Terraform | Grafana administrator password. |
 
-RDS master credentials are managed through AWS/RDS Secrets Manager integration and injected only into the one-off database role-bootstrap task. Separate Secrets Manager secrets hold the PostgreSQL runtime and migration login passwords; only their ARNs are passed to Terraform.
+The database and backend-auth provisioners generate or reuse Secrets Manager values. The backend-auth provisioner generates the JWT key only on first creation, preserves existing JWT material, and merges non-empty OAuth values supplied through local environment variables or the GitHub development Environment. It rejects incomplete provider configurations.
 
-The deployment automation writes those ARNs to the ignored local file `.deploy/db-secret-arns.env`. Password values never enter Terraform variables or state, Git, or workflow environment outputs.
+The local ignored files .deploy/db-secret-arns.env and .deploy/backend-auth-secret-arn.env contain ARNs only. The Grafana password used by local deployment is stored under .deploy/grafana-admin-password. Secret values must never be committed or printed into logs.
 
-The repository must never contain production secret values.
+The canonical JSON keys and GitHub variables/secrets are listed in [Configuration reference](docs/configuration-reference.md).
 
 Do not commit:
 
@@ -1066,17 +991,10 @@ credentials
 tokens
 private keys
 real passwords
+Terraform state or plan files
 ```
 
-Examples such as:
-
-```text
-terraform.tfvars.example
-```
-
-are documentation artifacts and are not themselves secrets.
-
----
+Examples such as terraform.tfvars.example are documentation artifacts and are not themselves secrets.
 
 ## 27. ECR architecture
 
@@ -1232,7 +1150,7 @@ bootstrap/
 
 ## 30. Terraform remote state
 
-The root backend uses:
+The root backend uses S3 with:
 
 ```hcl
 terraform {
@@ -1244,92 +1162,49 @@ terraform {
 }
 ```
 
-The current state bucket is:
+The committed development bucket is cloudstart-nova-terraform-state-760396521507. The bucket name and state key are also stored in config/dev.env; GitHub workflows allow the bucket to be overridden with the optional TF_STATE_BUCKET repository variable.
 
-```text
-cloudstart-nova-terraform-state-760396521507
-```
+The root backend cannot reference normal Terraform input variables because backend configuration is initialized before variable evaluation. The normal deployment path invokes scripts/ensure-terraform-state.sh, which verifies the AWS account, expected bucket owner, and region; it reuses a matching bucket and creates bootstrap resources only when the bucket is genuinely missing. Access or ownership uncertainty causes a safe failure.
 
-The bucket is created by the bootstrap architecture.
-
-The root Terraform backend does not use normal Terraform input variables for the bucket because backend configuration is initialized before variable evaluation.
-
-Initialize with:
+Manual initialization after the bucket is ready:
 
 ```bash
+set -a
+source config/dev.env
+set +a
+scripts/ensure-terraform-state.sh
 terraform init \
-  -backend-config="bucket=cloudstart-nova-terraform-state-760396521507" \
-  -backend-config="region=us-east-1"
+  -backend-config="bucket=$TF_STATE_BUCKET" \
+  -backend-config="region=$AWS_REGION" \
+  -backend-config="key=$TF_STATE_KEY" \
+  -reconfigure -input=false
 ```
 
-Do not type shell commands into an interactive bucket prompt.
-
-If Terraform asks:
-
-```text
-bucket
-  The name of the S3 bucket
-```
-
-stop with:
-
-```text
-Ctrl+C
-```
-
-and rerun initialization with `-backend-config`.
-
----
+Do not type shell commands into an interactive bucket prompt. If Terraform asks for a bucket name, stop and rerun init with explicit backend configuration.
 
 ## 31. Remote-state security
 
-The state bucket is expected to use:
+The bootstrap Terraform code configures the state bucket with:
 
 ```text
-versioning
-encryption
-public access blocking
-secure transport enforcement
+S3 versioning
+SSE-S3 encryption
+all four S3 public-access-block controls
+BucketOwnerEnforced ownership
+secure-transport deny bucket policy
+noncurrent version lifecycle retention
+incomplete multipart upload cleanup
 ```
 
-The latest audit confirmed:
+These are declared controls in bootstrap/main.tf. This repository audit reviewed the configuration but did not query the live AWS bucket, so it does not certify the current runtime bucket settings.
 
-```text
-Versioning: enabled
-Encryption: enabled
-SecureTransport policy: present
-```
-
-However, the audit also detected that the S3 Public Access Block was not fully configured.
-
-This remains a security task and must be explicitly verified before the environment is considered hardened.
-
----
+The bootstrap stack itself uses local Terraform state. Protect and back up that state file; never commit it.
 
 ## 32. Bootstrap locking compatibility
 
-The bootstrap still provisions the project's locking compatibility resource.
+The root Terraform backend uses S3-native locking through use_lockfile = true. The GitHub workflows initialize the backend with bucket, region, and state key; they do not pass a DynamoDB backend-lock argument.
 
-The root backend, however, currently uses:
-
-```text
-S3 lockfile
-```
-
-The repository's GitHub workflow still contains legacy references to:
-
-```text
-TF_STATE_DYNAMODB_TABLE
-dynamodb_table=...
-```
-
-This creates a configuration-consistency task.
-
-The final design should have one clearly documented locking mechanism.
-
-Until this is reconciled, do not describe the project as having a completely unified remote-state locking design.
-
----
+The bootstrap stack still creates the DynamoDB table cloudstart-terraform-lock as a compatibility resource for older tooling. It is not the active lock mechanism for the current root backend. Do not describe the project as using DynamoDB locking, and do not add a dynamodb_table backend argument without an intentional architecture change.
 
 ## 33. IAM architecture
 
@@ -1378,80 +1253,61 @@ The auditor's automated rule was too broad to prove that the policies were actua
 
 ## 34. GitHub Actions
 
-The repository currently contains:
+The current workflow inventory is:
 
 ```text
-.github/workflows/terraform-lint.yml
-.github/workflows/container-ci.yml
+.github/workflows/ci.yml
+.github/workflows/extreme-validation.yml
+.github/workflows/deploy-dev.yml
+.github/workflows/rebuild-dev.yml
 ```
 
-### Terraform workflow
+### Standard CI
 
-The workflow validates items such as:
+ci.yml validates backend tests and migrations, frontend/backend image builds and runtime smoke, Compose configuration, Terraform formatting/validation, TFLint, Checkov, Trivy, Gitleaks, ShellCheck, CodeQL, and workflow contracts.
 
-```text
-Terraform formatting
-Terraform validation
-Terraform bootstrap validation
-TFLint
-Terraform documentation
-Checkov
-Trivy configuration scanning
-Gitleaks
-```
+### Extreme validation
 
-The workflow also has an optional credentialed Terraform Plan path.
+extreme-validation.yml runs the broader local/system checks and optional read-only AWS checks. It is restricted to pushes/manual dispatch on Joao because the optional AWS checks use GitHub OIDC; it does not run on pull requests.
 
-### Container workflow
+### Development CD and rebuild
 
-The container workflow builds and scans application images and validates Compose configuration.
-
-It currently does not provide a complete:
-
-```text
-build
-→ push ECR
-→ update ECS
-→ deploy
-```
-
-continuous-delivery pipeline.
-
----
+deploy-dev.yml performs guarded, non-destructive application delivery on Joao after CI. rebuild-dev.yml is manual-only and destructive; it requires the exact confirmation REBUILD. Production deployment automation is not present.
 
 ## 35. CI versus CD
 
-The current repository has strong validation-oriented CI, but the application publication/deployment process is still partly operational.
+The repository has both validation-oriented CI and a guarded development CD path.
 
-Current:
-
-```text
-GitHub
-   |
-   v
-GitHub Actions
-   |
-   +--> Terraform validation
-   +--> security scanning
-   +--> container build
-   +--> container scanning
-```
-
-Not yet fully automated:
+Standard CI:
 
 ```text
-container build
-   |
-   v
-ECR publish
-   |
-   v
-ECS rollout
+Tests and migrations
+Container build/runtime smoke
+Compose validation
+Terraform validation/lint
+Security scans
+Workflow contract checks
 ```
 
-This distinction must remain explicit in architecture and operational documentation.
+Development CD:
 
----
+```text
+Joao application/runtime-artifact change or manual dispatch
+    -> wait for successful CI
+    -> GitHub OIDC to the development AWS role
+    -> build and scan frontend/backend images
+    -> publish full Git-SHA tags to ECR
+    -> ensure remote state and provision/reuse secrets
+    -> create and guard a saved Terraform plan
+    -> apply only the allowlisted development changes
+    -> wait for ECS services
+    -> DB bootstrap -> Alembic -> DB grants bootstrap
+    -> ALB/API/database/Grafana smoke tests
+```
+
+Automatic CD is limited to development. The push path filter includes application source, migrations, Dockerfiles, relevant Nginx configuration, and docker-compose.yml; documentation, Terraform, scripts, and workflow changes alone do not trigger a push deployment. workflow_dispatch can run the development deploy workflow manually. The job requires AWS_CD_ROLE_ARN; TF_STATE_BUCKET has a committed default and is optional.
+
+The manual rebuild workflow is separate and destructive. It requires confirmation=REBUILD and is never triggered by an ordinary push. There is no automatic production CD.
 
 ## 36. Local development
 
@@ -1543,136 +1399,77 @@ audit reports
 
 ## 39. First-time operator setup
 
-The operator needs:
-
-```text
-Git
-GitHub CLI
-AWS CLI
-Terraform
-Docker
-```
-
-Authenticate GitHub as required by the environment.
-
-Then:
+The supported first-time local setup is:
 
 ```bash
-git clone https://github.com/joao-henrike/NOVA.git
+git clone --branch Joao --single-branch https://github.com/joao-henrike/NOVA.git
 cd NOVA
+make setup
+make doctor
+make validate
+make up
+make smoke
 ```
 
-Fetch branches:
+The bootstrap requires Git, curl, unzip, Python 3.12+, and a working Docker daemon. It installs the repository-pinned Terraform 1.16.4, TFLint 0.64.0, Buildx 0.17.0, Compose 5.6.0, and AWS CLI v2 only when the host does not already provide it. It creates .venv and installs backend runtime/development dependencies.
 
-```bash
-git fetch origin
-```
+jq is required by the operational deployment scripts and is checked by make doctor, but is not installed by the local bootstrap. Checkov and pip-audit are CI-only tools and can be checked with CHECK_CI_TOOLS=1 after installing them separately.
 
-Switch:
-
-```bash
-git switch --track origin/Joao
-```
-
-Verify:
-
-```bash
-git branch --show-current
-```
-
-Expected:
-
-```text
-Joao
-```
-
----
+The bootstrap does not authenticate to AWS, create credentials, or create billable AWS resources. See docs/local-development.md for the complete local workflow.
 
 ## 40. Terraform initialization from a new environment
 
-After the bootstrap state exists:
+For the development account, load the non-sensitive metadata and let the state helper verify or create the bucket:
+
+```bash
+set -a
+source config/dev.env
+set +a
+scripts/ensure-terraform-state.sh
+```
+
+Then initialize the canonical root state:
 
 ```bash
 terraform init \
-  -backend-config="bucket=cloudstart-nova-terraform-state-760396521507" \
-  -backend-config="region=us-east-1"
+  -backend-config="bucket=$TF_STATE_BUCKET" \
+  -backend-config="region=$AWS_REGION" \
+  -backend-config="key=$TF_STATE_KEY" \
+  -reconfigure -input=false
 ```
 
-Then:
+For a custom environment, provide its bucket, region, and key explicitly. Do not assume the default account/bucket names are suitable for another AWS account.
+
+Then validate and review:
 
 ```bash
-terraform fmt -check
-```
-
-Then:
-
-```bash
+terraform fmt -check -recursive
 terraform validate
-```
-
-Then:
-
-```bash
 terraform plan -out=nova-start.tfplan
-```
-
-Inspect:
-
-```bash
 terraform show -no-color nova-start.tfplan
 ```
 
-Only after review:
-
-```bash
-terraform apply nova-start.tfplan
-```
-
----
+Only after reviewing the plan should an operator decide whether to apply it. make deploy performs its own guarded deployment sequence.
 
 ## 41. Safe Terraform operating procedure
 
-The normal operating cycle is:
+For manual infrastructure changes:
 
 ```text
 Change
-  |
-  v
-git diff
-  |
-  v
-terraform fmt
-  |
-  v
-terraform validate
-  |
-  v
-terraform plan
-  |
-  v
-Review
-  |
-  v
-terraform apply
-  |
-  v
-AWS validation
-  |
-  v
-Extreme audit
+  -> git diff
+  -> terraform fmt
+  -> terraform validate
+  -> terraform plan
+  -> inspect the complete plan
+  -> apply the reviewed plan
+  -> validate AWS runtime
+  -> run the audit
 ```
 
-Never use:
+The repository's automation uses saved plans and explicit resource allowlists. Its use of terraform apply -auto-approve is limited to a plan that was generated and checked inside the guarded deployment workflow or local deployment script; it is not a recommendation to auto-approve arbitrary plans.
 
-```bash
-terraform apply -auto-approve
-```
-
-as the standard review workflow for consequential infrastructure changes.
-
-Never apply an unexpected destructive plan without understanding the cause.
-
----
+Never apply an unexpected destructive plan without understanding the cause. Review account, region, state key, additions, changes, and deletions before any manual apply.
 
 ## 42. Application deployment procedure
 
@@ -2264,148 +2061,99 @@ The audit script itself therefore requires maintenance.
 
 ## 53. Current audit findings — status
 
-### Already resolved
+### Resolved in repository configuration
 
 ```text
-[RESOLVED] Frontend ECR repository had no image
-[RESOLVED] Backend ECR repository had no image
-[RESOLVED] Frontend image v0.1.1 published
-[RESOLVED] Backend image v0.1.0 published
-[RESOLVED] RDS backup retention reduced to 1 day
-[RESOLVED] RDS Multi-AZ disabled for current Free Tier constraints
-[RESOLVED] Zabbix 8.0 image references replaced with 7.4
-[RESOLVED] Terraform formatting validation passes
-[RESOLVED] Terraform configuration validates
+[RESOLVED] Frontend/backend ECR repositories and immutable release flow are declared
+[RESOLVED] Development CD publishes full Git-SHA image tags
+[RESOLVED] RDS backup retention defaults to 1 day
+[RESOLVED] Application and monitoring RDS are explicitly Single-AZ
+[RESOLVED] Zabbix images are pinned to 7.4.15
+[RESOLVED] Terraform state bootstrap configures versioning, encryption, public-access blocking, ownership controls, secure transport, and lifecycle cleanup
+[RESOLVED] Root Terraform state uses S3 lockfiles; no DynamoDB backend lock argument remains
+[RESOLVED] Backend JWT/OAuth secret provisioning is automated for development
+[RESOLVED] Database runtime and migrator secrets are provisioned separately
+[RESOLVED] Terraform formatting and static validation are part of CI
 ```
 
-### Configured in the `Joao` IaC
+### Configured in Joao IaC
 
 ```text
-[CONFIGURED] deploy_application = false (repository default; CD sets true explicitly for development)
-[CONFIGURED] frontend_image_tag = v0.1.1
-[CONFIGURED] backend_image_tag = v0.1.0
-[CONFIGURED] frontend/backend memory targets = 70
-[CONFIGURED] frontend/backend desired counts = 2
-[CONFIGURED] frontend/backend minimum counts = 2
+[CONFIGURED] deploy_application = false (safe repository baseline)
+[CONFIGURED] ECS frontend/backend desired/minimum count = 0 when deployment is disabled
+[CONFIGURED] ECS frontend/backend desired/minimum count = 2 when deployment is enabled
+[CONFIGURED] Autoscaling CPU targets = 60%; memory targets = 70%
+[CONFIGURED] Optional ACM-backed HTTPS listener with HTTP redirect
+[CONFIGURED] Three separate PostgreSQL identities and secret paths for application deployment
 ```
 
-### Still pending runtime validation/correction
+### Still requires operational or production hardening
 
 ```text
-[PENDING] frontend ECS actually running
-[PENDING] backend ECS actually running
-[PENDING] frontend target healthy
-[PENDING] backend target healthy
-[PENDING] Grafana target healthy
-[PENDING] Grafana timeout investigation
-[PENDING] ACM certificate, DNS hostname, and HTTPS runtime validation (Terraform TLS mode is now optional)
-[PENDING] state bucket full Public Access Block
-[PENDING] IAM least-privilege review
-[PENDING] VPC Flow Logs
-[PENDING] ALB access logs
-[PENDING] CloudTrail
-[PENDING] secret rotation strategy
-[PENDING] CI lockfile/DynamoDB consistency
-[PENDING] container hardening
+[PENDING LIVE CHECK] frontend/backend ECS running state and target health
+[PENDING LIVE CHECK] Grafana target health and previous timeout investigation
+[PENDING OPERATOR] ACM certificate issuance, matching DNS hostname, and live HTTPS validation
+[PENDING REVIEW] external GitHub OIDC role trust and least-privilege policy
+[PENDING HARDENING] VPC Flow Logs, ALB access logs, CloudTrail and alert routing
+[PENDING HARDENING] customer-managed KMS keys and secret rotation strategy
+[PENDING HARDENING] frontend/monitoring runtime container hardening and image signing
+[PENDING CONFIGURATION] Zabbix hosts/items/triggers and Grafana dashboards
 ```
 
----
+This is a repository-code audit, not a live AWS audit. The presence of Terraform resources is not evidence that the corresponding live AWS settings or ECS targets are currently healthy.
 
-## 54. Known live AWS snapshot
+## 54. Historical AWS snapshot (not current verification)
 
-The most recent audited environment observed:
+The following identifiers were retained from an earlier AWS audit:
 
 ```text
-Account:
-760396521507
-
-Region:
-us-east-1
-
-VPC:
-vpc-060907935831aae05
-
-VPC CIDR:
-10.20.0.0/16
-
-ALB:
-cloudstart-dev-alb-1378251204.us-east-1.elb.amazonaws.com
-
-ECS cluster:
-cloudstart-dev-cluster
-
-Application RDS:
-cloudstart-dev-db
-
-Monitoring RDS:
-cloudstart-dev-monitoring-db
+Account: 760396521507
+Region: us-east-1
+VPC: vpc-060907935831aae05
+VPC CIDR: 10.20.0.0/16
+ALB: cloudstart-dev-alb-1378251204.us-east-1.elb.amazonaws.com
+ECS cluster: cloudstart-dev-cluster
+Application RDS: cloudstart-dev-db
+Monitoring RDS: cloudstart-dev-monitoring-db
 ```
 
-At that audit moment:
+At that historical observation:
 
 ```text
-Frontend:
-Desired 0
-Running 0
-
-Backend:
-Desired 0
-Running 0
-
-Monitoring:
-Desired 1
-Running 1
+Frontend: Desired 0 / Running 0
+Backend: Desired 0 / Running 0
+Monitoring: Desired 1 / Running 1
 ```
 
-This snapshot predates the intended ECS activation change in the current `Joao` IaC and therefore must not be confused with the desired repository state.
+The snapshot has no reliable audit timestamp in this README and has not been re-queried during the documentation review. Treat every identifier and runtime count above as historical only. The current desired state must be checked directly in AWS before operating on it.
 
-The ECR images were subsequently published:
+## 55. Security posture declared by code
+
+Implemented in the current repository:
 
 ```text
-Frontend:
-v0.1.1
-
-Backend:
-v0.1.0
+[CODE] RDS private and encrypted, Single-AZ
+[CODE] ECS workloads have no public IP
+[CODE] Security-group segmentation between ALB, workloads, and data
+[CODE] ECR immutable tags and scan-on-push
+[CODE] Backend non-root application user
+[CODE] RDS-managed master secret and separated runtime/migrator/backend-auth secrets
+[CODE] Terraform state bucket versioning, SSE-S3, all public-access-block controls, ownership controls, and secure-transport deny policy
+[CODE] GitHub CI security validation and guarded development OIDC deployment
 ```
 
----
-
-## 55. Current known security posture
-
-Implemented:
+Not enabled in the committed development defaults or still pending:
 
 ```text
-[OK] RDS private
-[OK] RDS encrypted
-[OK] ECS tasks without public IP
-[OK] Security-group segmentation
-[OK] ECR image scanning on push
-[OK] Versioned image tags
-[OK] Backend non-root container user
-[OK] RDS-managed secrets
-[OK] Terraform state encryption
-[OK] Terraform state versioning
-[OK] Secure-transport state policy
-[OK] GitHub security validation workflows
+[TODO] ACM certificate and HTTPS listener activation (optional Terraform support exists)
+[TODO] WAF, ALB access logging, VPC Flow Logs, CloudTrail and alert routing
+[TODO] External OIDC role least-privilege review
+[TODO] Secret rotation and customer-managed KMS keys
+[TODO] Frontend and monitoring container hardening, SBOM and image signing
+[TODO] Zabbix hosts/items/triggers and Grafana dashboard provisioning
 ```
 
-Not yet hardened:
-
-```text
-[TODO] HTTPS
-[TODO] ACM
-[TODO] full S3 Public Access Block verification
-[TODO] IAM least privilege review
-[TODO] VPC Flow Logs
-[TODO] ALB access logs
-[TODO] CloudTrail
-[TODO] secret rotation
-[TODO] frontend non-root hardening
-[TODO] monitoring container hardening
-```
-
----
+The code declaration does not prove current AWS runtime state. Live bucket, ALB, ECS, RDS, and IAM checks must be run in the target account before claiming operational compliance.
 
 ## 56. AWS root identity rule
 
@@ -2714,25 +2462,20 @@ all required target groups healthy
 This README does **not** claim that the current MVP provides:
 
 ```text
-High-end production DR
-Multi-region failover
+High-end production DR or multi-region failover
 Multi-account governance
 Enterprise WAF
-HTTPS/TLS
-Complete SIEM
-Complete audit fabric
+HTTPS/TLS enabled in the committed development environment
+Managed ACM certificate issuance or DNS management
+Complete SIEM or immutable audit fabric
 Full application authorization/RBAC and MFA
-Full authorization model
 Financial transaction processing
 Mobile application
-Kubernetes
-Enterprise service mesh
+Kubernetes or enterprise service mesh
 Automated CD to production
 ```
 
-These capabilities require additional design, implementation, testing, and acceptance.
-
----
+Terraform supports an optional HTTPS listener when an operator supplies an already-issued ACM certificate and matching hostname; the committed development defaults leave both empty. These capabilities require additional design, implementation, testing, and acceptance.
 
 ## 65. Project operating principle
 
@@ -2886,39 +2629,29 @@ The architectural principle is:
 
 ## 68. Current implementation matrix
 
-| Component           | Repository      | Intended AWS state      | Current verification requirement |
-| ------------------- | --------------- | ----------------------- | -------------------------------- |
-| VPC                 | Implemented     | Provisioned             | Verify                           |
-| Public subnets      | Implemented     | Provisioned             | Verify                           |
-| Private App subnets | Implemented     | Provisioned             | Verify                           |
-| Private DB subnets  | Implemented     | Provisioned             | Verify                           |
-| IGW                 | Implemented     | Provisioned             | Verify                           |
-| NAT Gateways        | Implemented     | 2                       | Verify                           |
-| ALB                 | Implemented     | HTTP :80 by default     | Verify                           |
-| HTTPS               | Optional        | ACM :443 when configured | Certificate, DNS, and runtime validation |
-| Frontend ECS        | Implemented     | 2 tasks                 | Runtime validation               |
-| Backend ECS         | Implemented     | 2 tasks                 | Runtime validation               |
-| Monitoring ECS      | Implemented     | 1 task                  | Runtime validation               |
-| Application RDS     | Implemented     | Private PostgreSQL 16   | Verify                           |
-| Monitoring RDS      | Implemented     | Private PostgreSQL 16   | Verify                           |
-| Frontend ECR        | Implemented     | `v0.1.1`                | Verify                           |
-| Backend ECR         | Implemented     | `v0.1.0`                | Verify                           |
-| Grafana             | Implemented     | Port 3000               | Runtime validation               |
-| Zabbix Server       | Implemented     | Private                 | Runtime validation               |
-| Zabbix Web          | Implemented     | Private                 | Runtime validation               |
-| Secrets Manager     | Implemented     | External secret storage | Verify                           |
-| IAM                 | Implemented     | Dedicated roles         | Security review                  |
-| S3 remote state     | Implemented     | Enabled                 | Security review                  |
-| GitHub Actions      | Implemented     | CI                      | Verify                           |
-| Full automatic CD   | Not implemented | N/A                     | Future                           |
-| VPC Flow Logs       | Not implemented | N/A                     | Hardening                        |
-| ALB access logs     | Not implemented | N/A                     | Hardening                        |
-| CloudTrail          | Not implemented | N/A                     | Hardening                        |
-| GuardDuty           | Not implemented | N/A                     | Hardening                        |
-| WAF                 | Not implemented | N/A                     | Future                           |
-| ACM/HTTPS           | Optional        | Existing ACM cert + DNS hostname required | Apply and verify TLS mode |
-
----
+| Component | Repository state | Deployment/runtime boundary |
+| --- | --- | --- |
+| VPC, public/private subnets, IGW, per-AZ NAT | Implemented | Default two AZs; verify live resources |
+| ALB | Implemented | Public HTTP :80 by default |
+| HTTPS | Optional | Requires existing ACM certificate + matching hostname/DNS; not active by default |
+| Frontend ECS | Implemented | Desired/minimum 0 by default; 2 when app deployment is enabled |
+| Backend ECS | Implemented | Desired/minimum 0 by default; 2 when app deployment is enabled |
+| Monitoring ECS | Implemented | One stateful task |
+| Application RDS | Implemented | Private PostgreSQL 16, Single-AZ |
+| Monitoring RDS | Implemented | Private PostgreSQL 16, Single-AZ |
+| Frontend/backend ECR | Implemented | Terraform tags are defaults; development CD publishes Git-SHA tags |
+| Grafana / Zabbix | Implemented | Runtime health and Zabbix configuration objects require verification/configuration |
+| Secrets Manager | Implemented | RDS master + runtime + migrator + backend-auth + Grafana |
+| IAM | Implemented | Dedicated task execution roles; external OIDC role still needs policy review |
+| S3 remote state | Implemented | Bootstrap protection declared in code; live bucket not re-verified here |
+| Standard CI | Implemented | PR/push validation |
+| Extreme validation | Implemented | Joao push/manual; optional read-only AWS checks |
+| Development CD | Implemented | Guarded Git-SHA image publication and ECS rollout |
+| Development rebuild | Implemented | Manual-only; exact REBUILD confirmation; destructive |
+| Production CD | Not implemented | No production deployment workflow |
+| VPC Flow Logs / ALB access logs / CloudTrail | Not implemented | Security/operations hardening |
+| WAF / GuardDuty | Not implemented | Future hardening |
+| Managed certificate issuance / Route 53 | Not implemented | External prerequisites for optional HTTPS |
 
 ## 69. Final operational rule
 
@@ -2953,57 +2686,34 @@ Therefore:
 
 A fresh checkout can prepare the project-specific local environment from the repository itself.
 
-From the `Joao` branch:
-
 ```bash
 git clone --branch Joao --single-branch https://github.com/joao-henrike/NOVA.git
 cd NOVA
 make setup
 make doctor
+make validate
 ```
 
-The bootstrap downloads the pinned project tooling into `.tools/bin`:
+The bootstrap downloads the pinned project tooling into .tools/bin:
 
 ```text
 Terraform 1.16.4
-TFLint    0.64.0
+TFLint 0.64.0
+Docker Buildx 0.17.0
+Docker Compose 5.6.0
 AWS CLI v2 (only when the host does not already provide it)
 ```
 
-It also creates:
-
-```text
-.venv/
-```
-
-and installs the backend runtime/development dependencies together with the CI-aligned Checkov and pip-audit versions.
+It also creates .venv and installs the backend runtime/development dependencies. Checkov and pip-audit are CI-only tools and are not installed by the default bootstrap. jq is checked by make doctor and is required by deployment scripts.
 
 The bootstrap never creates AWS resources.
 
 ### Local application
 
-Start the complete application stack:
-
 ```bash
 make up
 make smoke
-```
-
-Run backend tests:
-
-```bash
 make test
-```
-
-Run migrations only:
-
-```bash
-make migrate
-```
-
-Stop the local stack:
-
-```bash
 make down
 ```
 
@@ -3011,19 +2721,12 @@ make down
 
 ```bash
 make validate
+make tf-validate
 make tflint
 ```
 
-Remote Terraform state is configured separately and requires an explicit `TF_STATE_BUCKET` before:
+Remote Terraform state is separate. make tf-init requires an existing state bucket; scripts/ensure-terraform-state.sh performs the safe account/owner/region check and is called automatically by make deploy.
 
-```bash
-make tf-init
-```
+The full local and deployment workflows are documented in docs/local-development.md, docs/deployment.md, and docs/configuration-reference.md.
 
-The full local bootstrap and development workflow is documented in:
-
-```text
-docs/local-development.md
-```
-
-This keeps environment preparation reproducible while preserving a hard boundary between local setup and billable AWS provisioning.
+This keeps local preparation reproducible while preserving a hard boundary between local setup and billable AWS provisioning.
