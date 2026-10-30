@@ -318,11 +318,23 @@ http://localhost:8000/docs
 
 ### AWS ECS / Secrets Manager
 
-The normal backend ECS task reads its runtime database password from a dedicated Secrets Manager JSON secret and reads authentication settings from a separate JSON secret. Terraform accepts only their ARNs through `db_runtime_secret_arn` and `backend_auth_secret_arn`; it never receives or stores password values.
+The normal backend ECS task reads its runtime database password from a dedicated Secrets Manager JSON secret and authentication settings from a separate JSON secret. Terraform accepts only their ARNs through db_runtime_secret_arn and backend_auth_secret_arn; it never receives plaintext password or OAuth values.
 
-The Alembic task reads a separate migrator password through `db_migrator_secret_arn`. A one-off bootstrap task is the only ECS task definition allowed to inject the RDS-managed master password.
+The Alembic task reads a separate migrator password through db_migrator_secret_arn. A one-off bootstrap task is the only ECS task definition allowed to inject the RDS-managed master password. The bootstrap and migration task definitions omit task_role_arn entirely; their execution roles are used only for image pulls, logs, and startup-time secret injection.
 
-The JSON secret must contain all of these keys. Values for an unused provider may be empty strings, but the keys must exist:
+The development scripts provision or reuse these secrets automatically:
+
+| Secret name | JSON fields | Used by |
+| --- | --- | --- |
+| cloudstart-dev/database/runtime | password | Normal backend HTTP task; DML-only login. |
+| cloudstart-dev/database/migrator | password | One-off Alembic task. |
+| cloudstart-dev/backend/authentication | AUTH_JWT_SECRET_KEY and Google/Apple OAuth fields | Backend session and OAuth configuration. |
+
+The RDS master password is created and managed by RDS. It is not one of the application-generated secrets.
+
+#### Backend authentication secret schema
+
+The secret must be a JSON object with all keys present. Values for an unused provider may be empty strings:
 
 ```json
 {
@@ -338,40 +350,17 @@ The JSON secret must contain all of these keys. Values for an unused provider ma
 }
 ```
 
-Create the secret in the target AWS account and region, populate it with this JSON using real values, then pass its ARN through `backend_auth_secret_arn` (or `TF_VAR_backend_auth_secret_arn`). Keep the JSON file outside the repository, protect it with restrictive filesystem permissions, and never pass secret values as Terraform variables.
+The current provisioner is scripts/provision-backend-auth-secret.sh. Its default name is cloudstart-dev/backend/authentication; BACKEND_AUTH_SECRET_NAME can override it. On first creation it generates a high-entropy JWT key. On later runs it validates and preserves the existing key, merging only non-empty OAuth environment values. It rejects partially configured Google or Apple provider sets and never prints secret values. The local ignored file .deploy/backend-auth-secret-arn.env contains only the secret ARN.
 
-The development deployment automation also calls `scripts/provision-db-credentials.sh`. It creates or reuses these Secrets Manager JSON secrets:
+The database provisioner is scripts/provision-db-credentials.sh. It creates/reuses cloudstart-dev/database/runtime and cloudstart-dev/database/migrator, generates high-entropy passwords on first creation, and writes only their ARNs to .deploy/db-secret-arns.env. The values remain in Secrets Manager.
 
-```text
-cloudstart-dev/database/runtime
-cloudstart-dev/database/migrator
-```
+The development GitHub OIDC role must permit secretsmanager:DescribeSecret, GetSecretValue, CreateSecret, and PutSecretValue for all three provisioned application secrets: runtime, migrator, and backend authentication. ECS execution roles have narrower read access scoped to each task's required secret.
 
-Each contains only a `password` field. The provisioner generates high-entropy values on first creation, never prints them, and writes only the secret ARNs to the ignored local file `.deploy/db-secret-arns.env`. The normal backend task receives only the runtime secret. The migration task receives only the migrator secret. The bootstrap task receives both plus the RDS-managed master secret, under a dedicated ECS execution role.
+Local deployment accepts the matching GOOGLE_* and APPLE_* variables in the shell environment. GitHub deployment reads those values from the development Environment secrets. Supply the complete set of fields for a provider or leave that provider unused.
 
-The development GitHub OIDC role must permit `secretsmanager:DescribeSecret`, `GetSecretValue`, `CreateSecret`, and `PutSecretValue` for the two `cloudstart-dev/database/*` secrets so the workflow can provision/reuse them. ECS execution roles have narrower read access scoped to each task's required secret.
+This configures credential delivery; it does not create Google/Apple OAuth client registrations. Apple web sign-in requires an HTTPS callback domain and a registered Apple Service ID. The committed development ALB is HTTP-only until an operator supplies an already-issued ACM certificate and matching hostname.
 
-Create an empty secret container first:
-
-```bash
-aws secretsmanager create-secret --name cloudstart-dev/backend-auth --description "CloudStart backend JWT and OAuth configuration" --region us-east-1
-```
-
-Then populate it from a protected local JSON file:
-
-```bash
-chmod 600 backend-auth.json
-aws secretsmanager put-secret-value --secret-id cloudstart-dev/backend-auth --secret-string file://backend-auth.json --region us-east-1
-```
-
-Use the ARN returned by create-secret in config/dev.tfvars. The app deployment guard requires the ARN whenever deploy_application = true. The secret value must be populated before starting ECS tasks, because ECS resolves these JSON keys during task startup.
-
-The backend ECS execution role receives `GetSecretValue` only for the runtime database and backend authentication secrets. The migration execution role reads only the migrator secret. The bootstrap execution role reads the RDS master secret and the two application-role password secrets. The application task role itself receives no Secrets Manager permissions.
-
-This configures credential delivery; it does not create Google/Apple OAuth client registrations. Apple web sign-in also remains dependent on an HTTPS callback domain and an Apple-registered Service ID. The current HTTP-only ALB is not sufficient for production OAuth callbacks.
-
-For production, provider credentials and the JWT signing secret must come from the secret-management layer rather than repository files.
-
+For production, provider credentials and the JWT signing secret must come from the secret-management layer rather than repository files. See docs/configuration-reference.md for the full variable/secret inventory.
 
 ### Authentication rate limits
 
