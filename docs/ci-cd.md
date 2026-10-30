@@ -160,13 +160,19 @@ Ensure remote S3 state and terraform init
 terraform plan + resource allowlist guard
       |
       v
-Apply the exact saved plan
+Apply exact plan (register task revisions; hold app services)
       |
       v
-Wait for frontend/backend/monitoring ECS services
+Wait for current/zero-count services
       |
       v
 DB bootstrap -> Alembic migration -> runtime grants bootstrap
+      |
+      v
+Activate frontend/backend revisions + restore autoscaling capacity
+      |
+      v
+Wait for application/monitoring ECS stability
       |
       v
 ALB / API / DB / Grafana smoke tests
@@ -204,6 +210,12 @@ The AWS OIDC role is configured outside this repository. It must be able to veri
 The development CD pipeline does not blindly apply every Terraform difference.
 
 It creates a saved plan and allows only the known application/monitoring task definitions and services, frontend/backend autoscaling targets, purpose-specific ECS execution roles/policies, the dedicated no-ingress database-task security group/rules, and the five CloudWatch log groups. It rejects every unlisted resource change and every delete action. The local deploy script and manual rebuild workflow enforce the same explicit allowlist.
+
+During an application release, Terraform registers the new frontend/backend task definitions but does not switch the live service revisions. The deployment paths then perform database bootstrap, Alembic migration, and post-migration runtime grants before calling `scripts/activate-application-services.sh`. The helper updates both ECS services, restores configured desired capacity/autoscaling bounds, waits for all application/monitoring services to stabilize, and verifies that ECS retained the requested task-definition ARNs. During first deployment the frontend/backend services are created at zero tasks and start only after migrations.
+
+Terraform intentionally ignores subsequent ECS service `task_definition` and `desired_count` drift because the release helper is the authority for application activation. Standalone Terraform apply is not the supported method for rolling out new application images.
+
+Migrations must remain backward-compatible with the currently running version while they execute (expand/contract). Add replacement schema first, switch application code only after migration, and remove obsolete schema in a later release.
 
 Infrastructure drift or unrelated infrastructure changes must be resolved through the infrastructure workflow rather than hidden inside an application release.
 

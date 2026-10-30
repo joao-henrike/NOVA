@@ -15,12 +15,15 @@ This folder contains local setup, validation, deployment, state-bootstrap, secre
 | `ensure-terraform-state.sh` | Verifies the AWS identity and remote-state bucket; bootstraps the S3 state resources only if the bucket is confirmed missing. | AWS read operations; may create S3/bootstrap resources when missing. |
 | `provision-db-credentials.sh` | Creates or reuses the runtime and migrator Secrets Manager credentials. | Creates/updates secret versions in the configured AWS account; values are not printed. |
 | `provision-backend-auth-secret.sh` | Creates or reuses the backend JWT/OAuth JSON secret, preserving the existing signing key. | Creates/updates the configured Secrets Manager secret; values are not printed. |
-| `deploy.sh` | End-to-end development deployment: validates account, prepares state/secrets, plans/applies infrastructure, builds/pushes immutable images, activates ECS, migrates, and smoke-tests. | **State-changing and potentially billable AWS operations.** |
+| `deploy.sh` | End-to-end development deployment: validates account, prepares state/secrets, plans/applies infrastructure, builds/pushes immutable images, migrates, activates ECS, and smoke-tests. | **State-changing and potentially billable AWS operations.** |
+| `activate-application-services.sh` | Switches frontend/backend ECS services to the registered task revisions after migrations and runtime grants succeed, restores configured desired/autoscaling capacity, waits for stability, and verifies the active task-definition ARNs. | **Changes ECS task revisions and capacity.** Requires initialized Terraform state and AWS credentials. |
 | `destroy-all.sh` | Destroys resources tracked in the configured current/legacy states, stops local Compose stacks, then inventories remaining project resources. | **Destructive.** Requires exact account/region confirmation. Does not directly delete arbitrary untracked leftovers. |
 | `run-gitleaks.sh` | Downloads a pinned Gitleaks binary with checksum verification and scans the Git repository. | Local/CI temporary files; no AWS operations. |
 | `extreme-checks.sh` | Shared GitHub Actions helper for recording independent validation results and skipped checks. | CI evidence files only; it does not provision AWS. |
 
 The root-level `audit-nova.sh` and `audit-frontend.sh` are separate read-only diagnostic tools and are documented in the [root README](../README.md).
+
+The supported deployment paths intentionally keep new frontend/backend task revisions inactive during Terraform apply. They call `activate-application-services.sh` only after database bootstrap, Alembic upgrade, and post-migration runtime grants have succeeded. Do not run this helper manually before those steps.
 
 ## Safe local validation
 

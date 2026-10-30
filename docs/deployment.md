@@ -36,7 +36,7 @@ For a fresh development deployment, the preferred command is:
 make deploy
 ```
 
-The deployment automation verifies branch `Joao` and the expected AWS account, creates the protected remote-state bucket when it is missing, provisions the restricted database secrets and backend authentication secret, initializes the canonical state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, activates ECS, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests. The local Makefile deployment and both GitHub workflows use the same provisioning scripts.
+The deployment automation verifies branch `Joao` and the expected AWS account, creates the protected remote-state bucket when it is missing, provisions the restricted database secrets and backend authentication secret, initializes the canonical state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, registers new ECS task definitions without switching live frontend/backend services, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, activates the new application task revisions, restores configured ECS capacity/autoscaling, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests. The local Makefile deployment and both GitHub workflows use the same provisioning scripts.
 
 The Grafana administrator password is generated locally by `scripts/deploy.sh` on first use and stored under `.deploy/`. This directory is ignored by Git. The database provisioner stores generated runtime/migrator password values only in AWS Secrets Manager; its local `.deploy/db-secret-arns.env` file contains ARNs only. The RDS master password remains managed by RDS and is injected only into the one-off role-bootstrap task.
 
@@ -71,6 +71,12 @@ monitoring_db_backup_retention = 1 day
 ```
 
 The effective ECS desired/minimum count follows the configured desired/minimum values while `deploy_application = true`; when it is false, frontend/backend desired and minimum counts are zero. The monitoring service remains at one task.
+
+The development release path sets `start_application_services = false` during Terraform apply. That registers new frontend/backend task definitions while leaving existing service revisions untouched; on first deployment, application services remain at zero tasks. After database bootstrap, Alembic migrations, and post-migration runtime grants succeed, `scripts/activate-application-services.sh` switches the two services to the new task revisions and restores configured desired/minimum/maximum capacity.
+
+Terraform intentionally ignores subsequent ECS service `task_definition` and `desired_count` changes because application rollout is coordinated by the deployment helper. Use `make deploy` or the supported GitHub deployment workflow rather than expecting a standalone `terraform apply` to roll out a new application image.
+
+Migrations must remain backward-compatible with the currently running backend during the migration phase (expand/contract: add schema first, switch application code, remove obsolete schema only in a later release). Do not drop or rename a database object still used by the currently active service in the same release that introduces its replacement.
 
 ## 3. Local application validation
 
