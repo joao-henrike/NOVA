@@ -146,6 +146,19 @@ class ApplicationApiTest(unittest.TestCase):
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.json()["status"], "inactive")
 
+        for invalid_payload in ({"name": None}, {"status": None}):
+            invalid_update = self.client.patch(
+                f"/api/items/{item_id}",
+                json=invalid_payload,
+                headers=headers,
+            )
+            self.assertEqual(invalid_update.status_code, 422)
+
+        unchanged = self.client.get(f"/api/items/{item_id}", headers=headers)
+        self.assertEqual(unchanged.status_code, 200)
+        self.assertEqual(unchanged.json()["name"], "CloudStart API v2")
+        self.assertEqual(unchanged.json()["status"], "inactive")
+
         listed = self.client.get(
             "/api/items?status=inactive",
             headers=headers,
