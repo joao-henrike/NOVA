@@ -70,7 +70,7 @@ db_backup_retention         = 1 day
 monitoring_db_backup_retention = 1 day
 ```
 
-The effective ECS desired/minimum count follows the configured desired/minimum values while `deploy_application = true`.
+The effective ECS desired/minimum count follows the configured desired/minimum values while `deploy_application = true`; when it is false, frontend/backend desired and minimum counts are zero. The monitoring service remains at one task.
 
 ## 3. Local application validation
 
