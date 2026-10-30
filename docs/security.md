@@ -319,6 +319,6 @@ The backend applies fixed-window quotas to authentication endpoints. Counters ar
 
 Blocked requests return HTTP 429 with a Retry-After header and a generic response body. Bucket keys are HMACs derived from the application signing secret and the endpoint scope/client address; raw client IP addresses are not stored. Buckets older than one day are pruned during authentication requests.
 
-In non-local environments, client address extraction uses the final address in X-Forwarded-For. This relies on the current network boundary: backend tasks accept traffic only from the ALB security group, and the ALB must retain its default append behavior for X-Forwarded-For. Do not expose the backend directly or trust arbitrary forwarding headers from another ingress path.
+In non-local environments, client address extraction uses the final address in X-Forwarded-For. The ALB explicitly sets `xff_header_processing_mode = "append"` and `enable_xff_client_port = false`, so it appends the peer address as a plain IP. Backend tasks accept traffic only from the ALB security group. Do not change the ALB to `preserve` or `remove`, expose the backend directly, or trust arbitrary forwarding headers from another ingress path.
 
 These limits are a baseline abuse-control measure, not a substitute for AWS WAF, bot management, account-level risk controls, or alerting. The quotas are fixed defaults in application code and should be tuned using real traffic before a public launch.
