@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, exists, select, update
+from sqlalchemy.orm import Session, aliased
 
 from app.models.auth import AuthIdentity, AuthProvider, OAuthState, RefreshToken
 from app.models.user import User
@@ -126,6 +126,38 @@ class AuthRepository:
         session.commit()
         return record
 
+    def prune_expired_refresh_families(
+        self,
+        session: Session,
+        *,
+        now: datetime,
+        batch_size: int = 100,
+    ) -> None:
+        if batch_size < 1:
+            raise ValueError("Refresh-token cleanup batch size must be positive.")
+
+        expired_token = aliased(RefreshToken)
+        unexpired_token = aliased(RefreshToken)
+        expired_families = (
+            select(expired_token.family_id)
+            .where(expired_token.expires_at <= now)
+            .where(
+                ~exists(
+                    select(1).where(
+                        unexpired_token.family_id == expired_token.family_id,
+                        unexpired_token.expires_at > now,
+                    )
+                )
+            )
+            .distinct()
+            .limit(batch_size)
+        )
+        session.execute(
+            delete(RefreshToken).where(
+                RefreshToken.family_id.in_(expired_families)
+            )
+        )
+
     def create_refresh_token(
         self,
         session: Session,
@@ -136,6 +168,13 @@ class AuthRepository:
         expires_at: datetime,
         replaced_by_hash: str | None = None,
     ) -> RefreshToken:
+        # Keep replay-detection history while any token in a family can still
+        # be presented. Once every token has expired, the whole family is safe
+        # to remove. Batching bounds the work on login and refresh requests.
+        self.prune_expired_refresh_families(
+            session,
+            now=datetime.now(UTC),
+        )
         record = RefreshToken(
             user_id=user_id,
             family_id=family_id,
