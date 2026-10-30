@@ -287,12 +287,6 @@ run_one_off_database_task \
 log "Activating frontend/backend revisions after database migrations"
 bash "$ROOT_DIR/scripts/activate-application-services.sh"
 
-log "Waiting for application and monitoring ECS services to stabilize"
-aws ecs wait services-stable \
-  --cluster "$cluster" \
-  --services "$frontend_service" "$backend_service" "$monitoring_service" \
-  --region "$AWS_REGION"
-
 log "Running ALB smoke tests"
 base_url="$(terraform output -raw alb_application_url)"
 base_url="${base_url%/}"

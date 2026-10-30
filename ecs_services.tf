@@ -418,7 +418,8 @@ resource "aws_ecs_service" "backend" {
 
 
   lifecycle {
-    ignore_changes = [desired_count]
+    # CD activates the next task revision only after the database migration succeeds.
+    ignore_changes = [desired_count, task_definition]
   }
 
   depends_on = [
