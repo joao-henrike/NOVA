@@ -343,7 +343,7 @@ class ApplicationApiTest(unittest.TestCase):
         accepted = self.client.post(
             "/api/auth/logout",
             cookies={"nova_refresh_token": refresh_token},
-            headers={"Origin": "http://testserver"},
+            headers={"Origin": "https://testserver"},
         )
         self.assertEqual(accepted.status_code, 204)
 
