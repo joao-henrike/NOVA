@@ -1,7 +1,7 @@
 import json
 import secrets
 from typing import Annotated, Literal
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from fastapi import (
     APIRouter,
@@ -183,6 +183,32 @@ def _clear_state_cookie(response: Response, provider: AuthProvider) -> None:
         key=f"nova_oauth_state_{provider.value}",
         path="/api/auth",
     )
+
+
+def _require_same_origin_cookie_request(request: Request) -> None:
+    """Protect cookie-authenticated mutations from same-site sibling origins."""
+    origin = request.headers.get("origin")
+    host = request.headers.get("host")
+    try:
+        parsed = urlsplit(origin or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Invalid request origin.") from exc
+
+    if (
+        not origin
+        or not host
+        or parsed.scheme not in {"http", "https"}
+        or parsed.netloc.casefold() != host.casefold()
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or parsed.username
+        or parsed.password
+    ):
+        raise HTTPException(status_code=403, detail="Cross-origin cookie request rejected.")
+
+    if settings.app_env.lower() != "local" and parsed.scheme != "https":
+        raise HTTPException(status_code=403, detail="HTTPS origin required.")
 
 
 def _extract_apple_profile_name(user_data: str | None) -> str | None:
@@ -443,7 +469,10 @@ def logout(
     db: Session = Depends(get_db),
 ) -> None:
     _enforce_auth_rate_limit(request, db, scope="logout")
-    token = (data.refresh_token if data else None) or refresh_cookie
+    body_token = data.refresh_token if data else None
+    token = body_token or refresh_cookie
+    if token and not body_token:
+        _require_same_origin_cookie_request(request)
     service.logout(db, token)
     response.delete_cookie("nova_refresh_token", path="/api/auth")
 
