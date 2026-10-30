@@ -83,13 +83,24 @@ jobs:
           terraform_wrapper: false
 
       - name: Select immutable application tag
+        env:
+          REQUESTED_IMAGE_TAG: ${{ inputs.image_tag }}
+        shell: bash
         run: |
           set -euo pipefail
-          tag="${{ inputs.image_tag }}"
+          tag="$REQUESTED_IMAGE_TAG"
           if [ -z "$tag" ]; then
             tag="$GITHUB_SHA"
           fi
-          echo "IMAGE_TAG=$tag" >> "$GITHUB_ENV"
+
+          # Docker/ECR tag grammar: first character alphanumeric or underscore;
+          # remaining characters are alphanumeric, underscore, dot, or hyphen.
+          if ! [[ "$tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "Invalid ECR image tag. Use 1-128 characters: letters, numbers, '_', '.', or '-'." >&2
+            exit 1
+          fi
+
+          printf 'IMAGE_TAG=%s\n' "$tag" >> "$GITHUB_ENV"
 
       - name: Generate deployment secret
         shell: bash
