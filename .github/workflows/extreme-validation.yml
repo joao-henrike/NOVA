@@ -3,8 +3,6 @@ name: NOVA - Extreme Validation
 on:
   push:
     branches: [Joao]
-  pull_request:
-    branches: [Joao, main]
   workflow_dispatch:
 
 permissions:
@@ -17,6 +15,7 @@ concurrency:
 jobs:
   extreme:
     name: Extreme Full-System Validation
+    if: github.ref == 'refs/heads/Joao'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: development
@@ -279,12 +278,17 @@ jobs:
       - name: Run live AWS validation
         if: always()
         env:
-          OIDC_OUTCOME: __GHA_steps_aws_oidc_outcome__
+          OIDC_OUTCOME: ${{ steps.aws_oidc.outcome }}
         shell: bash
         run: |
           # shellcheck disable=SC2016
           source scripts/extreme-checks.sh
-          record_external_result aws_oidc "$([ "$OIDC_OUTCOME" = "success" ] && echo 0 || echo 1)"
+          if [ "$OIDC_OUTCOME" != "success" ]; then
+            record_external_result aws_oidc 1
+            finish_checks
+            exit $?
+          fi
+          record_external_result aws_oidc 0
           run_check aws_role_present bash -c 'test -n "$AWS_CD_ROLE_ARN"'
           run_check aws_state_bucket_present bash -c 'test -n "$TF_STATE_BUCKET"'
           run_check aws_expected_account bash -c 'test "$EXPECTED_AWS_ACCOUNT_ID" = "760396521507"'

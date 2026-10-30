@@ -205,6 +205,8 @@ Gitleaks
 
 The optional Terraform Plan path uses GitHub OIDC instead of long-lived AWS credentials stored in the workflow.
 
+The extreme full-system validation workflow is deliberately limited to pushes on `Joao` and manual runs on that branch. It does not run on pull requests: its live AWS step requires `id-token: write` to assume the development role, so excluding untrusted PR contexts prevents PR code from inheriting AWS OIDC capability. Ordinary pull requests continue to receive the non-AWS CI validation. The AWS step consumes the real `steps.aws_oidc.outcome` value and stops before any AWS API call if role assumption fails.
+
 The current OIDC deployment path is restricted to the development environment. There is intentionally no automated production-deployment OIDC path.
 
 ## 12. Current public security limitations

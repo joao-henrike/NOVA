@@ -581,6 +581,8 @@ Before enabling the deployment job, configure `AWS_CD_ROLE_ARN` and `TF_STATE_BU
 
 AWS authentication uses GitHub OIDC. The CD workflow rejects an AWS account other than `760396521507`.
 
+The extreme validation workflow that performs live AWS checks is not triggered by pull requests; it runs only on the `Joao` branch (push or manual dispatch). This keeps the job-level OIDC permission away from untrusted PR execution contexts. CI remains the mandatory PR validation path.
+
 The workflow applies only a previously generated Terraform plan whose non-no-op resources are limited to the frontend/backend ECS task definitions and services. Any unrelated resource change or destructive action stops the release.
 
 The workflow provisions/reuses the runtime and migrator Secrets Manager values before planning. The AWS CD role therefore needs `secretsmanager:DescribeSecret`, `GetSecretValue`, `CreateSecret`, and `PutSecretValue` limited to the two database credential secrets.
