@@ -15,37 +15,39 @@ data "aws_iam_policy_document" "ecs_task_assume_role" {
   }
 }
 
-data "aws_iam_policy_document" "ecs_execution_permissions" {
+data "aws_iam_policy_document" "ecs_execution_base_permissions" {
   statement {
-    sid    = "EcrPull"
-    effect = "Allow"
-
-    actions = [
-      "ecr:GetAuthorizationToken"
-    ]
-
+    sid       = "EcrPull"
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
     resources = ["*"]
   }
+}
+
+data "aws_iam_policy_document" "ecs_execution_permissions" {
+  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_base_permissions.json]
 
   statement {
-    sid    = "EcrRepositoryPull"
-    effect = "Allow"
-
-    actions = [
-      "ecr:BatchCheckLayerAvailability",
-      "ecr:BatchGetImage",
-      "ecr:GetDownloadUrlForLayer"
-    ]
-
-    resources = [
-      aws_ecr_repository.frontend.arn,
-      aws_ecr_repository.backend.arn
-    ]
+    sid       = "EcrFrontendRepositoryPull"
+    effect    = "Allow"
+    actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = [aws_ecr_repository.frontend.arn]
   }
 
   # Compatibility only while deploy_application=false: the disabled baseline
   # keeps the legacy backend task definition valid if an existing service is
   # still running. The deployed backend switches to its dedicated execution role.
+  dynamic "statement" {
+    for_each = var.deploy_application ? [] : [aws_ecr_repository.backend.arn]
+
+    content {
+      sid       = "LegacyBackendRepositoryPullWhileDisabled"
+      effect    = "Allow"
+      actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+      resources = [statement.value]
+    }
+  }
+
   dynamic "statement" {
     for_each = var.deploy_application ? [] : [aws_db_instance.this.master_user_secret[0].secret_arn]
 
@@ -85,7 +87,14 @@ resource "aws_iam_role_policy" "ecs_execution" {
 }
 
 data "aws_iam_policy_document" "ecs_backend_execution_permissions" {
-  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_permissions.json]
+  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_base_permissions.json]
+
+  statement {
+    sid       = "EcrBackendRepositoryPull"
+    effect    = "Allow"
+    actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = [aws_ecr_repository.backend.arn]
+  }
 
   dynamic "statement" {
     for_each = var.db_runtime_secret_arn == "" ? [] : [var.db_runtime_secret_arn]
@@ -127,7 +136,14 @@ resource "aws_iam_role_policy" "ecs_backend_execution" {
 }
 
 data "aws_iam_policy_document" "ecs_migration_execution_permissions" {
-  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_permissions.json]
+  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_base_permissions.json]
+
+  statement {
+    sid       = "EcrBackendRepositoryPull"
+    effect    = "Allow"
+    actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = [aws_ecr_repository.backend.arn]
+  }
 
   dynamic "statement" {
     for_each = var.db_migrator_secret_arn == "" ? [] : [var.db_migrator_secret_arn]
@@ -158,7 +174,14 @@ resource "aws_iam_role_policy" "ecs_migration_execution" {
 }
 
 data "aws_iam_policy_document" "ecs_db_bootstrap_execution_permissions" {
-  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_permissions.json]
+  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_base_permissions.json]
+
+  statement {
+    sid       = "EcrBackendRepositoryPull"
+    effect    = "Allow"
+    actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = [aws_ecr_repository.backend.arn]
+  }
 
   statement {
     sid       = "ReadRdsMasterSecretForRoleBootstrap"
