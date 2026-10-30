@@ -1,5 +1,5 @@
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -18,7 +18,7 @@ from app.core.security import (
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.auth import AuthIdentity, OAuthState, RefreshToken
+from app.models.auth import AuthIdentity, AuthProvider, OAuthState, RefreshToken
 from app.models.item import Item
 from app.models.user import User
 from app.services.auth import AuthService
@@ -248,6 +248,43 @@ class ApplicationApiTest(unittest.TestCase):
 
         access_after_logout = self.client.get("/api/auth/me", headers=headers)
         self.assertEqual(access_after_logout.status_code, 401)
+
+    def test_new_oauth_login_removes_expired_states(self) -> None:
+        expired_state = f"expired-{uuid4()}"
+        current_state = f"current-{uuid4()}"
+
+        with self.session_factory() as session:
+            session.add(
+                OAuthState(
+                    provider=AuthProvider.GOOGLE,
+                    state=expired_state,
+                    nonce="expired-nonce",
+                    code_verifier="expired-verifier",
+                    redirect_uri="https://cloudstart.example.com/callback",
+                    expires_at=datetime.now(UTC) - timedelta(seconds=1),
+                )
+            )
+            session.commit()
+
+            AuthService().create_oauth_state(
+                session,
+                provider=AuthProvider.GOOGLE,
+                state=current_state,
+                nonce="current-nonce",
+                code_verifier="current-verifier",
+                redirect_uri="https://cloudstart.example.com/callback",
+            )
+
+            self.assertIsNone(
+                session.query(OAuthState)
+                .filter(OAuthState.state == expired_state)
+                .one_or_none()
+            )
+            self.assertIsNotNone(
+                session.query(OAuthState)
+                .filter(OAuthState.state == current_state)
+                .one_or_none()
+            )
 
     def test_missing_user_is_rejected(self) -> None:
         token, _ = create_access_token(uuid4(), uuid4())

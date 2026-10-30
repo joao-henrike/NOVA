@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.models.auth import AuthIdentity, AuthProvider, OAuthState, RefreshToken
@@ -79,6 +79,11 @@ class AuthRepository:
         redirect_uri: str,
         expires_at: datetime,
     ) -> OAuthState:
+        session.execute(
+            delete(OAuthState).where(
+                OAuthState.expires_at <= datetime.now(UTC)
+            )
+        )
         record = OAuthState(
             provider=provider,
             state=state,
