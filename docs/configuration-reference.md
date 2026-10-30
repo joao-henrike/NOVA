@@ -6,7 +6,7 @@ This is the operator reference for Terraform inputs, bootstrap inputs, environme
 
 ## 1. Terraform root inputs
 
-The root stack declares 63 input variables in variables.tf.
+The root stack declares 64 input variables in variables.tf.
 
 | Name | Type | Default | Sensitive | Purpose |
 | --- | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ The root stack declares 63 input variables in variables.tf.
 | availability_zone_count | number | 2 | No | Number of Availability Zones to use for the workload. |
 | vpc_cidr | string | "10.20.0.0/16" | No | Primary IPv4 CIDR block for the VPC. |
 | deploy_application | bool | false | No | Whether ECS services should run application tasks. Set true after the frontend/backend images have been pushed to ECR. |
+| start_application_services | bool | true | No | Whether frontend/backend ECS services should start during Terraform apply. Release workflows set false so migrations complete before the new task revisions receive traffic. |
 | frontend_image_tag | string | "v0.1.1" | No | Immutable tag of the frontend image in the CloudStart ECR repository. |
 | backend_image_tag | string | "v0.1.0" | No | Immutable tag of the backend image in the CloudStart ECR repository. |
 | frontend_container_name | string | "frontend" | No | ECS frontend container name. |
@@ -77,6 +78,8 @@ The root stack declares 63 input variables in variables.tf.
 ### Cross-variable requirements
 
 - The committed development baseline has deploy_application = false. In this mode frontend/backend desired and minimum ECS counts are reduced to zero.
+- Application release workflows set start_application_services = false during Terraform apply. New task definitions are registered, but existing frontend/backend services keep their current revisions; on first deployment they remain at zero tasks until migrations and runtime grants succeed.
+- The supported deployment paths then run scripts/activate-application-services.sh to switch service revisions and restore the configured desired count and autoscaling bounds. A standalone Terraform apply is not the supported application image rollout path.
 - When deploy_application = true, the runtime, migrator, and RDS master PostgreSQL usernames and password secret ARNs must be distinct.
 - Application activation also requires backend_auth_secret_arn. It must identify a JSON secret containing every key listed in section 5.
 - grafana_admin_password must be supplied with at least 12 characters for the monitoring stack.

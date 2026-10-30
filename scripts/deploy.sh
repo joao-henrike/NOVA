@@ -186,7 +186,7 @@ log "Pushing immutable application images"
 docker push "$frontend_repo:$IMAGE_TAG"
 docker push "$backend_repo:$IMAGE_TAG"
 
-log "Planning application activation"
+log "Planning application task revisions with service activation deferred until after migrations"
 terraform plan \
   -refresh=true \
   -lock=true \
@@ -207,7 +207,7 @@ APP_UNEXPECTED="$(jq '[.resource_changes[]? | select(.change.actions != ["no-op"
 [ "$APP_DELETES" -eq 0 ] || fatal "Application activation plan contains deletions."
 [ "$APP_UNEXPECTED" -eq 0 ] || fatal "Application activation plan modifies resources outside the application ECS scope."
 
-log "Activating frontend/backend ECS services"
+log "Registering application task revisions while keeping live service revisions unchanged"
 terraform apply -input=false -auto-approve "$APPLICATION_PLAN"
 
 cluster="$(terraform output -raw ecs_cluster_name)"
