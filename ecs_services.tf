@@ -58,8 +58,12 @@ resource "aws_ecs_task_definition" "backend" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.backend_task_cpu
   memory                   = var.backend_task_memory
-  execution_role_arn       = aws_iam_role.ecs_backend_execution.arn
-  task_role_arn            = aws_iam_role.ecs_backend_task.arn
+  execution_role_arn = (
+    var.deploy_application
+    ? aws_iam_role.ecs_backend_execution.arn
+    : aws_iam_role.ecs_execution.arn
+  )
+  task_role_arn = aws_iam_role.ecs_backend_task.arn
 
   lifecycle {
     precondition {
@@ -113,15 +117,20 @@ resource "aws_ecs_task_definition" "backend" {
         },
         {
           name  = "DB_USER"
-          value = var.db_runtime_username
+          value = var.deploy_application ? var.db_runtime_username : var.db_username
         }
       ]
 
       secrets = concat(
-        var.db_runtime_secret_arn == "" ? [] : [
+        var.deploy_application ? [
           {
             name      = "DB_PASSWORD"
             valueFrom = "${var.db_runtime_secret_arn}:password::"
+          }
+        ] : [
+          {
+            name      = "DB_PASSWORD"
+            valueFrom = "${aws_db_instance.this.master_user_secret[0].secret_arn}:password::"
           }
         ],
         var.backend_auth_secret_arn == "" ? [] : [

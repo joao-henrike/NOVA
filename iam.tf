@@ -43,7 +43,30 @@ data "aws_iam_policy_document" "ecs_execution_permissions" {
     ]
   }
 
+  # Compatibility only while deploy_application=false: the disabled baseline
+  # keeps the legacy backend task definition valid if an existing service is
+  # still running. The deployed backend switches to its dedicated execution role.
+  dynamic "statement" {
+    for_each = var.deploy_application ? [] : [aws_db_instance.this.master_user_secret[0].secret_arn]
 
+    content {
+      sid       = "LegacyBackendDatabaseSecretWhileDisabled"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_application || var.backend_auth_secret_arn == "" ? [] : [var.backend_auth_secret_arn]
+
+    content {
+      sid       = "LegacyBackendAuthSecretWhileDisabled"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value]
+    }
+  }
 }
 
 resource "aws_iam_role" "ecs_execution" {
