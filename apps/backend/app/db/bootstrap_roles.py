@@ -41,16 +41,42 @@ def _ensure_login_role(
         (role_name,),
     ).fetchone()
 
-    action = "ALTER ROLE" if exists else "CREATE ROLE"
-    statement = sql.SQL(
-        "{} {} WITH LOGIN PASSWORD {} "
-        "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
-    ).format(
-        sql.SQL(action),
-        sql.Identifier(role_name),
-        sql.Literal(password),
-    )
-    connection.execute(statement)
+    if exists:
+        # A CREATEROLE administrator may rotate credentials for a role it
+        # administers, but cannot change the SUPERUSER attribute. Do not send
+        # NOSUPERUSER during ALTER ROLE: it is a superuser-only operation.
+        statement = sql.SQL("ALTER ROLE {} WITH LOGIN PASSWORD {}").format(
+            sql.Identifier(role_name),
+            sql.Literal(password),
+        )
+        connection.execute(statement)
+    else:
+        # Safe attributes are enforced at creation time, when they are
+        # controlled by the role-creating administrator.
+        statement = sql.SQL(
+            "CREATE ROLE {} WITH LOGIN PASSWORD {} "
+            "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+        ).format(
+            sql.Identifier(role_name),
+            sql.Literal(password),
+        )
+        connection.execute(statement)
+
+    attributes = connection.execute(
+        """
+        SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
+        FROM pg_roles
+        WHERE rolname = %s
+        """,
+        (role_name,),
+    ).fetchone()
+    if attributes is None:
+        raise RuntimeError(f"PostgreSQL role {role_name} was not found after provisioning.")
+    if any(attributes):
+        raise RuntimeError(
+            f"PostgreSQL role {role_name} has elevated attributes; "
+            "refusing to continue with a non-least-privilege application identity."
+        )
 
 
 def _revoke_role_memberships(
