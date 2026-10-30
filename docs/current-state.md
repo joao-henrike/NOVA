@@ -270,7 +270,7 @@ The ECS tasks have no public IP addresses.
 
 Both application and monitoring RDS instances are Single-AZ and not publicly accessible. The database-task security group has no ingress rules and permits only HTTPS egress plus PostgreSQL toward the application RDS security group.
 
-The normal backend task uses `cloudstart_runtime` and receives only the runtime Secrets Manager password. The Alembic task uses `cloudstart_migrator`; the one-off bootstrap task alone receives the RDS-managed master secret. JWT/OAuth settings use a separate optional Secrets Manager JSON secret; values are populated out-of-band.
+The normal backend task uses `cloudstart_runtime` and receives only the runtime Secrets Manager password. The Alembic task uses `cloudstart_migrator`; the one-off bootstrap task alone receives the RDS-managed master secret. The backend JWT/OAuth JSON secret is created or reused by the deployment provisioner: it generates the JWT signing key on first creation, preserves it on later runs, and accepts optional Google/Apple values from local environment variables or the GitHub development Environment. Terraform receives the secret ARN only.
 
 ## 6. Current operational boundaries
 
