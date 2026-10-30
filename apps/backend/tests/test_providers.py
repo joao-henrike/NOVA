@@ -1,15 +1,21 @@
 import unittest
+
+import httpx
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from google.auth.exceptions import TransportError
+from jwt.exceptions import PyJWKClientError
 
 from app.api.routes.auth import _extract_apple_profile_name, _validate_redirect_uri
 from app.core.config import settings
 from app.services.providers import (
     ProviderAuthenticationError,
+    _post_form,
+    claims_to_identity,
+    exchange_apple_code,
     exchange_google_code,
     verify_apple_id_token,
     verify_google_id_token,
@@ -127,6 +133,127 @@ class ProviderSettingsTest(unittest.TestCase):
         self.assertEqual(data["code_verifier"], "pkce-verifier")
         self.assertEqual(data["grant_type"], "authorization_code")
         self.assertEqual(data["redirect_uri"], settings.google_redirect_uri)
+
+
+    @patch("app.services.providers.httpx.post")
+    def test_token_exchange_normalizes_transport_errors(self, post) -> None:
+        post.side_effect = httpx.ConnectError("provider unavailable")
+
+        with self.assertRaisesRegex(ProviderAuthenticationError, "request failed"):
+            _post_form("https://provider.example/token", {"code": "test"})
+
+    @patch("app.services.providers.httpx.post")
+    def test_token_exchange_normalizes_invalid_json(self, post) -> None:
+        response = Mock()
+        response.json.side_effect = ValueError("invalid JSON")
+        post.return_value = response
+
+        with self.assertRaisesRegex(ProviderAuthenticationError, "request failed"):
+            _post_form("https://provider.example/token", {"code": "test"})
+
+    @patch("app.services.providers.httpx.post")
+    def test_token_exchange_rejects_non_object_and_provider_errors(self, post) -> None:
+        response = Mock()
+        response.json.return_value = ["not", "an", "object"]
+        post.return_value = response
+        with self.assertRaisesRegex(ProviderAuthenticationError, "invalid data"):
+            _post_form("https://provider.example/token", {"code": "test"})
+
+        response.json.return_value = {"error": "access_denied"}
+        with self.assertRaisesRegex(ProviderAuthenticationError, "rejected"):
+            _post_form("https://provider.example/token", {"code": "test"})
+
+    @patch("app.services.providers._post_form", return_value={})
+    def test_google_code_exchange_rejects_missing_id_token(self, post_form) -> None:
+        with self.assertRaisesRegex(ProviderAuthenticationError, "ID token"):
+            exchange_google_code(
+                "authorization-code",
+                "pkce-verifier",
+                settings.google_redirect_uri,
+            )
+
+    @patch("app.services.providers._post_form", return_value={})
+    @patch("app.services.providers.generate_apple_client_secret", return_value="client-secret")
+    def test_apple_code_exchange_rejects_missing_id_token(
+        self,
+        client_secret,
+        post_form,
+    ) -> None:
+        with self.assertRaisesRegex(ProviderAuthenticationError, "ID token"):
+            exchange_apple_code(
+                "authorization-code",
+                settings.apple_redirect_uri,
+            )
+        client_secret.assert_called_once()
+        post_form.assert_called_once()
+
+    @patch("app.services.providers._post_form")
+    @patch("app.services.providers.generate_apple_client_secret", return_value="client-secret")
+    def test_apple_code_exchange_sends_expected_parameters(
+        self,
+        client_secret,
+        post_form,
+    ) -> None:
+        post_form.return_value = {"id_token": "apple-id-token"}
+        result = exchange_apple_code("authorization-code", settings.apple_redirect_uri)
+
+        self.assertEqual(result["id_token"], "apple-id-token")
+        data = post_form.call_args.args[1]
+        self.assertEqual(data["client_id"], settings.apple_client_id)
+        self.assertEqual(data["client_secret"], "client-secret")
+        self.assertEqual(data["code"], "authorization-code")
+        self.assertEqual(data["redirect_uri"], settings.apple_redirect_uri)
+        self.assertEqual(data["grant_type"], "authorization_code")
+        client_secret.assert_called_once()
+
+    @patch("app.services.providers.id_token.verify_oauth2_token")
+    def test_google_id_token_normalizes_invalid_token_value(self, verify) -> None:
+        verify.side_effect = ValueError("invalid provider token")
+        with self.assertRaisesRegex(ProviderAuthenticationError, "validation failed"):
+            verify_google_id_token("invalid-token", "expected-nonce")
+
+    def test_apple_jwks_lookup_errors_are_normalized(self) -> None:
+        client = Mock()
+        client.get_signing_key_from_jwt.side_effect = PyJWKClientError("JWKS unavailable")
+        with (
+            patch("app.services.providers.get_apple_jwk_client", return_value=client),
+            self.assertRaisesRegex(ProviderAuthenticationError, "validation failed"),
+        ):
+            verify_apple_id_token("signed-token", "expected-nonce")
+
+    def test_provider_identity_rejects_invalid_subject_and_oversized_fields(self) -> None:
+        invalid_subjects = (None, "", "  ", 123)
+        for subject in invalid_subjects:
+            with self.subTest(subject=subject):
+                with self.assertRaisesRegex(ProviderAuthenticationError, "subject"):
+                    claims_to_identity({"sub": subject})
+
+        with self.assertRaisesRegex(ProviderAuthenticationError, "subject is too long"):
+            claims_to_identity({"sub": "S" * 256})
+
+        with self.assertRaisesRegex(ProviderAuthenticationError, "email address is too long"):
+            claims_to_identity(
+                {
+                    "sub": "valid-subject",
+                    "email": ("a" * 310) + "@example.com",
+                    "email_verified": True,
+                }
+            )
+
+    def test_redirect_uri_rejects_missing_scheme_fragment_and_malformed_host(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "absolute HTTP"):
+            _validate_redirect_uri("/api/auth/callback")
+        with self.assertRaisesRegex(RuntimeError, "fragment"):
+            _validate_redirect_uri("https://example.com/callback#fragment")
+        with self.assertRaisesRegex(RuntimeError, "invalid"):
+            _validate_redirect_uri("http://[::1")
+
+    def test_apple_redirect_requires_https_and_registered_domain(self) -> None:
+        settings.app_env = "local"
+        with self.assertRaisesRegex(RuntimeError, "requires HTTPS"):
+            _validate_redirect_uri("http://localhost:8000/callback", apple=True)
+        with self.assertRaisesRegex(RuntimeError, "registered domain"):
+            _validate_redirect_uri("https://localhost/callback", apple=True)
 
     def _apple_token(self, *, nonce="expected-nonce", audience=None, issuer=None):
         private_key = rsa.generate_private_key(
