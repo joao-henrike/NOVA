@@ -447,7 +447,7 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 )
             )
 
-        with psycopg.connect(admin_conninfo) as connection:
+        with psycopg.connect(provisioner_conninfo) as connection:
             assert not connection.execute(
                 "SELECT has_function_privilege(%s, %s, 'EXECUTE')",
                 (runtime_role, f"{schema_name}.future_value()"),
