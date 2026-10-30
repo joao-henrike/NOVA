@@ -21,6 +21,7 @@ from app.main import app
 from app.models.auth import AuthIdentity, OAuthState, RefreshToken
 from app.models.item import Item
 from app.models.user import User
+from app.services.auth import AuthService
 from app.services.providers import (
     apple_authorization_url,
     claims_to_identity,
@@ -86,6 +87,14 @@ class ApplicationApiTest(unittest.TestCase):
     def _auth_headers(self, user_id=None) -> dict[str, str]:
         token, _ = create_access_token(user_id or self.user_id)
         return {"Authorization": f"Bearer {token}"}
+
+    def _issue_refresh_token(self) -> str:
+        with self.session_factory() as session:
+            user = session.get(User, self.user_id)
+            if user is None:
+                raise AssertionError("Test user does not exist.")
+            _, refresh_token, _ = AuthService().issue_session(session, user=user)
+            return refresh_token
 
     def test_items_requires_authentication(self) -> None:
         response = self.client.get("/api/items")
@@ -185,6 +194,46 @@ class ApplicationApiTest(unittest.TestCase):
         owner_read = self.client.get(f"/api/items/{item_id}", headers=owner_headers)
         self.assertEqual(owner_read.status_code, 200)
         self.assertEqual(owner_read.json()["name"], "Private owner item")
+
+    def test_refresh_rotates_token_and_reuse_revokes_family(self) -> None:
+        original_token = self._issue_refresh_token()
+
+        rotated = self.client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": original_token},
+        )
+        self.assertEqual(rotated.status_code, 200)
+        replacement_token = rotated.cookies.get("nova_refresh_token")
+        self.assertIsNotNone(replacement_token)
+        self.assertNotEqual(replacement_token, original_token)
+
+        reused = self.client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": original_token},
+        )
+        self.assertEqual(reused.status_code, 401)
+
+        # Reuse detection revokes the whole family, including its latest token.
+        revoked_replacement = self.client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": replacement_token},
+        )
+        self.assertEqual(revoked_replacement.status_code, 401)
+
+    def test_logout_revokes_refresh_token(self) -> None:
+        refresh_token = self._issue_refresh_token()
+
+        logged_out = self.client.post(
+            "/api/auth/logout",
+            json={"refresh_token": refresh_token},
+        )
+        self.assertEqual(logged_out.status_code, 204)
+
+        refreshed = self.client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": refresh_token},
+        )
+        self.assertEqual(refreshed.status_code, 401)
 
     def test_missing_user_is_rejected(self) -> None:
         token, _ = create_access_token(uuid4())
