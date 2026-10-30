@@ -448,25 +448,28 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
             connection.execute(
                 sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema_name))
             )
-            connection.execute(
-                sql.SQL("REVOKE CONNECT ON DATABASE {} FROM {}, {}").format(
-                    sql.Identifier(database_name),
-                    sql.Identifier(runtime_role),
-                    sql.Identifier(migrator_role),
-                )
-            )
+
+        # DROP OWNED also removes the migrator's default-privilege catalog
+        # entries, which otherwise prevent DROP ROLE after ALTER DEFAULT PRIVILEGES.
+        with psycopg.connect(admin_conninfo) as connection:
             for role in (
                 runtime_role,
                 migrator_role,
                 runtime_inherited_role,
                 migrator_inherited_role,
+                provisioner_role,
+            ):
+                connection.execute(
+                    sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role))
+                )
+            for role in (
+                runtime_role,
+                migrator_role,
+                runtime_inherited_role,
+                migrator_inherited_role,
+                provisioner_role,
             ):
                 connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
-        with psycopg.connect(admin_conninfo) as connection:
-            connection.execute(
-                sql.SQL("DROP OWNED BY {}").format(sql.Identifier(provisioner_role))
-            )
-            connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(provisioner_role)))
     except Exception:
         # Best-effort cleanup keeps random test objects out of the shared
         # PostgreSQL service even when an assertion exposes a privilege defect.
@@ -477,37 +480,30 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                         sql.Identifier(schema_name)
                     )
                 )
-                connection.execute(
-                    sql.SQL("REVOKE CONNECT ON DATABASE {} FROM {}, {}").format(
-                        sql.Identifier(database_name),
-                        sql.Identifier(runtime_role),
-                        sql.Identifier(migrator_role),
-                    )
-                )
-                for role in (
-                    runtime_role,
-                    migrator_role,
-                    runtime_inherited_role,
-                    migrator_inherited_role,
-                ):
-                    if connection.execute(
-                        "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                        (role,),
-                    ).fetchone():
-                        connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
         except Exception:
             pass
         try:
             with psycopg.connect(admin_conninfo) as connection:
-                if connection.execute(
-                    "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                    (provisioner_role,),
-                ).fetchone():
+                cleanup_roles = (
+                    runtime_role,
+                    migrator_role,
+                    runtime_inherited_role,
+                    migrator_inherited_role,
+                    provisioner_role,
+                )
+                existing_roles = []
+                for role in cleanup_roles:
+                    if connection.execute(
+                        "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                        (role,),
+                    ).fetchone():
+                        existing_roles.append(role)
+                        connection.execute(
+                            sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role))
+                        )
+                for role in existing_roles:
                     connection.execute(
-                        sql.SQL("DROP OWNED BY {}").format(sql.Identifier(provisioner_role))
-                    )
-                    connection.execute(
-                        sql.SQL("DROP ROLE {}").format(sql.Identifier(provisioner_role))
+                        sql.SQL("DROP ROLE {}").format(sql.Identifier(role))
                     )
         except Exception:
             pass
