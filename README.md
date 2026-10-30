@@ -720,6 +720,8 @@ https://app.example.com/api/auth/google/callback
 https://app.example.com/api/auth/apple/callback
 ```
 
+Only verified email claims from the provider's signed ID token are used as account email. Apple's browser-posted profile object is used for an optional display name only; its email field is not trusted. Successful authentication and refresh responses are marked `no-store`.
+
 ---
 
 ## 18. ECS architecture
