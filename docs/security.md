@@ -221,6 +221,7 @@ These must not be described as current protections.
 The current backend implements:
 
 ```text
+PostgreSQL-backed authentication rate limits shared across ECS tasks
 Google authentication
 Apple authentication
 OAuth state validation
@@ -236,7 +237,6 @@ The current backend still does not implement:
 ```text
 RBAC/role permissions beyond owner-scoped Item access
 MFA
-Rate limiting
 Payment security controls
 Financial transaction controls
 Business-level audit logging
@@ -287,3 +287,21 @@ What is the rollback path?
 ```
 
 The repository's PR template provides the first level of this review discipline.
+
+
+### Authentication rate limiting
+
+The backend applies fixed-window quotas to authentication endpoints. Counters are stored in PostgreSQL with atomic upserts, so ECS replicas share the same limits rather than maintaining independent in-memory counters.
+
+| Scope | Limit | Window |
+|---|---:|---:|
+| OAuth login start | 10 requests | 5 minutes |
+| OAuth callbacks | 20 requests | 5 minutes |
+| Refresh | 30 requests | 5 minutes |
+| Logout | 60 requests | 5 minutes |
+
+Blocked requests return HTTP 429 with a Retry-After header and a generic response body. Bucket keys are HMACs derived from the application signing secret and the endpoint scope/client address; raw client IP addresses are not stored. Buckets older than one day are pruned during authentication requests.
+
+In non-local environments, client address extraction uses the final address in X-Forwarded-For. This relies on the current network boundary: backend tasks accept traffic only from the ALB security group, and the ALB must retain its default append behavior for X-Forwarded-For. Do not expose the backend directly or trust arbitrary forwarding headers from another ingress path.
+
+These limits are a baseline abuse-control measure, not a substitute for AWS WAF, bot management, account-level risk controls, or alerting. The quotas are fixed defaults in application code and should be tuned using real traffic before a public launch.
