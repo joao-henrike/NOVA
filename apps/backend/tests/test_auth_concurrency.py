@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from threading import Barrier
 from uuid import uuid4
 
@@ -130,6 +130,112 @@ def test_concurrent_refresh_attempts_revoke_the_token_family(
                 session.commit()
         settings.auth_jwt_secret_key = original_secret
 
+
+
+def test_refresh_family_cleanup_uses_postgresql_and_preserves_replay_history(
+    postgres_session_factory,
+) -> None:
+    original_secret = settings.auth_jwt_secret_key
+    settings.auth_jwt_secret_key = "refresh-retention-test-secret-" + ("x" * 40)
+    user_id = None
+    active_family_id = None
+    service = AuthService()
+    expired_ancestor_token = "postgres-expired-ancestor-refresh-token"
+    expired_family_id = uuid4()
+
+    try:
+        with postgres_session_factory() as session:
+            user = User(
+                email=f"refresh-retention-{uuid4()}@example.invalid",
+                name="Refresh Retention Test",
+                email_verified=False,
+            )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            user_id = user.id
+
+            _, current_token, _ = service.issue_session(session, user=user)
+            current_record = session.scalar(
+                select(RefreshToken).where(
+                    RefreshToken.token_hash == hash_refresh_token(current_token)
+                )
+            )
+            assert current_record is not None
+            active_family_id = current_record.family_id
+
+            now = datetime.now(UTC)
+            session.add_all(
+                [
+                    RefreshToken(
+                        user_id=user.id,
+                        family_id=active_family_id,
+                        token_hash=hash_refresh_token(expired_ancestor_token),
+                        expires_at=now - timedelta(seconds=1),
+                        revoked_at=now - timedelta(seconds=2),
+                    ),
+                    RefreshToken(
+                        user_id=user.id,
+                        family_id=expired_family_id,
+                        token_hash=hash_refresh_token("postgres-expired-family-a"),
+                        expires_at=now - timedelta(days=1),
+                        revoked_at=now - timedelta(days=2),
+                    ),
+                    RefreshToken(
+                        user_id=user.id,
+                        family_id=expired_family_id,
+                        token_hash=hash_refresh_token("postgres-expired-family-b"),
+                        expires_at=now - timedelta(days=1),
+                        revoked_at=now - timedelta(days=2),
+                    ),
+                ]
+            )
+            session.commit()
+
+            # Issuing a new session runs the cleanup against PostgreSQL.
+            service.issue_session(session, user=user)
+
+            assert session.scalar(
+                select(RefreshToken.id)
+                .where(RefreshToken.family_id == expired_family_id)
+                .limit(1)
+            ) is None
+            assert session.scalar(
+                select(RefreshToken.id)
+                .where(
+                    RefreshToken.family_id == active_family_id,
+                    RefreshToken.token_hash == hash_refresh_token(expired_ancestor_token),
+                )
+                .limit(1)
+            ) is not None
+
+            # The expired ancestor is still recognized as a replay signal
+            # because its family has a token that remains within its lifetime.
+            with pytest.raises(AuthenticationError):
+                service.rotate_refresh_token(
+                    session,
+                    refresh_token=expired_ancestor_token,
+                )
+
+            family_tokens = list(
+                session.scalars(
+                    select(RefreshToken).where(
+                        RefreshToken.family_id == active_family_id
+                    )
+                )
+            )
+            assert family_tokens
+            assert all(token.revoked_at is not None for token in family_tokens)
+
+    finally:
+        if user_id is not None:
+            with postgres_session_factory() as session:
+                session.execute(
+                    delete(RefreshToken).where(RefreshToken.user_id == user_id)
+                )
+                session.execute(delete(User).where(User.id == user_id))
+                session.commit()
+        settings.auth_jwt_secret_key = original_secret
 
 
 def test_concurrent_rate_limit_requests_cannot_exceed_shared_quota(
