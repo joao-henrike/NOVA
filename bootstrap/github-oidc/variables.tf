@@ -88,6 +88,20 @@ variable "github_environment" {
   }
 }
 
+variable "existing_github_oidc_provider_arn" {
+  description = "Optional ARN of an existing GitHub Actions OIDC provider. When set, the stack reads and reuses it without changing audiences or tags."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.existing_github_oidc_provider_arn == "" ||
+      can(regex("^arn:aws:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$", var.existing_github_oidc_provider_arn))
+    )
+    error_message = "existing_github_oidc_provider_arn must be a GitHub Actions IAM OIDC provider ARN."
+  }
+}
+
 variable "role_name" {
   description = "IAM role name used as the AWS_CD_ROLE_ARN repository variable."
   type        = string

@@ -50,11 +50,25 @@ if len(matches) > 1:
 print(matches[0] if matches else "")
 ')"
 
-if [ -n "$provider_arn" ] && ! terraform -chdir="$STACK_DIR" state show aws_iam_openid_connect_provider.github >/dev/null 2>&1; then
-  echo "Importing the existing GitHub OIDC provider into the dedicated local bootstrap state."
-  terraform -chdir="$STACK_DIR" import -input=false -no-color \
-    aws_iam_openid_connect_provider.github "$provider_arn"
+# The GitHub OIDC provider can be shared by other repositories and roles.
+# Reuse it as a read-only data source; never import/update its audiences or tags.
+if [ -n "$provider_arn" ]; then
+  TF_VAR_existing_github_oidc_provider_arn="$provider_arn"
+  export TF_VAR_existing_github_oidc_provider_arn
+  echo "Reusing existing GitHub OIDC provider without changing its audiences or tags."
+else
+  unset TF_VAR_existing_github_oidc_provider_arn
+  echo "No GitHub OIDC provider exists; Terraform will create one for this account."
 fi
+
+# Detach any provider imported by an older version of this bootstrap stack.
+# state rm only removes the management reference; it does not delete the IAM provider.
+for address in 'aws_iam_openid_connect_provider.github' 'aws_iam_openid_connect_provider.github[0]'; do
+  if terraform -chdir="$STACK_DIR" state show "$address" >/dev/null 2>&1; then
+    echo "Detaching previously managed shared OIDC provider from local Terraform state: $address"
+    terraform -chdir="$STACK_DIR" state rm "$address"
+  fi
+done
 
 if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
   if ! terraform -chdir="$STACK_DIR" state show aws_iam_role.github_actions_cd >/dev/null 2>&1; then
@@ -70,7 +84,8 @@ terraform -chdir="$STACK_DIR" plan \
   -out="$PLAN_FILE"
 
 echo
-echo "The plan creates/updates only the GitHub OIDC provider and the NOVA development deployment role."
+echo "The plan reuses an existing GitHub OIDC provider unchanged, or creates it only when missing."
+echo "It creates/updates only the NOVA development deployment role and never deletes a shared OIDC provider."
 echo "No root application infrastructure, databases, or ECS services are changed by this bootstrap."
 terraform -chdir="$STACK_DIR" apply -input=false -auto-approve "$PLAN_FILE"
 

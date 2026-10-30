@@ -50,7 +50,7 @@ aws sts get-caller-identity
 bash scripts/bootstrap-github-oidc-role.sh CREATE_GITHUB_OIDC_ROLE
 ```
 
-The script verifies the AWS account, initializes and validates this stack, imports an existing GitHub OIDC provider if one is already registered, displays the exact role plan, and requires the explicit confirmation phrase before applying.
+The script verifies the AWS account, initializes and validates this stack, and looks for an existing GitHub OIDC provider. If one exists, it reads the provider and reuses its ARN as a Terraform data source; it does not import, update, or retag a shared provider. It creates the provider only if absent. It then displays the exact role plan and requires the explicit confirmation phrase before applying.
 
 After the apply, set the repository Actions variable using the output ARN:
 

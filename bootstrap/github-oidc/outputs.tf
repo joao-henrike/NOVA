@@ -5,7 +5,7 @@ output "github_actions_cd_role_arn" {
 
 output "github_actions_oidc_provider_arn" {
   description = "AWS IAM OIDC identity provider trusted by GitHub Actions."
-  value       = aws_iam_openid_connect_provider.github.arn
+  value       = local.github_oidc_provider_arn
 }
 
 output "github_actions_oidc_subject" {

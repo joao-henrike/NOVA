@@ -54,6 +54,26 @@ locals {
   scalable_target_arn = "arn:aws:application-autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:scalable-target/service/${local.name}-cluster/${local.name}-*"
 }
 
+locals {
+  github_oidc_provider_arn = (
+    var.existing_github_oidc_provider_arn != ""
+    ? data.aws_iam_openid_connect_provider.existing_github[0].arn
+    : aws_iam_openid_connect_provider.github[0].arn
+  )
+  github_oidc_provider_has_sts_audience = (
+    var.existing_github_oidc_provider_arn == "" ||
+    contains(
+      data.aws_iam_openid_connect_provider.existing_github[0].client_id_list,
+      "sts.amazonaws.com",
+    )
+  )
+}
+
+data "aws_iam_openid_connect_provider" "existing_github" {
+  count = var.existing_github_oidc_provider_arn == "" ? 0 : 1
+  arn   = var.existing_github_oidc_provider_arn
+}
+
 data "aws_iam_policy_document" "github_trust" {
   statement {
     sid     = "TrustOnlyNOVADevelopmentEnvironment"
@@ -62,7 +82,7 @@ data "aws_iam_policy_document" "github_trust" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [local.github_oidc_provider_arn]
     }
 
     condition {
@@ -80,6 +100,7 @@ data "aws_iam_policy_document" "github_trust" {
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
+  count          = var.existing_github_oidc_provider_arn == "" ? 1 : 0
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
 
@@ -103,6 +124,11 @@ resource "aws_iam_role" "github_actions_cd" {
     precondition {
       condition     = data.aws_caller_identity.current.account_id == var.expected_account_id
       error_message = "Refusing to create the GitHub Actions role outside the expected CloudStart AWS account."
+    }
+
+    precondition {
+      condition     = local.github_oidc_provider_has_sts_audience
+      error_message = "The existing GitHub OIDC provider must already trust the sts.amazonaws.com audience; this stack will not modify a shared provider."
     }
   }
 }
