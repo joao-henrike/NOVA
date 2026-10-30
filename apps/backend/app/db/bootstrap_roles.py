@@ -190,14 +190,16 @@ def provision_database_roles(
             sql.Identifier(schema_name)
         )
     )
+    # Reconcile existing direct schema ACLs instead of only removing CREATE.
+    # This keeps repeated provisioning safe when a previous grant was broader.
     connection.execute(
-        sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(
+        sql.SQL("REVOKE ALL PRIVILEGES ON SCHEMA {} FROM {}").format(
             sql.Identifier(schema_name),
             sql.Identifier(runtime_role),
         )
     )
     connection.execute(
-        sql.SQL("REVOKE CREATE ON SCHEMA {} FROM {}").format(
+        sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(
             sql.Identifier(schema_name),
             sql.Identifier(runtime_role),
         )
@@ -217,6 +219,21 @@ def provision_database_roles(
         owner_role=migrator_role,
     )
 
+    # Remove stale direct ACLs before granting the exact runtime privilege set.
+    # This prevents a prior TRUNCATE/REFERENCES/TRIGGER/sequence UPDATE grant
+    # from surviving an otherwise idempotent bootstrap run.
+    connection.execute(
+        sql.SQL("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA {} FROM {}").format(
+            sql.Identifier(schema_name),
+            sql.Identifier(runtime_role),
+        )
+    )
+    connection.execute(
+        sql.SQL("REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {} FROM {}").format(
+            sql.Identifier(schema_name),
+            sql.Identifier(runtime_role),
+        )
+    )
     connection.execute(
         sql.SQL(
             "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {} TO {}"
