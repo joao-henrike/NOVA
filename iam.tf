@@ -266,9 +266,9 @@ data "aws_iam_policy_document" "ecs_monitoring_execution_permissions" {
   }
 
   statement {
-    sid       = "ReadMonitoringSecrets"
-    effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
+    sid     = "ReadMonitoringSecrets"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
     resources = [
       aws_db_instance.monitoring.master_user_secret[0].secret_arn,
       aws_secretsmanager_secret.grafana_admin.arn
