@@ -243,6 +243,27 @@ data "aws_iam_policy_document" "github_cd_permissions" {
   }
 
   statement {
+    sid    = "CreateOnlyRequiredECSServiceLinkedRoles"
+    effect = "Allow"
+    actions = [
+      "iam:CreateServiceLinkedRole",
+    ]
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService",
+    ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:AWSServiceName"
+      values = [
+        "ecs.amazonaws.com",
+        "ecs.application-autoscaling.amazonaws.com",
+      ]
+    }
+  }
+
+  statement {
     sid    = "RegisterNOVAApplicationTaskDefinitions"
     effect = "Allow"
     actions = [
