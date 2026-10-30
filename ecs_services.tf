@@ -83,10 +83,14 @@ resource "aws_ecs_task_definition" "backend" {
           trimspace(var.db_runtime_secret_arn) != "" &&
           trimspace(var.db_migrator_secret_arn) != "" &&
           var.db_runtime_username != var.db_migrator_username &&
-          var.db_runtime_username != var.db_username
+          var.db_runtime_username != var.db_username &&
+          var.db_migrator_username != var.db_username &&
+          var.db_runtime_secret_arn != var.db_migrator_secret_arn &&
+          var.db_runtime_secret_arn != aws_db_instance.this.master_user_secret[0].secret_arn &&
+          var.db_migrator_secret_arn != aws_db_instance.this.master_user_secret[0].secret_arn
         )
       )
-      error_message = "Application deployment requires distinct runtime/migrator PostgreSQL identities and their Secrets Manager ARNs, plus backend_auth_secret_arn."
+      error_message = "Application deployment requires three distinct PostgreSQL usernames, three distinct database password secrets, and backend_auth_secret_arn."
     }
   }
 
@@ -203,10 +207,16 @@ resource "aws_ecs_task_definition" "db_bootstrap" {
         !var.deploy_application ||
         (
           trimspace(var.db_runtime_secret_arn) != "" &&
-          trimspace(var.db_migrator_secret_arn) != ""
+          trimspace(var.db_migrator_secret_arn) != "" &&
+          var.db_runtime_username != var.db_migrator_username &&
+          var.db_runtime_username != var.db_username &&
+          var.db_migrator_username != var.db_username &&
+          var.db_runtime_secret_arn != var.db_migrator_secret_arn &&
+          var.db_runtime_secret_arn != aws_db_instance.this.master_user_secret[0].secret_arn &&
+          var.db_migrator_secret_arn != aws_db_instance.this.master_user_secret[0].secret_arn
         )
       )
-      error_message = "The database bootstrap task requires runtime and migrator Secrets Manager ARNs before application deployment."
+      error_message = "Database bootstrap requires distinct master/runtime/migrator usernames and distinct Secrets Manager password ARNs before application deployment."
     }
   }
 
