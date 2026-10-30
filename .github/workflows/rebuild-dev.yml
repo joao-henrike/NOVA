@@ -398,6 +398,7 @@ jobs:
             -no-color \
             -var-file=config/dev.tfvars \
             -var='deploy_application=true' \
+            -var='start_application_services=false' \
             -var="frontend_image_tag=$IMAGE_TAG" \
             -var="backend_image_tag=$IMAGE_TAG" \
             -out="$RUNNER_TEMP/application.tfplan"
@@ -474,6 +475,9 @@ jobs:
           run_one_off_task "$(terraform output -raw db_bootstrap_task_definition_arn)" "db-bootstrap" "database role bootstrap"
           run_one_off_task "$(terraform output -raw db_migration_task_definition_arn)" "db-migration" "Alembic migrations"
           run_one_off_task "$(terraform output -raw db_bootstrap_task_definition_arn)" "db-bootstrap" "post-migration runtime grants"
+
+      - name: Activate application revisions after database migrations
+        run: bash scripts/activate-application-services.sh
 
       - name: Development smoke tests
         shell: bash

@@ -197,6 +197,7 @@ jobs:
           TF_VAR_environment: ${{ env.DEPLOY_ENVIRONMENT }}
           TF_VAR_aws_region: ${{ env.AWS_REGION }}
           TF_VAR_deploy_application: "true"
+          TF_VAR_start_application_services: "false"
           TF_VAR_frontend_image_tag: ${{ github.sha }}
           TF_VAR_backend_image_tag: ${{ github.sha }}
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
@@ -228,7 +229,7 @@ jobs:
       - name: Apply exact plan
         run: terraform apply -input=false -auto-approve cd.tfplan
 
-      - name: Wait for application and monitoring services
+      - name: Wait for current application and monitoring services
         run: |
           set -euo pipefail
           aws ecs wait services-stable \
@@ -284,6 +285,9 @@ jobs:
           run_one_off_task "$(terraform output -raw db_bootstrap_task_definition_arn)" "db-bootstrap" "database role bootstrap"
           run_one_off_task "$(terraform output -raw db_migration_task_definition_arn)" "db-migration" "Alembic migrations"
           run_one_off_task "$(terraform output -raw db_bootstrap_task_definition_arn)" "db-bootstrap" "post-migration runtime grants"
+
+      - name: Activate new application revisions after database migrations
+        run: bash scripts/activate-application-services.sh
 
       - name: Development smoke tests
         run: |

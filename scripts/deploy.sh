@@ -194,6 +194,7 @@ terraform plan \
   -no-color \
   -var-file="$TFVARS_FILE" \
   -var='deploy_application=true' \
+  -var='start_application_services=false' \
   -var="frontend_image_tag=$IMAGE_TAG" \
   -var="backend_image_tag=$IMAGE_TAG" \
   -out="$APPLICATION_PLAN"
@@ -282,6 +283,15 @@ run_one_off_database_task \
   "$(terraform output -raw db_bootstrap_task_definition_arn)" \
   "db-bootstrap" \
   "post-migration runtime grants"
+
+log "Activating frontend/backend revisions after database migrations"
+bash "$ROOT_DIR/scripts/activate-application-services.sh"
+
+log "Waiting for application and monitoring ECS services to stabilize"
+aws ecs wait services-stable \
+  --cluster "$cluster" \
+  --services "$frontend_service" "$backend_service" "$monitoring_service" \
+  --region "$AWS_REGION"
 
 log "Running ALB smoke tests"
 base_url="$(terraform output -raw alb_application_url)"
