@@ -8,9 +8,10 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 from app.core.security import hash_refresh_token
-from app.models.auth import RefreshToken
+from app.models.auth import AuthRateLimitBucket, RefreshToken
 from app.models.user import User
 from app.services.auth import AuthenticationError, AuthService
+from app.services.rate_limit import RateLimitExceeded, _bucket_key, check_rate_limit
 
 
 @pytest.fixture
@@ -126,4 +127,58 @@ def test_concurrent_refresh_attempts_revoke_the_token_family(
                 )
                 session.execute(delete(User).where(User.id == user_id))
                 session.commit()
+        settings.auth_jwt_secret_key = original_secret
+
+
+
+def test_concurrent_rate_limit_requests_cannot_exceed_shared_quota(
+    postgres_session_factory,
+) -> None:
+    original_secret = settings.auth_jwt_secret_key
+    settings.auth_jwt_secret_key = "rate-limit-concurrency-secret-" + ("x" * 40)
+
+    client_ip = f"198.51.100.{(uuid4().int % 240) + 10}"
+    scope = f"rate-limit-concurrency-{uuid4()}"
+    request_count = 12
+    allowed_limit = 4
+    barrier = Barrier(request_count)
+    bucket_key = _bucket_key(scope=scope, client_ip=client_ip)
+
+    try:
+        def attempt_request() -> str:
+            with postgres_session_factory() as session:
+                barrier.wait(timeout=10)
+                try:
+                    check_rate_limit(
+                        session,
+                        scope=scope,
+                        client_ip=client_ip,
+                        limit=allowed_limit,
+                        window_seconds=300,
+                    )
+                    return "accepted"
+                except RateLimitExceeded:
+                    return "blocked"
+
+        with ThreadPoolExecutor(max_workers=request_count) as executor:
+            futures = [
+                executor.submit(attempt_request)
+                for _ in range(request_count)
+            ]
+            outcomes = [future.result(timeout=30) for future in futures]
+
+        assert outcomes.count("accepted") == allowed_limit
+        assert outcomes.count("blocked") == request_count - allowed_limit
+
+        with postgres_session_factory() as session:
+            bucket = session.get(AuthRateLimitBucket, bucket_key)
+            assert bucket is not None
+            assert bucket.request_count == request_count
+
+    finally:
+        with postgres_session_factory() as session:
+            session.query(AuthRateLimitBucket).filter(
+                AuthRateLimitBucket.bucket_key == bucket_key
+            ).delete(synchronize_session=False)
+            session.commit()
         settings.auth_jwt_secret_key = original_secret
