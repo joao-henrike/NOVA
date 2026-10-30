@@ -226,52 +226,41 @@ This GitHub authentication layer is also intentionally **not implemented yet**.
 
 ## 9. Terraform remote state
 
-The root Terraform configuration uses an S3 backend with the S3 lockfile mechanism.
+The root Terraform configuration uses an S3 backend with S3-native lockfiles. The bucket is created by the separate bootstrap stack when it is missing.
 
-The repository also contains a separate bootstrap stack under:
-
-```text
-bootstrap/
-```
-
-The bootstrap stack creates the remote state infrastructure. It must be run only when the state bucket does not already exist or when intentionally rebuilding state infrastructure.
-
-Example:
+For the current development environment, source the non-sensitive metadata and run the safe state helper:
 
 ```bash
-cp bootstrap/terraform.tfvars.example bootstrap/terraform.tfvars
+set -a
+source config/dev.env
+set +a
+scripts/ensure-terraform-state.sh
 ```
 
-Set a unique bucket name, then:
+The helper verifies the AWS account, expected bucket owner, and region. It reuses a matching bucket, bootstraps missing resources only when the bucket is confirmed absent, and fails closed if ownership or access cannot be verified.
 
-```bash
-terraform -chdir=bootstrap init
-terraform -chdir=bootstrap validate
-terraform -chdir=bootstrap plan
-terraform -chdir=bootstrap apply
-```
+The bootstrap creates the versioned/encrypted S3 bucket, full public-access-block settings, ownership controls, secure-transport policy, lifecycle rules, and a DynamoDB compatibility table. The root backend uses S3 lockfiles; it does not use the DynamoDB table for locking. The bootstrap stack itself keeps local state, which must be protected and never committed.
 
-Do not commit `bootstrap/terraform.tfvars`.
+For deliberate manual bootstrap in a new/custom environment only, first configure bootstrap/terraform.tfvars from its example and run terraform with backend disabled. Do not run a second bootstrap against an existing bucket merely to recreate its state. Prefer the shared helper for the current development bucket.
 
 ## 10. Initialize the root backend
 
-After the state bucket exists:
+After the state helper confirms that the bucket exists:
 
 ```bash
-export TF_STATE_BUCKET="your-existing-state-bucket"
-
-make tf-init
+set -a
+source config/dev.env
+set +a
+terraform init \
+  -backend-config="bucket=$TF_STATE_BUCKET" \
+  -backend-config="region=$AWS_REGION" \
+  -backend-config="key=$TF_STATE_KEY" \
+  -reconfigure -input=false
 ```
 
-This configures:
+The Makefile target make tf-init can initialize an already-existing bucket, but it does not call the bootstrap helper. make deploy runs the helper automatically as part of its end-to-end deployment path.
 
-```text
-S3 remote state
-S3 lockfile
-encrypted state
-```
-
-Verify:
+Verify state access:
 
 ```bash
 terraform state list
