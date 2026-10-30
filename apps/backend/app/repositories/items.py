@@ -53,8 +53,9 @@ class ItemRepository:
         item = Item(user_id=user_id, **data.model_dump())
         try:
             session.add(item)
-            session.commit()
+            session.flush()
             session.refresh(item)
+            session.commit()
             return item
         except SQLAlchemyError:
             session.rollback()
@@ -76,8 +77,9 @@ class ItemRepository:
             for field, value in data.model_dump(exclude_unset=True).items():
                 setattr(item, field, value)
 
-            session.commit()
+            session.flush()
             session.refresh(item)
+            session.commit()
             return item
         except SQLAlchemyError:
             session.rollback()

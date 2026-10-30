@@ -88,9 +88,10 @@ class ItemRepositoryTest(unittest.TestCase):
             )
 
         session.add.assert_called_once()
+        session.flush.assert_called_once()
+        session.refresh.assert_called_once()
         session.commit.assert_called_once()
         session.rollback.assert_called_once()
-        session.refresh.assert_not_called()
 
     def test_update_rolls_back_when_commit_fails(self) -> None:
         item = Item(
@@ -112,9 +113,51 @@ class ItemRepositoryTest(unittest.TestCase):
             )
 
         self.assertEqual(item.name, "After update")
+        session.flush.assert_called_once()
+        session.refresh.assert_called_once()
         session.commit.assert_called_once()
         session.rollback.assert_called_once()
-        session.refresh.assert_not_called()
+
+    def test_create_rolls_back_when_refresh_fails_before_commit(self) -> None:
+        session = Mock(spec=Session)
+        session.refresh.side_effect = SQLAlchemyError("refresh failed")
+
+        with self.assertRaisesRegex(SQLAlchemyError, "refresh failed"):
+            self.repository.create(
+                session,
+                user_id=self.user_id,
+                data=ItemCreate(name="Refresh rollback create"),
+            )
+
+        session.add.assert_called_once()
+        session.flush.assert_called_once()
+        session.refresh.assert_called_once()
+        session.commit.assert_not_called()
+        session.rollback.assert_called_once()
+
+    def test_update_rolls_back_when_refresh_fails_before_commit(self) -> None:
+        item = Item(
+            id=uuid4(),
+            user_id=self.user_id,
+            name="Before refresh failure",
+            status=ItemStatus.ACTIVE,
+        )
+        session = Mock(spec=Session)
+        session.scalar.return_value = item
+        session.refresh.side_effect = SQLAlchemyError("refresh failed")
+
+        with self.assertRaisesRegex(SQLAlchemyError, "refresh failed"):
+            self.repository.update(
+                session,
+                item.id,
+                user_id=self.user_id,
+                data=ItemUpdate(name="Updated before refresh failure"),
+            )
+
+        session.flush.assert_called_once()
+        session.refresh.assert_called_once_with(item)
+        session.commit.assert_not_called()
+        session.rollback.assert_called_once()
 
     def test_delete_rolls_back_when_commit_fails(self) -> None:
         item = Item(
