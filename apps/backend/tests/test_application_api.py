@@ -498,7 +498,10 @@ class ApplicationApiTest(unittest.TestCase):
                 "/api/auth/refresh",
                 json={"refresh_token": "not-a-valid-refresh-token"},
             )
-            logout_response = self.client.post("/api/auth/logout")
+            logout_response = self.client.post(
+                "/api/auth/logout",
+                json={"refresh_token": "invalid-rate-limit-test-token"},
+            )
 
         self.assertEqual(blocked_refresh.status_code, 429)
         self.assertEqual(logout_response.status_code, 204)
