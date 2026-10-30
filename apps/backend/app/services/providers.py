@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any
 from urllib.parse import urlencode
 
@@ -111,7 +111,7 @@ def verify_google_id_token(
     try:
         claims = id_token.verify_oauth2_token(
             token,
-            Request(timeout=10),
+            partial(Request(), timeout=10),
             settings.google_client_id,
         )
     except (ValueError, TransportError) as exc:

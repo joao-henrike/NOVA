@@ -64,7 +64,7 @@ class ProviderSettingsTest(unittest.TestCase):
         self.assertEqual(result, claims)
         verify.assert_called_once()
         self.assertEqual(verify.call_args.args[2], "google-client-id")
-        self.assertEqual(verify.call_args.args[1].timeout, 10)
+        self.assertEqual(verify.call_args.args[1].keywords["timeout"], 10)
 
     @patch("app.services.providers.id_token.verify_oauth2_token")
     def test_google_id_token_rejects_wrong_nonce(self, verify) -> None:
