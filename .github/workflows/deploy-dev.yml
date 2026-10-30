@@ -4,7 +4,18 @@ on:
   push:
     branches: [Joao]
     paths:
-      - "apps/**"
+      # Ship only files that alter the deployed frontend/backend image or schema.
+      # Unit tests, test fixtures, and documentation must not trigger a cloud deployment.
+      - "apps/backend/app/**"
+      - "apps/backend/alembic/**"
+      - "apps/backend/alembic.ini"
+      - "apps/backend/Dockerfile"
+      - "apps/backend/.dockerignore"
+      - "apps/backend/requirements.txt"
+      - "apps/frontend/public/**"
+      - "apps/frontend/Dockerfile"
+      - "apps/frontend/.dockerignore"
+      - "apps/frontend/nginx.conf"
       - "docker-compose.yml"
       - "scripts/provision-db-credentials.sh"
       - ".github/workflows/deploy-dev.yml"
