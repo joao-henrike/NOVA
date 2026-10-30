@@ -286,6 +286,65 @@ class ApplicationApiTest(unittest.TestCase):
                 .one_or_none()
             )
 
+    def test_oauth_state_can_only_be_consumed_once(self) -> None:
+        state = f"one-time-{uuid4()}"
+
+        with self.session_factory() as session:
+            service = AuthService()
+            service.create_oauth_state(
+                session,
+                provider=AuthProvider.GOOGLE,
+                state=state,
+                nonce="one-time-nonce",
+                code_verifier="one-time-verifier",
+                redirect_uri="https://cloudstart.example.com/callback",
+            )
+
+            first_use = service.consume_oauth_state(
+                session,
+                provider=AuthProvider.GOOGLE,
+                state=state,
+            )
+            replay = service.consume_oauth_state(
+                session,
+                provider=AuthProvider.GOOGLE,
+                state=state,
+            )
+
+        self.assertIsNotNone(first_use)
+        self.assertEqual(first_use.state, state)
+        self.assertIsNone(replay)
+
+    def test_expired_oauth_state_is_rejected_and_deleted(self) -> None:
+        state = f"expired-callback-{uuid4()}"
+
+        with self.session_factory() as session:
+            session.add(
+                OAuthState(
+                    provider=AuthProvider.GOOGLE,
+                    state=state,
+                    nonce="expired-nonce",
+                    code_verifier="expired-verifier",
+                    redirect_uri="https://cloudstart.example.com/callback",
+                    expires_at=datetime.now(UTC) - timedelta(seconds=1),
+                )
+            )
+            session.commit()
+
+            consumed = AuthService().consume_oauth_state(
+                session,
+                provider=AuthProvider.GOOGLE,
+                state=state,
+            )
+            remaining = (
+                session.query(OAuthState)
+                .filter(OAuthState.state == state)
+                .one_or_none()
+            )
+
+        self.assertIsNone(consumed)
+        self.assertIsNone(remaining)
+
     def test_missing_user_is_rejected(self) -> None:
         token, _ = create_access_token(uuid4(), uuid4())
         response = self.client.get(
