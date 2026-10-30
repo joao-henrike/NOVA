@@ -200,7 +200,7 @@ jobs:
           TF_VAR_frontend_image_tag: ${{ github.sha }}
           TF_VAR_backend_image_tag: ${{ github.sha }}
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-        run: terraform plan -refresh=true -lock=true -input=false -var-file=config/dev.tfvars -var='deploy_application=true' -var="frontend_image_tag=$GITHUB_SHA" -var="backend_image_tag=$GITHUB_SHA" -out=cd.tfplan -no-color
+        run: terraform plan -refresh=true -lock=true -input=false -var-file=config/dev.tfvars -var="aws_region=$AWS_REGION" -var='deploy_application=true' -var="frontend_image_tag=$GITHUB_SHA" -var="backend_image_tag=$GITHUB_SHA" -out=cd.tfplan -no-color
 
       - name: Guard application-only plan
         run: |
