@@ -2,58 +2,57 @@ data "aws_caller_identity" "current" {}
 
 locals {
   name                 = "${var.project_name}-${var.environment}"
-  github_oidc_subject  = "repo:joao-henrike@\${var.github_owner_id}/NOVA@\${var.github_repository_id}:environment:\${var.github_environment}"
-  state_bucket_arn     = "arn:aws:s3:::\${var.state_bucket_name}"
+  github_oidc_subject  = "repo:joao-henrike@${var.github_owner_id}/NOVA@${var.github_repository_id}:environment:${var.github_environment}"
+  state_bucket_arn     = "arn:aws:s3:::${var.state_bucket_name}"
   state_file_arns      = [
-    "\${local.state_bucket_arn}/\${var.state_key}",
-    "\${local.state_bucket_arn}/\${var.state_key}.tflock",
+    "${local.state_bucket_arn}/${var.state_key}",
+    "${local.state_bucket_arn}/${var.state_key}.tflock",
   ]
   ecr_repository_arns = [
-    "arn:aws:ecr:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:repository/\${local.name}-frontend",
-    "arn:aws:ecr:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:repository/\${local.name}-backend",
+    "arn:aws:ecr:${var.aws_region}:${data.aws_caller_identity.current.account_id}:repository/${local.name}-frontend",
+    "arn:aws:ecr:${var.aws_region}:${data.aws_caller_identity.current.account_id}:repository/${local.name}-backend",
   ]
   secret_names = [
-    "\${local.name}/database/runtime",
-    "\${local.name}/database/migrator",
-    "\${local.name}/backend/authentication",
+    "${local.name}/database/runtime",
+    "${local.name}/database/migrator",
+    "${local.name}/backend/authentication",
   ]
   secret_arns = [
     for secret_name in local.secret_names :
-    "arn:aws:secretsmanager:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:secret:\${secret_name}-*"
+    "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${secret_name}-*"
   ]
-  ecs_cluster_arn = "arn:aws:ecs:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:cluster/\${local.name}-cluster"
-  ecs_task_definition_arn = "arn:aws:ecs:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:task-definition/\${local.name}-*:*"
+  ecs_cluster_arn = "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:cluster/${local.name}-cluster"
+  ecs_task_definition_arn = "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/${local.name}-*:*"
   ecs_one_off_task_definition_arns = [
-    "arn:aws:ecs:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:task-definition/\${local.name}-db-bootstrap:*",
-    "arn:aws:ecs:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:task-definition/\${local.name}-db-migration:*",
+    "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/${local.name}-db-bootstrap:*",
+    "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/${local.name}-db-migration:*",
   ]
   ecs_service_arns = [
-    "arn:aws:ecs:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:service/\${local.name}-cluster/\${local.name}-frontend",
-    "arn:aws:ecs:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:service/\${local.name}-cluster/\${local.name}-backend",
-    "arn:aws:ecs:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:service/\${local.name}-cluster/\${local.name}-monitoring",
+    "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${local.name}-cluster/${local.name}-frontend",
+    "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${local.name}-cluster/${local.name}-backend",
+    "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${local.name}-cluster/${local.name}-monitoring",
   ]
-  ecs_task_arn = "arn:aws:ecs:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:task/\${local.name}-cluster/*"
   ecs_execution_role_arns = [
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-execution",
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-backend-execution",
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-migration-execution",
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-db-bootstrap-execution",
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-monitoring-execution",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-execution",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-backend-execution",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-migration-execution",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-db-bootstrap-execution",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-monitoring-execution",
   ]
   ecs_mutable_role_arns = [
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-backend-execution",
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-migration-execution",
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-db-bootstrap-execution",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-backend-execution",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-migration-execution",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-db-bootstrap-execution",
   ]
   ecs_pass_role_arns = concat(local.ecs_execution_role_arns, [
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-frontend-task",
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-backend-task",
-    "arn:aws:iam::\${data.aws_caller_identity.current.account_id}:role/\${local.name}-ecs-monitoring-task",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-frontend-task",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-backend-task",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-monitoring-task",
   ])
-  log_group_arn = "arn:aws:logs:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:log-group:/ecs/\${local.name}/*:*"
-  security_group_arn = "arn:aws:ec2:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:security-group/*"
-  security_group_rule_arn = "arn:aws:ec2:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:security-group-rule/*"
-  scalable_target_arn = "arn:aws:application-autoscaling:\${var.aws_region}:\${data.aws_caller_identity.current.account_id}:scalable-target/service/\${local.name}-cluster/\${local.name}-*"
+  log_group_arn = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${local.name}/*:*"
+  security_group_arn = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/*"
+  security_group_rule_arn = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group-rule/*"
+  scalable_target_arn = "arn:aws:application-autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:scalable-target/service/${local.name}-cluster/${local.name}-*"
 }
 
 data "aws_iam_policy_document" "github_trust" {
@@ -210,17 +209,25 @@ data "aws_iam_policy_document" "github_cd_permissions" {
   }
 
   statement {
-    sid    = "ManageOnlyNOVAECSTaskExecutionRoles"
+    sid    = "CreateAndTrustOnlyNamedNOVAExecutionRoles"
     effect = "Allow"
     actions = [
       "iam:CreateRole",
       "iam:UpdateAssumeRolePolicy",
-      "iam:PutRolePolicy",
-      "iam:DeleteRolePolicy",
       "iam:TagRole",
       "iam:UntagRole",
     ]
     resources = local.ecs_mutable_role_arns
+  }
+
+  statement {
+    sid    = "UpdateOnlyNOVAExecutionRoleInlinePolicies"
+    effect = "Allow"
+    actions = [
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+    ]
+    resources = local.ecs_execution_role_arns
   }
 
   statement {
@@ -269,7 +276,7 @@ data "aws_iam_policy_document" "github_cd_permissions" {
     sid       = "RunOnlyDatabaseBootstrapAndMigrationTasks"
     effect    = "Allow"
     actions   = ["ecs:RunTask", "ecs:TagResource"]
-    resources = concat(local.ecs_one_off_task_definition_arns, [local.ecs_cluster_arn])
+    resources = local.ecs_one_off_task_definition_arns
 
     condition {
       test     = "ArnEquals"
