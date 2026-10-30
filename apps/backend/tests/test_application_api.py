@@ -19,6 +19,7 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.auth import AuthIdentity, OAuthState, RefreshToken
+from app.models.item import Item
 from app.models.user import User
 from app.services.providers import (
     apple_authorization_url,
@@ -75,14 +76,15 @@ class ApplicationApiTest(unittest.TestCase):
         with self.session_factory() as session:
             session.query(RefreshToken).delete(synchronize_session=False)
             session.query(OAuthState).delete(synchronize_session=False)
+            session.query(Item).delete(synchronize_session=False)
             session.query(AuthIdentity).delete(synchronize_session=False)
             session.query(User).filter(User.id != self.user_id).delete(
                 synchronize_session=False,
             )
             session.commit()
 
-    def _auth_headers(self) -> dict[str, str]:
-        token, _ = create_access_token(self.user_id)
+    def _auth_headers(self, user_id=None) -> dict[str, str]:
+        token, _ = create_access_token(user_id or self.user_id)
         return {"Authorization": f"Bearer {token}"}
 
     def test_items_requires_authentication(self) -> None:
@@ -132,6 +134,57 @@ class ApplicationApiTest(unittest.TestCase):
 
         missing = self.client.get(f"/api/items/{item_id}", headers=headers)
         self.assertEqual(missing.status_code, 404)
+
+    def test_items_are_isolated_between_users(self) -> None:
+        with self.session_factory() as session:
+            other_user = User(
+                email=f"other-{uuid4()}@example.com",
+                name="Other User",
+                email_verified=True,
+            )
+            session.add(other_user)
+            session.commit()
+            session.refresh(other_user)
+            other_user_id = other_user.id
+
+        owner_headers = self._auth_headers()
+        other_headers = self._auth_headers(other_user_id)
+
+        created = self.client.post(
+            "/api/items",
+            json={"name": "Private owner item"},
+            headers=owner_headers,
+        )
+        self.assertEqual(created.status_code, 201)
+        item_id = created.json()["id"]
+
+        other_list = self.client.get("/api/items", headers=other_headers)
+        self.assertEqual(other_list.status_code, 200)
+        self.assertEqual(other_list.json(), [])
+
+        self.assertEqual(
+            self.client.get(f"/api/items/{item_id}", headers=other_headers).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.patch(
+                f"/api/items/{item_id}",
+                json={"name": "Unauthorized change"},
+                headers=other_headers,
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.delete(
+                f"/api/items/{item_id}",
+                headers=other_headers,
+            ).status_code,
+            404,
+        )
+
+        owner_read = self.client.get(f"/api/items/{item_id}", headers=owner_headers)
+        self.assertEqual(owner_read.status_code, 200)
+        self.assertEqual(owner_read.json()["name"], "Private owner item")
 
     def test_missing_user_is_rejected(self) -> None:
         token, _ = create_access_token(uuid4())

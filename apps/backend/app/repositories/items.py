@@ -13,12 +13,14 @@ class ItemRepository:
         self,
         session: Session,
         *,
+        user_id: UUID,
         offset: int = 0,
         limit: int = 50,
         status: ItemStatus | None = None,
     ) -> list[Item]:
         statement = (
             select(Item)
+            .where(Item.user_id == user_id)
             .order_by(Item.created_at.desc(), Item.id.desc())
             .offset(offset)
             .limit(limit)
@@ -28,11 +30,27 @@ class ItemRepository:
 
         return list(session.scalars(statement))
 
-    def get(self, session: Session, item_id: UUID) -> Item | None:
-        return session.get(Item, item_id)
+    def get(
+        self,
+        session: Session,
+        item_id: UUID,
+        *,
+        user_id: UUID,
+    ) -> Item | None:
+        statement = select(Item).where(
+            Item.id == item_id,
+            Item.user_id == user_id,
+        )
+        return session.scalar(statement)
 
-    def create(self, session: Session, data: ItemCreate) -> Item:
-        item = Item(**data.model_dump())
+    def create(
+        self,
+        session: Session,
+        *,
+        user_id: UUID,
+        data: ItemCreate,
+    ) -> Item:
+        item = Item(user_id=user_id, **data.model_dump())
         try:
             session.add(item)
             session.commit()
@@ -42,7 +60,18 @@ class ItemRepository:
             session.rollback()
             raise
 
-    def update(self, session: Session, item: Item, data: ItemUpdate) -> Item:
+    def update(
+        self,
+        session: Session,
+        item_id: UUID,
+        *,
+        user_id: UUID,
+        data: ItemUpdate,
+    ) -> Item | None:
+        item = self.get(session, item_id, user_id=user_id)
+        if item is None:
+            return None
+
         try:
             for field, value in data.model_dump(exclude_unset=True).items():
                 setattr(item, field, value)
@@ -54,10 +83,21 @@ class ItemRepository:
             session.rollback()
             raise
 
-    def delete(self, session: Session, item: Item) -> None:
+    def delete(
+        self,
+        session: Session,
+        item_id: UUID,
+        *,
+        user_id: UUID,
+    ) -> bool:
+        item = self.get(session, item_id, user_id=user_id)
+        if item is None:
+            return False
+
         try:
             session.delete(item)
             session.commit()
+            return True
         except SQLAlchemyError:
             session.rollback()
             raise

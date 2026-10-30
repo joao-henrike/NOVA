@@ -21,11 +21,11 @@ def list_items(
     item_status: ItemStatus | None = Query(default=None, alias="status"),
     db: Session = Depends(get_db),
 ) -> list[ItemRead]:
-    del current_user
     return [
         ItemRead.model_validate(item)
         for item in service.list(
             db,
+            user_id=current_user.id,
             offset=offset,
             limit=limit,
             status=item_status,
@@ -39,8 +39,9 @@ def create_item(
     current_user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> ItemRead:
-    del current_user
-    return ItemRead.model_validate(service.create(db, data))
+    return ItemRead.model_validate(
+        service.create(db, user_id=current_user.id, data=data)
+    )
 
 
 @router.get("/{item_id}", response_model=ItemRead)
@@ -49,9 +50,10 @@ def get_item(
     current_user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> ItemRead:
-    del current_user
     try:
-        return ItemRead.model_validate(service.get(db, item_id))
+        return ItemRead.model_validate(
+            service.get(db, item_id, user_id=current_user.id)
+        )
     except ItemNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Item not found") from exc
 
@@ -63,12 +65,18 @@ def update_item(
     current_user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> ItemRead:
-    del current_user
     if not data.model_dump(exclude_unset=True):
         raise HTTPException(status_code=400, detail="No fields to update")
 
     try:
-        return ItemRead.model_validate(service.update(db, item_id, data))
+        return ItemRead.model_validate(
+            service.update(
+                db,
+                item_id,
+                user_id=current_user.id,
+                data=data,
+            )
+        )
     except ItemNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Item not found") from exc
 
@@ -79,8 +87,7 @@ def delete_item(
     current_user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> None:
-    del current_user
     try:
-        service.delete(db, item_id)
+        service.delete(db, item_id, user_id=current_user.id)
     except ItemNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Item not found") from exc
