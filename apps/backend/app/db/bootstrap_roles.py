@@ -95,6 +95,41 @@ def _revoke_role_memberships(
         )
 
 
+def _set_current_user_role_option(
+    connection: psycopg.Connection,
+    *,
+    role_name: str,
+    can_set: bool,
+) -> None:
+    """Temporarily allow the bootstrap identity to assume the migrator role."""
+    option = sql.SQL("TRUE" if can_set else "FALSE")
+    connection.execute(
+        sql.SQL(
+            "GRANT {} TO CURRENT_USER WITH SET {}, INHERIT FALSE"
+        ).format(sql.Identifier(role_name), option)
+    )
+
+    membership = connection.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM pg_auth_members AS membership
+            JOIN pg_roles AS granted_role ON granted_role.oid = membership.roleid
+            JOIN pg_roles AS member_role ON member_role.oid = membership.member
+            WHERE granted_role.rolname = %s
+              AND member_role.rolname = current_user
+              AND membership.set_option = %s
+        )
+        """,
+        (role_name, can_set),
+    ).fetchone()
+    if membership is None or not membership[0]:
+        expected = "enabled" if can_set else "disabled"
+        raise RuntimeError(
+            f"Unable to ensure SET ROLE is {expected} for the bootstrap identity and {role_name}."
+        )
+
+
 def _transfer_schema_objects(
     connection: psycopg.Connection,
     *,
@@ -103,13 +138,15 @@ def _transfer_schema_objects(
 ) -> None:
     tables = connection.execute(
         """
-        SELECT tablename
+        SELECT tablename, tableowner
         FROM pg_tables
         WHERE schemaname = %s
         """,
         (schema_name,),
     ).fetchall()
-    for (table_name,) in tables:
+    for table_name, current_owner in tables:
+        if current_owner == owner_role:
+            continue
         connection.execute(
             sql.SQL("ALTER TABLE {}.{} OWNER TO {}").format(
                 sql.Identifier(schema_name),
@@ -120,14 +157,16 @@ def _transfer_schema_objects(
 
     sequences = connection.execute(
         """
-        SELECT c.relname
+        SELECT c.relname, pg_get_userbyid(c.relowner)
         FROM pg_class AS c
         JOIN pg_namespace AS n ON n.oid = c.relnamespace
         WHERE n.nspname = %s AND c.relkind = 'S'
         """,
         (schema_name,),
     ).fetchall()
-    for (sequence_name,) in sequences:
+    for sequence_name, current_owner in sequences:
+        if current_owner == owner_role:
+            continue
         connection.execute(
             sql.SQL("ALTER SEQUENCE {}.{} OWNER TO {}").format(
                 sql.Identifier(schema_name),
@@ -138,13 +177,16 @@ def _transfer_schema_objects(
 
     views = connection.execute(
         """
-        SELECT table_name
-        FROM information_schema.views
-        WHERE table_schema = %s
+        SELECT c.relname, pg_get_userbyid(c.relowner)
+        FROM pg_class AS c
+        JOIN pg_namespace AS n ON n.oid = c.relnamespace
+        WHERE n.nspname = %s AND c.relkind = 'v'
         """,
         (schema_name,),
     ).fetchall()
-    for (view_name,) in views:
+    for view_name, current_owner in views:
+        if current_owner == owner_role:
+            continue
         connection.execute(
             sql.SQL("ALTER VIEW {}.{} OWNER TO {}").format(
                 sql.Identifier(schema_name),
@@ -155,14 +197,16 @@ def _transfer_schema_objects(
 
     materialized_views = connection.execute(
         """
-        SELECT c.relname
+        SELECT c.relname, pg_get_userbyid(c.relowner)
         FROM pg_class AS c
         JOIN pg_namespace AS n ON n.oid = c.relnamespace
         WHERE n.nspname = %s AND c.relkind = 'm'
         """,
         (schema_name,),
     ).fetchall()
-    for (view_name,) in materialized_views:
+    for view_name, current_owner in materialized_views:
+        if current_owner == owner_role:
+            continue
         connection.execute(
             sql.SQL("ALTER MATERIALIZED VIEW {}.{} OWNER TO {}").format(
                 sql.Identifier(schema_name),
@@ -217,6 +261,15 @@ def provision_database_roles(
     _revoke_role_memberships(connection, role_name=runtime_role)
     _revoke_role_memberships(connection, role_name=migrator_role)
 
+    # PostgreSQL 16 grants CREATEROLE administrators ADMIN OPTION but not SET
+    # OPTION on roles they create. Temporarily enable SET so this identity can
+    # transfer object ownership and then administer ACLs as the new owner.
+    _set_current_user_role_option(
+        connection,
+        role_name=migrator_role,
+        can_set=True,
+    )
+
     connection.execute(
         sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
             sql.Identifier(database_name),
@@ -264,6 +317,12 @@ def provision_database_roles(
         connection,
         schema_name=schema_name,
         owner_role=migrator_role,
+    )
+
+    # The migrator now owns application objects. Perform ACL reconciliation
+    # as that owner; the RDS master identity is not a PostgreSQL superuser.
+    connection.execute(
+        sql.SQL("SET ROLE {}").format(sql.Identifier(migrator_role))
     )
 
     # Remove stale direct ACLs before granting the exact runtime privilege set.
@@ -316,6 +375,15 @@ def provision_database_roles(
             sql.Identifier(schema_name),
             sql.Identifier(runtime_role),
         )
+    )
+
+    connection.execute("RESET ROLE")
+    # Keep the administrator's ADMIN OPTION for future maintenance, but
+    # remove the temporary ability to SET ROLE outside the bootstrap task.
+    _set_current_user_role_option(
+        connection,
+        role_name=migrator_role,
+        can_set=False,
     )
 
 
