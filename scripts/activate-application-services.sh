@@ -26,6 +26,23 @@ activate_service() {
   desired_count="$(terraform output -raw "${component}_desired_task_count")"
   min_capacity="$(terraform output -raw "${component}_min_task_count")"
   max_capacity="$(terraform output -raw "${component}_max_task_count")"
+  current_desired_count="$(aws ecs describe-services \
+    --cluster "$cluster" \
+    --services "$service" \
+    --region "$AWS_REGION" \
+    --query 'services[0].desiredCount' \
+    --output text)"
+
+  if [[ ! "$current_desired_count" =~ ^[0-9]+$ ]]; then
+    echo "Could not determine the current desired count for $service." >&2
+    return 1
+  fi
+  if [ "$current_desired_count" -gt 0 ]; then
+    desired_count="$current_desired_count"
+    echo "Preserving $component desired count at $desired_count."
+  else
+    echo "Starting $component with configured initial desired count $desired_count."
+  fi
 
   echo "Activating ${component} service after database migrations."
   aws ecs update-service \
