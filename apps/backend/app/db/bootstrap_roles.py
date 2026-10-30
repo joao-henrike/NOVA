@@ -445,9 +445,54 @@ def provision_database_roles(
             sql.Identifier(runtime_role),
         )
     )
-    connection.execute(
-        "ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC"
+    # Future objects created by Alembic inherit this role's default ACLs.
+    # Reconcile both database-wide and application-schema defaults so stale
+    # grants cannot reappear after the current objects have been cleaned.
+    default_privilege_revokes = (
+        "ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM PUBLIC",
+        "ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM PUBLIC",
+        "ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC",
+        sql.SQL(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA {} "
+            "REVOKE ALL ON TABLES FROM PUBLIC"
+        ).format(sql.Identifier(schema_name)),
+        sql.SQL(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA {} "
+            "REVOKE ALL ON SEQUENCES FROM PUBLIC"
+        ).format(sql.Identifier(schema_name)),
+        sql.SQL(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA {} "
+            "REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC"
+        ).format(sql.Identifier(schema_name)),
     )
+    for statement in default_privilege_revokes:
+        connection.execute(statement)
+
+    # The runtime login must never receive implicit privileges on objects
+    # created by the migration owner; runtime grants are applied by bootstrap
+    # only after each migration run.
+    runtime_default_privilege_revokes = (
+        sql.SQL("ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM {}").format(
+            sql.Identifier(runtime_role)
+        ),
+        sql.SQL("ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM {}").format(
+            sql.Identifier(runtime_role)
+        ),
+        sql.SQL("ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS FROM {}").format(
+            sql.Identifier(runtime_role)
+        ),
+        sql.SQL(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA {} REVOKE ALL ON TABLES FROM {}"
+        ).format(sql.Identifier(schema_name), sql.Identifier(runtime_role)),
+        sql.SQL(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA {} REVOKE ALL ON SEQUENCES FROM {}"
+        ).format(sql.Identifier(schema_name), sql.Identifier(runtime_role)),
+        sql.SQL(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA {} REVOKE ALL ON FUNCTIONS FROM {}"
+        ).format(sql.Identifier(schema_name), sql.Identifier(runtime_role)),
+    )
+    for statement in runtime_default_privilege_revokes:
+        connection.execute(statement)
     connection.execute(
         sql.SQL(
             "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {} TO {}"
