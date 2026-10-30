@@ -203,6 +203,13 @@ jobs:
       - name: Bootstrap validate
         working-directory: bootstrap
         run: terraform validate -no-color
+
+      - name: GitHub OIDC init without backend
+        working-directory: bootstrap/github-oidc
+        run: terraform init -backend=false -input=false -no-color
+      - name: GitHub OIDC validate
+        working-directory: bootstrap/github-oidc
+        run: terraform validate -no-color
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a
         with:
@@ -218,6 +225,9 @@ jobs:
       - name: TFLint bootstrap
         working-directory: bootstrap
         run: tflint --config ../.tflint.hcl --format compact
+      - name: TFLint GitHub OIDC bootstrap
+        working-directory: bootstrap/github-oidc
+        run: tflint --config ../../.tflint.hcl --format compact
 
   security:
     name: Security Scans

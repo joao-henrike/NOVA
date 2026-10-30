@@ -13,7 +13,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$WORK_ROOT/root" "$WORK_ROOT/bootstrap" "$PROVIDER_CACHE"
+mkdir -p "$WORK_ROOT/root" "$WORK_ROOT/bootstrap" "$WORK_ROOT/bootstrap/github-oidc" "$PROVIDER_CACHE"
 
 copy_tf_files() {
   local src="$1"
@@ -25,6 +25,7 @@ copy_tf_files() {
 
 copy_tf_files "$ROOT_DIR" "$WORK_ROOT/root"
 copy_tf_files "$ROOT_DIR/bootstrap" "$WORK_ROOT/bootstrap"
+copy_tf_files "$ROOT_DIR/bootstrap/github-oidc" "$WORK_ROOT/bootstrap/github-oidc"
 
 cat > "$TF_CLI_CONFIG" <<EOF
 plugin_cache_dir = "$PROVIDER_CACHE"
@@ -43,4 +44,8 @@ printf '%s\n' "Provider cache: $PROVIDER_CACHE"
 
 "$TERRAFORM" -chdir="$WORK_ROOT/bootstrap" validate -no-color
 
-printf '%s\n' "Terraform root and bootstrap validation passed."
+"$TERRAFORM" -chdir="$WORK_ROOT/bootstrap/github-oidc" init -backend=false -input=false -no-color
+
+"$TERRAFORM" -chdir="$WORK_ROOT/bootstrap/github-oidc" validate -no-color
+
+printf '%s\n' "Terraform root, state bootstrap, and GitHub OIDC bootstrap validation passed."
