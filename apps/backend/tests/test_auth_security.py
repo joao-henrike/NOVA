@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import jwt
 
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.core.security import (
     create_access_token,
     create_pkce_challenge,
@@ -61,6 +61,23 @@ class AuthSecurityTest(unittest.TestCase):
             self.assertEqual(header["alg"], "HS256")
         finally:
             settings.auth_jwt_secret_key = original_secret
+
+    def test_apple_configuration_requires_private_key_source(self) -> None:
+        configuration = Settings(
+            apple_client_id="com.example.cloudstart.web",
+            apple_team_id="TEAM123456",
+            apple_key_id="KEY1234567",
+            apple_redirect_uri="https://cloudstart.example.com/callback",
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Apple authentication is not configured",
+        ):
+            configuration.require_apple_config()
+
+        configuration.apple_private_key = "test-private-key"
+        configuration.require_apple_config()
 
     def test_provider_subject_is_canonical_identity(self) -> None:
         subject, email, verified, name = claims_to_identity(

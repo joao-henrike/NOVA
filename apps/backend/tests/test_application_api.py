@@ -327,6 +327,7 @@ class ApplicationApiTest(unittest.TestCase):
         settings.apple_client_id = "com.example.cloudstart.web"
         settings.apple_team_id = "TEAM123456"
         settings.apple_key_id = "KEY1234567"
+        settings.apple_private_key = "mocked-private-key"
         settings.apple_redirect_uri = (
             "https://cloudstart.example.com/api/auth/apple/callback"
         )

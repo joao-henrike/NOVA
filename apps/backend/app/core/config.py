@@ -84,7 +84,7 @@ class Settings(BaseSettings):
                 self.apple_key_id,
                 self.apple_redirect_uri,
             )
-        ):
+        ) or not (self.apple_private_key or self.apple_private_key_path):
             raise RuntimeError("Apple authentication is not configured.")
 
     def require_auth_signing_key(self) -> str:
