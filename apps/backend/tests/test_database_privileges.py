@@ -46,6 +46,8 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
     database_name = admin_url.database
     runtime_role = f"nova_rt_{uuid4().hex[:16]}"
     migrator_role = f"nova_mg_{uuid4().hex[:16]}"
+    runtime_inherited_role = f"nova_rti_{uuid4().hex[:14]}"
+    migrator_inherited_role = f"nova_mgi_{uuid4().hex[:14]}"
     runtime_password = "runtime-test-" + uuid4().hex + uuid4().hex
     migrator_password = "migrator-test-" + uuid4().hex + uuid4().hex
     schema_name = f"nova_test_{uuid4().hex[:16]}"
@@ -115,16 +117,38 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 )
             )
 
-            # These built-in memberships grant cluster-wide table access and
-            # must not survive reconciliation of the application logins.
+            # Create inherited privilege groups as the non-superuser
+            # provisioner. The runtime group receives excessive schema access;
+            # both memberships must be removed by the bootstrap reconciliation.
+            for inherited_role in (runtime_inherited_role, migrator_inherited_role):
+                connection.execute(
+                    sql.SQL("CREATE ROLE {} NOLOGIN").format(
+                        sql.Identifier(inherited_role)
+                    )
+                )
             connection.execute(
-                sql.SQL("GRANT pg_read_all_data TO {}").format(
-                    sql.Identifier(runtime_role)
+                sql.SQL(
+                    "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {} TO {}"
+                ).format(sql.Identifier(schema_name), sql.Identifier(runtime_inherited_role))
+            )
+            connection.execute(
+                sql.SQL(
+                    "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {} TO {}"
+                ).format(sql.Identifier(schema_name), sql.Identifier(runtime_inherited_role))
+            )
+            connection.execute(
+                sql.SQL("GRANT CREATE ON SCHEMA {} TO {}").format(
+                    sql.Identifier(schema_name), sql.Identifier(runtime_inherited_role)
                 )
             )
             connection.execute(
-                sql.SQL("GRANT pg_write_all_data TO {}").format(
-                    sql.Identifier(migrator_role)
+                sql.SQL("GRANT {} TO {}").format(
+                    sql.Identifier(runtime_inherited_role), sql.Identifier(runtime_role)
+                )
+            )
+            connection.execute(
+                sql.SQL("GRANT {} TO {}").format(
+                    sql.Identifier(migrator_inherited_role), sql.Identifier(migrator_role)
                 )
             )
 
@@ -149,12 +173,12 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
             assert role_attributes == (False, False, False, False, False)
 
             assert not connection.execute(
-                "SELECT pg_has_role(%s, 'pg_read_all_data', 'MEMBER')",
-                (runtime_role,),
+                "SELECT pg_has_role(%s, %s, 'MEMBER')",
+                (runtime_role, runtime_inherited_role),
             ).fetchone()[0]
             assert not connection.execute(
-                "SELECT pg_has_role(%s, 'pg_write_all_data', 'MEMBER')",
-                (migrator_role,),
+                "SELECT pg_has_role(%s, %s, 'MEMBER')",
+                (migrator_role, migrator_inherited_role),
             ).fetchone()[0]
             assert not connection.execute(
                 """
@@ -324,9 +348,24 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
             connection.execute(
                 sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema_name))
             )
-            connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(runtime_role)))
-            connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(migrator_role)))
+            connection.execute(
+                sql.SQL("REVOKE CONNECT ON DATABASE {} FROM {}, {}").format(
+                    sql.Identifier(database_name),
+                    sql.Identifier(runtime_role),
+                    sql.Identifier(migrator_role),
+                )
+            )
+            for role in (
+                runtime_role,
+                migrator_role,
+                runtime_inherited_role,
+                migrator_inherited_role,
+            ):
+                connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
         with psycopg.connect(admin_conninfo) as connection:
+            connection.execute(
+                sql.SQL("DROP OWNED BY {}").format(sql.Identifier(provisioner_role))
+            )
             connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(provisioner_role)))
     except Exception:
         # Best-effort cleanup keeps random test objects out of the shared
@@ -338,7 +377,19 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                         sql.Identifier(schema_name)
                     )
                 )
-                for role in (runtime_role, migrator_role):
+                connection.execute(
+                    sql.SQL("REVOKE CONNECT ON DATABASE {} FROM {}, {}").format(
+                        sql.Identifier(database_name),
+                        sql.Identifier(runtime_role),
+                        sql.Identifier(migrator_role),
+                    )
+                )
+                for role in (
+                    runtime_role,
+                    migrator_role,
+                    runtime_inherited_role,
+                    migrator_inherited_role,
+                ):
                     if connection.execute(
                         "SELECT 1 FROM pg_roles WHERE rolname = %s",
                         (role,),
@@ -352,6 +403,9 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                     "SELECT 1 FROM pg_roles WHERE rolname = %s",
                     (provisioner_role,),
                 ).fetchone():
+                    connection.execute(
+                        sql.SQL("DROP OWNED BY {}").format(sql.Identifier(provisioner_role))
+                    )
                     connection.execute(
                         sql.SQL("DROP ROLE {}").format(sql.Identifier(provisioner_role))
                     )
