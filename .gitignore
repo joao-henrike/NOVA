@@ -58,6 +58,13 @@ tfdoc/
 .tflint.d/
 
 # Python / Node artifacts if auxiliary tooling is added later
+# Python test coverage reports
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+coverage.txt
+htmlcov/
 __pycache__/
 *.py[cod]
 node_modules/

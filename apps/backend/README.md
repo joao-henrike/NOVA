@@ -298,6 +298,34 @@ For local Google development, the example environment file uses an HTTP localhos
 
 Apple web authentication requires a registered HTTPS domain, so the Apple flow is not expected to work against a plain localhost HTTP callback.
 
+## Tests and coverage
+
+Install the development tooling from this directory:
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+```
+
+Run the backend suite with line and branch coverage enabled:
+
+```bash
+coverage run -m pytest -q
+coverage report --show-missing
+coverage html
+```
+
+The coverage source is restricted to `app/`; test code and third-party packages are not counted. Branch measurement records whether both outcomes of conditional paths are exercised, not only whether a line ran. The terminal report lists modules and missing line numbers, while `htmlcov/index.html` provides a navigable per-file view.
+
+The GitHub Actions backend job runs the same coverage command against PostgreSQL 16, prints the per-module report, and uploads JSON, XML, text, and HTML reports as the `backend-coverage` workflow artifact. The initial report establishes the measured baseline; no percentage threshold is imposed until the uncovered paths have been reviewed and the baseline is understood.
+
+```bash
+# Machine-readable reports
+coverage json -o coverage.json
+coverage xml -o coverage.xml
+```
+
+Coverage files are generated outputs and are ignored by Git.
+
 ## Local development
 
 From `apps/backend`:

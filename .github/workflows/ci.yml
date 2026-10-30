@@ -85,8 +85,31 @@ jobs:
         run: alembic downgrade base && alembic upgrade head
       - name: Check migration drift after round-trip
         run: alembic check
-      - name: Pytest
-        run: pytest -q
+      - name: Pytest with line and branch coverage
+        run: coverage run -m pytest -q
+      - name: Generate coverage reports
+        if: always()
+        run: |
+          if [ ! -f .coverage ]; then
+            echo "Coverage data was not produced."
+            exit 1
+          fi
+          coverage report --show-missing --skip-covered | tee coverage.txt
+          coverage json -o coverage.json
+          coverage xml -o coverage.xml
+          coverage html --directory htmlcov
+      - name: Upload backend coverage reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: backend-coverage-${{ github.run_id }}
+          path: |
+            apps/backend/coverage.txt
+            apps/backend/coverage.json
+            apps/backend/coverage.xml
+            apps/backend/htmlcov/
+          if-no-files-found: error
+          retention-days: 14
 
   containers:
     name: Container Build and Runtime Smoke
