@@ -74,7 +74,7 @@ export TF_VAR_grafana_admin_password="$GRAFANA_ADMIN_PASSWORD"
 unset GRAFANA_ADMIN_PASSWORD
 
 log "Provisioning separate PostgreSQL runtime and migrator credentials"
-"$ROOT_DIR/scripts/provision-db-credentials.sh"
+bash "$ROOT_DIR/scripts/provision-db-credentials.sh"
 [ -s "$SECRET_DIR/db-secret-arns.env" ] || fatal "Database credential ARNs were not written."
 # shellcheck disable=SC1090
 source "$SECRET_DIR/db-secret-arns.env"
