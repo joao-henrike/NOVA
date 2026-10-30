@@ -10,6 +10,7 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     Response,
     status,
 )
@@ -27,6 +28,11 @@ from app.db.session import get_db
 from app.models.auth import AuthProvider
 from app.schemas.auth import RefreshRequest, TokenResponse, UserRead
 from app.services.auth import AuthenticationError, AuthService
+from app.services.rate_limit import (
+    RateLimitExceeded,
+    check_rate_limit,
+    get_request_client_ip,
+)
 from app.services.providers import (
     ProviderAuthenticationError,
     apple_authorization_url,
@@ -39,6 +45,46 @@ from app.services.providers import (
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 service = AuthService()
+
+# Shared PostgreSQL counters ensure limits apply across ECS task replicas.
+AUTH_RATE_LIMITS: dict[str, tuple[int, int]] = {
+    "login": (10, 300),
+    "callback": (20, 300),
+    "refresh": (30, 300),
+    "logout": (60, 300),
+}
+
+
+def _enforce_auth_rate_limit(
+    request: Request,
+    db: Session,
+    *,
+    scope: str,
+) -> None:
+    limit, window_seconds = AUTH_RATE_LIMITS[scope]
+    try:
+        client_ip = get_request_client_ip(request)
+        check_rate_limit(
+            db,
+            scope=scope,
+            client_ip=client_ip,
+            limit=limit,
+            window_seconds=window_seconds,
+        )
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many authentication requests. Please try again later.",
+            headers={
+                "Retry-After": str(exc.retry_after),
+                "Cache-Control": "no-store",
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid client address metadata.",
+        ) from exc
 
 
 def _validate_redirect_uri(uri: str, *, apple: bool = False) -> None:
@@ -163,12 +209,17 @@ def _authentication_response(
 
 
 @router.get("/google/login", include_in_schema=False)
-def google_login(db: Session = Depends(get_db)) -> Response:
+def google_login(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Response:
+    _enforce_auth_rate_limit(request, db, scope="login")
     return _start_login(AuthProvider.GOOGLE, db)
 
 
 @router.get("/google/callback", include_in_schema=False)
 def google_callback(
+    request: Request,
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
     error: str | None = Query(default=None),
@@ -178,6 +229,7 @@ def google_callback(
     ),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
+    _enforce_auth_rate_limit(request, db, scope="callback")
     if error or not code or not state:
         raise HTTPException(
             status_code=400,
@@ -234,12 +286,17 @@ def google_callback(
 
 
 @router.get("/apple/login", include_in_schema=False)
-def apple_login(db: Session = Depends(get_db)) -> Response:
+def apple_login(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Response:
+    _enforce_auth_rate_limit(request, db, scope="login")
     return _start_login(AuthProvider.APPLE, db)
 
 
 @router.post("/apple/callback", include_in_schema=False)
 def apple_callback(
+    request: Request,
     code: Annotated[str | None, Form()] = None,
     state: Annotated[str | None, Form()] = None,
     error: Annotated[str | None, Form()] = None,
@@ -250,6 +307,7 @@ def apple_callback(
     ),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
+    _enforce_auth_rate_limit(request, db, scope="callback")
     if error or not code or not state:
         raise HTTPException(
             status_code=400,
@@ -332,6 +390,7 @@ def apple_callback(
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(
+    request: Request,
     data: RefreshRequest,
     response: Response,
     refresh_cookie: str | None = Cookie(
@@ -340,6 +399,7 @@ def refresh(
     ),
     db: Session = Depends(get_db),
 ) -> TokenResponse:
+    _enforce_auth_rate_limit(request, db, scope="refresh")
     token = data.refresh_token or refresh_cookie
     if not token:
         raise HTTPException(status_code=401, detail="Refresh token required.")
@@ -363,6 +423,7 @@ def refresh(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
+    request: Request,
     response: Response,
     refresh_cookie: str | None = Cookie(
         default=None,
@@ -371,6 +432,7 @@ def logout(
     data: RefreshRequest | None = None,
     db: Session = Depends(get_db),
 ) -> None:
+    _enforce_auth_rate_limit(request, db, scope="logout")
     token = (data.refresh_token if data else None) or refresh_cookie
     service.logout(db, token)
     response.delete_cookie("nova_refresh_token", path="/api/auth")
