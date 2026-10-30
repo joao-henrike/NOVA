@@ -310,6 +310,14 @@ def provision_database_roles(
     if current_database != database_name:
         raise RuntimeError("Connected database does not match DB_NAME.")
 
+    # PostgreSQL grants CONNECT and TEMPORARY to PUBLIC by default. This
+    # dedicated application database is limited to the explicit logins below.
+    connection.execute(
+        sql.SQL("REVOKE ALL PRIVILEGES ON DATABASE {} FROM PUBLIC").format(
+            sql.Identifier(database_name)
+        )
+    )
+
     _ensure_login_role(
         connection,
         role_name=runtime_role,
