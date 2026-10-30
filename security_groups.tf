@@ -30,6 +30,7 @@ resource "aws_security_group" "backend" {
   })
 }
 
+#checkov:skip=CKV2_AWS_5:Attached dynamically to one-off Fargate tasks via the database_tasks_security_group_id output in deployment scripts/workflows.
 resource "aws_security_group" "database_tasks" {
   name        = "${local.name}-database-tasks-sg"
   description = "No-ingress security group for one-off database bootstrap and migration tasks."
