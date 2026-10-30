@@ -30,6 +30,7 @@ from app.models.item import Item
 from app.models.user import User
 from app.services.auth import AuthService
 from app.services.providers import (
+    ProviderAuthenticationError,
     apple_authorization_url,
     claims_to_identity,
     generate_apple_client_secret,
@@ -196,6 +197,124 @@ class ApplicationApiTest(unittest.TestCase):
             headers=headers,
         )
         self.assertEqual(invalid_id.status_code, 422)
+
+
+    def test_auth_rate_limit_rejects_invalid_client_metadata(self) -> None:
+        with patch(
+            "app.api.routes.auth.get_request_client_ip",
+            side_effect=ValueError("invalid forwarded address"),
+        ):
+            response = self.client.post(
+                "/api/auth/refresh",
+                json={"refresh_token": "not-used"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["detail"],
+            "Invalid client address metadata.",
+        )
+
+    def test_google_callback_rejects_missing_parameters_and_mismatched_state(self) -> None:
+        self.client.cookies.clear()
+        invalid_requests = (
+            {},
+            {"error": "access_denied", "state": "state"},
+            {"code": "authorization-code"},
+            {"state": "state"},
+        )
+        for params in invalid_requests:
+            with self.subTest(params=params):
+                response = self.client.get(
+                    "/api/auth/google/callback",
+                    params=params,
+                )
+                self.assertEqual(response.status_code, 400)
+
+        mismatch = self.client.get(
+            "/api/auth/google/callback",
+            params={"code": "authorization-code", "state": "expected-state"},
+            cookies={"nova_oauth_state_google": "different-state"},
+        )
+        self.assertEqual(mismatch.status_code, 400)
+
+    def test_google_callback_rejects_state_without_pkce_verifier(self) -> None:
+        state = f"missing-verifier-{uuid4()}"
+        with self.session_factory() as session:
+            session.add(
+                OAuthState(
+                    provider=AuthProvider.GOOGLE,
+                    state=state,
+                    nonce="test-nonce",
+                    code_verifier=None,
+                    redirect_uri="https://example.com/callback",
+                    expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                )
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/api/auth/google/callback",
+            params={"code": "authorization-code", "state": state},
+            cookies={"nova_oauth_state_google": state},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_google_callback_normalizes_provider_authentication_errors(self) -> None:
+        state = "provider-error-state"
+        record = OAuthState(
+            provider=AuthProvider.GOOGLE,
+            state=state,
+            nonce="test-nonce",
+            code_verifier="test-verifier",
+            redirect_uri="https://example.com/callback",
+            expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        )
+        with (
+            patch(
+                "app.api.routes.auth.service.consume_oauth_state",
+                return_value=record,
+            ),
+            patch(
+                "app.api.routes.auth.exchange_google_code",
+                side_effect=ProviderAuthenticationError("provider unavailable"),
+            ),
+        ):
+            response = self.client.get(
+                "/api/auth/google/callback",
+                params={"code": "authorization-code", "state": state},
+                cookies={"nova_oauth_state_google": state},
+            )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"], "Google authentication failed.")
+
+    def test_cookie_refresh_requires_https_origin_outside_local(self) -> None:
+        original_environment = settings.app_env
+        _, refresh_token = self._issue_session()
+        self.client.cookies.clear()
+        self.client.cookies.set("nova_refresh_token", refresh_token)
+        settings.app_env = "dev"
+        try:
+            response = self.client.post(
+                "/api/auth/refresh",
+                headers={
+                    "Origin": "http://testserver",
+                    "X-Forwarded-For": "203.0.113.20",
+                },
+            )
+        finally:
+            settings.app_env = original_environment
+            self.client.cookies.clear()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "HTTPS origin required.")
+
+    def test_refresh_without_any_token_returns_unauthorized(self) -> None:
+        self.client.cookies.clear()
+        response = self.client.post("/api/auth/refresh", json={})
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"], "Refresh token required.")
 
     def test_items_crud(self) -> None:
         headers = self._auth_headers()
