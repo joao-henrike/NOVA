@@ -51,7 +51,6 @@ locals {
   ])
   log_group_arn = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${local.name}/*:*"
   security_group_arn = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/*"
-  security_group_rule_arn = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group-rule/*"
   scalable_target_arn = "arn:aws:application-autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:scalable-target/service/${local.name}-cluster/${local.name}-*"
 }
 
@@ -330,18 +329,53 @@ data "aws_iam_policy_document" "github_cd_permissions" {
   }
 
   statement {
+    sid    = "TagOnlyNOVADevelopmentSecurityGroups"
+    effect = "Allow"
+    actions = [
+      "ec2:CreateTags",
+    ]
+    resources = [local.security_group_arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Environment"
+      values   = [var.environment]
+    }
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "aws:TagKeys"
+      values = [
+        "Name",
+        "Project",
+        "Environment",
+        "ManagedBy",
+        "Repository",
+        "Owner",
+        "CostCenter",
+        "Component",
+      ]
+    }
+  }
+
+  statement {
     sid    = "ChangeOnlyTaggedNOVADevelopmentSecurityGroups"
     effect = "Allow"
     actions = [
       "ec2:AuthorizeSecurityGroupEgress",
       "ec2:AuthorizeSecurityGroupIngress",
-      "ec2:CreateTags",
       "ec2:DeleteSecurityGroup",
       "ec2:DeleteTags",
       "ec2:RevokeSecurityGroupEgress",
       "ec2:RevokeSecurityGroupIngress",
     ]
-    resources = [local.security_group_arn, local.security_group_rule_arn]
+    resources = [local.security_group_arn]
 
     condition {
       test     = "StringEquals"
