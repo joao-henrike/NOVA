@@ -108,7 +108,7 @@ The backend Dockerfile:
 
 ### Frontend
 
-The frontend uses the Alpine-based Nginx image and defines a container health check.
+The frontend uses the Alpine-based Nginx image and defines a container health check. Its HTML loads JavaScript and CSS only from local static files; inline scripts/styles were removed so the browser can enforce a restrictive Content Security Policy. Production and local Nginx both send `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`, `form-action 'self'`, same-origin scripts/styles/connections, `nosniff`, `DENY` framing, `no-referrer`, and a restrictive Permissions Policy. The frontend has no external CDN, analytics, font, image, or script dependency.
 
 The repository does not currently configure advanced container runtime controls such as read-only root filesystems, capability dropping, or image signing in the ECS task definitions.
 
