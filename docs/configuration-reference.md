@@ -226,3 +226,95 @@ The deploy workflow is triggered by application/runtime artifact paths on branch
 - Development metadata: config/dev.env, config/dev.tfvars.
 - Local deployment: scripts/deploy.sh, scripts/ensure-terraform-state.sh, scripts/provision-db-credentials.sh, scripts/provision-backend-auth-secret.sh.
 - GitHub workflows: .github/workflows/ci.yml, .github/workflows/extreme-validation.yml, .github/workflows/deploy-dev.yml, .github/workflows/rebuild-dev.yml.
+
+## 12. Managed Terraform resource inventory
+
+This inventory is generated from root and bootstrap Terraform resource declarations in the current Joao branch. It documents what the code manages; it is not proof that each AWS resource currently exists.
+
+| Resource type | Declarations | Terraform file / local resource name |
+| --- | ---: | --- |
+| aws_appautoscaling_policy | 4 | ecs_services.tf (frontend_cpu, frontend_memory, backend_cpu, backend_memory) |
+| aws_appautoscaling_target | 2 | ecs_services.tf (frontend, backend) |
+| aws_cloudwatch_log_group | 5 | cloudwatch_logs.tf (frontend, backend, db_bootstrap, db_migration, monitoring) |
+| aws_db_instance | 2 | rds.tf (this), monitoring.tf (monitoring) |
+| aws_db_subnet_group | 2 | rds.tf (this), monitoring.tf (monitoring) |
+| aws_default_security_group | 1 | vpc.tf (this) |
+| aws_dynamodb_table | 1 | bootstrap/main.tf (terraform_lock; compatibility table) |
+| aws_ecr_lifecycle_policy | 2 | ecr.tf (frontend, backend) |
+| aws_ecr_repository | 2 | ecr.tf (frontend, backend) |
+| aws_ecs_cluster | 1 | ecs.tf (this) |
+| aws_ecs_service | 3 | ecs_services.tf (frontend, backend), monitoring.tf (monitoring) |
+| aws_ecs_task_definition | 5 | ecs_services.tf (frontend, backend, db_bootstrap, db_migration), monitoring.tf (monitoring) |
+| aws_eip | 1 | vpc.tf (nat; one per selected AZ) |
+| aws_iam_role | 8 | iam.tf (ecs_execution, ecs_backend_execution, ecs_migration_execution, ecs_db_bootstrap_execution, ecs_monitoring_execution, ecs_frontend_task, ecs_backend_task), monitoring.tf (ecs_monitoring_task) |
+| aws_iam_role_policy | 5 | iam.tf (ecs_execution, ecs_backend_execution, ecs_migration_execution, ecs_db_bootstrap_execution, ecs_monitoring_execution) |
+| aws_internet_gateway | 1 | vpc.tf (this) |
+| aws_lb | 1 | ecs.tf (this) |
+| aws_lb_listener | 3 | ecs.tf (http, http_redirect, https; HTTPS listener conditional) |
+| aws_lb_listener_rule | 2 | ecs.tf (backend), monitoring.tf (grafana) |
+| aws_lb_target_group | 3 | ecs.tf (frontend, backend), monitoring.tf (grafana) |
+| aws_nat_gateway | 1 | vpc.tf (this; one per selected AZ via for_each) |
+| aws_route_table | 3 | vpc.tf (public, private_app, private_db; private_app is per AZ via for_each) |
+| aws_route_table_association | 3 | vpc.tf (public, private_app, private_db; each uses for_each) |
+| aws_s3_bucket | 1 | bootstrap/main.tf (terraform_state) |
+| aws_s3_bucket_lifecycle_configuration | 1 | bootstrap/main.tf (terraform_state) |
+| aws_s3_bucket_ownership_controls | 1 | bootstrap/main.tf (terraform_state) |
+| aws_s3_bucket_policy | 1 | bootstrap/main.tf (terraform_state) |
+| aws_s3_bucket_public_access_block | 1 | bootstrap/main.tf (terraform_state) |
+| aws_s3_bucket_server_side_encryption_configuration | 1 | bootstrap/main.tf (terraform_state) |
+| aws_s3_bucket_versioning | 1 | bootstrap/main.tf (terraform_state) |
+| aws_secretsmanager_secret | 1 | monitoring.tf (grafana_admin; other application secrets are provisioned out-of-band by scripts) |
+| aws_secretsmanager_secret_version | 1 | monitoring.tf (grafana_admin) |
+| aws_security_group | 7 | security_groups.tf (alb, frontend, backend, database_tasks, rds), monitoring.tf (monitoring, monitoring_db) |
+| aws_subnet | 3 | vpc.tf (public, private_app, private_db; each uses for_each by AZ) |
+| aws_vpc | 1 | vpc.tf (this) |
+| aws_vpc_security_group_egress_rule | 9 | security_groups.tf (alb_to_frontend, alb_to_backend, alb_to_grafana, backend_https, backend_to_rds, database_tasks_https, database_tasks_to_rds), monitoring.tf (monitoring_to_db, monitoring_https) |
+| aws_vpc_security_group_ingress_rule | 8 | security_groups.tf (alb_http, alb_https, frontend_from_alb, backend_from_alb, rds_from_backend, rds_from_database_tasks), monitoring.tf (monitoring_from_alb, monitoring_db_from_monitoring) |
+
+The 98 declarations include resources using count/for_each; runtime instance counts vary with Availability Zone selection and configuration. Secrets for database runtime/migrator and backend JWT/OAuth are managed by the deployment scripts rather than Terraform.
+
+## 13. Root Terraform outputs
+
+The root outputs.tf file currently exposes:
+
+| Output | Sensitive | Purpose |
+| --- | --- | --- |
+| aws_account_id | No | AWS account ID used for the deployment. |
+| aws_region | No | AWS region used for the deployment. |
+| vpc_id | No | ID of the CloudStart VPC. |
+| public_subnet_ids | No | Public subnet IDs by Availability Zone. |
+| private_app_subnet_ids | No | Private application subnet IDs by Availability Zone. |
+| private_db_subnet_ids | No | Private database subnet IDs by Availability Zone. |
+| alb_dns_name | No | AWS-generated public DNS name of the Application Load Balancer. |
+| alb_application_url | No | Application base URL; HTTPS hostname when TLS is enabled, otherwise the ALB DNS name over HTTP. |
+| alb_domain_name | No | Configured hostname for HTTPS, or empty when TLS is disabled. |
+| frontend_ecr_repository_url | No | Frontend ECR repository URL. |
+| backend_ecr_repository_url | No | Backend ECR repository URL. |
+| ecs_cluster_name | No | ECS cluster name. |
+| frontend_ecs_service_name | No | Frontend ECS service name. |
+| backend_ecs_service_name | No | Backend ECS service name. |
+| backend_security_group_id | No | Backend HTTP security group ID. |
+| database_tasks_security_group_id | No | No-ingress security group for DB bootstrap/migration tasks. |
+| frontend_task_definition_arn | No | Frontend task definition ARN. |
+| backend_task_definition_arn | No | Backend task definition ARN. |
+| db_bootstrap_task_definition_arn | No | One-off DB role-bootstrap task definition ARN. |
+| db_migration_task_definition_arn | No | One-off Alembic migration task definition ARN. |
+| rds_endpoint | No | Application RDS endpoint hostname and port. |
+| rds_port | No | Application PostgreSQL port. |
+| rds_master_username | No | RDS master username. |
+| rds_master_user_secret_arn | Yes | ARN of the RDS-managed master password secret. |
+| grafana_url | No | Grafana URL through the configured ALB listener. |
+| monitoring_ecs_service_name | No | Monitoring ECS service name. |
+| monitoring_rds_endpoint | No | Private endpoint for the monitoring PostgreSQL database. |
+
+## 14. Bootstrap Terraform outputs
+
+The bootstrap outputs are:
+
+| Output | Purpose |
+| --- | --- |
+| state_bucket_name | S3 bucket name for Terraform remote state. |
+| state_bucket_arn | S3 bucket ARN for Terraform remote state. |
+| lock_table_name | DynamoDB table name used for Terraform state locking compatibility. |
+| region | AWS region used for the backend resources. |
+
