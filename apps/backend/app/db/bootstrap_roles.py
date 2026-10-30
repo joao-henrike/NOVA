@@ -343,6 +343,17 @@ def provision_database_roles(
         can_set=True,
     )
 
+    # Reconcile direct database ACL drift as well as PUBLIC defaults. The
+    # application logins need CONNECT, but neither requires TEMPORARY or any
+    # other database-level privilege.
+    connection.execute(
+        sql.SQL("REVOKE ALL PRIVILEGES ON DATABASE {} FROM {}, {}").format(
+            sql.Identifier(database_name),
+            sql.Identifier(runtime_role),
+            sql.Identifier(migrator_role),
+        )
+    )
+
     connection.execute(
         sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
             sql.Identifier(database_name),
