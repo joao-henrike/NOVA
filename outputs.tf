@@ -87,6 +87,16 @@ output "backend_task_definition_arn" {
   value       = aws_ecs_task_definition.backend.arn
 }
 
+output "db_bootstrap_task_definition_arn" {
+  description = "One-off ECS task definition that provisions application database roles using the RDS master secret."
+  value       = aws_ecs_task_definition.db_bootstrap.arn
+}
+
+output "db_migration_task_definition_arn" {
+  description = "One-off ECS task definition that applies Alembic migrations as the non-runtime migration role."
+  value       = aws_ecs_task_definition.db_migration.arn
+}
+
 output "rds_endpoint" {
   description = "RDS connection endpoint hostname and port."
   value       = aws_db_instance.this.endpoint

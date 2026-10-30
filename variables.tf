@@ -302,13 +302,73 @@ variable "db_name" {
 }
 
 variable "db_username" {
-  description = "RDS master username. The password is managed by RDS/Secrets Manager."
+  description = "RDS master username. Used only by the one-off database role bootstrap task; its password is managed by RDS/Secrets Manager."
   type        = string
   default     = "cloudstart_admin"
 
   validation {
     condition     = can(regex("^[a-zA-Z][a-zA-Z0-9_]{0,15}$", var.db_username))
     error_message = "db_username must be 1-16 characters, start with a letter, and contain only letters, numbers, or underscores."
+  }
+}
+
+variable "db_runtime_username" {
+  description = "PostgreSQL login used by the normal backend service. It receives DML privileges only."
+  type        = string
+  default     = "cloudstart_runtime"
+
+  validation {
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.db_runtime_username))
+    error_message = "db_runtime_username must be a valid PostgreSQL role identifier."
+  }
+}
+
+variable "db_migrator_username" {
+  description = "PostgreSQL login used only by the one-off Alembic migration task."
+  type        = string
+  default     = "cloudstart_migrator"
+
+  validation {
+    condition = (
+      can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.db_migrator_username)) &&
+      var.db_migrator_username != var.db_runtime_username &&
+      var.db_migrator_username != var.db_username
+    )
+    error_message = "db_migrator_username must be a valid PostgreSQL role identifier, distinct from the runtime and RDS master usernames."
+  }
+}
+
+variable "db_runtime_secret_arn" {
+  description = "ARN of an externally provisioned Secrets Manager JSON secret with a password field for db_runtime_username. The password value must never enter Terraform."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.db_runtime_secret_arn == "" ||
+      can(regex(
+        "^arn:[^:]+:secretsmanager:${var.aws_region}:[0-9]{12}:secret:.+$",
+        var.db_runtime_secret_arn,
+      ))
+    )
+    error_message = "db_runtime_secret_arn must be empty or a Secrets Manager secret ARN in aws_region."
+  }
+}
+
+variable "db_migrator_secret_arn" {
+  description = "ARN of an externally provisioned Secrets Manager JSON secret with a password field for db_migrator_username. The password value must never enter Terraform."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.db_migrator_secret_arn == "" ||
+      can(regex(
+        "^arn:[^:]+:secretsmanager:${var.aws_region}:[0-9]{12}:secret:.+$",
+        var.db_migrator_secret_arn,
+      ))
+    )
+    error_message = "db_migrator_secret_arn must be empty or a Secrets Manager secret ARN in aws_region."
   }
 }
 

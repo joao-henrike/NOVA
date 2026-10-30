@@ -58,13 +58,22 @@ resource "aws_ecs_task_definition" "backend" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.backend_task_cpu
   memory                   = var.backend_task_memory
-  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  execution_role_arn       = aws_iam_role.ecs_backend_execution.arn
   task_role_arn            = aws_iam_role.ecs_backend_task.arn
 
   lifecycle {
     precondition {
-      condition     = !var.deploy_application || trimspace(var.backend_auth_secret_arn) != ""
-      error_message = "Set backend_auth_secret_arn before enabling deploy_application; backend JWT/OAuth settings must come from Secrets Manager."
+      condition = (
+        !var.deploy_application ||
+        (
+          trimspace(var.backend_auth_secret_arn) != "" &&
+          trimspace(var.db_runtime_secret_arn) != "" &&
+          trimspace(var.db_migrator_secret_arn) != "" &&
+          var.db_runtime_username != var.db_migrator_username &&
+          var.db_runtime_username != var.db_username
+        )
+      )
+      error_message = "Application deployment requires distinct runtime/migrator PostgreSQL identities and their Secrets Manager ARNs, plus backend_auth_secret_arn."
     }
   }
 
@@ -104,15 +113,15 @@ resource "aws_ecs_task_definition" "backend" {
         },
         {
           name  = "DB_USER"
-          value = var.db_username
+          value = var.db_runtime_username
         }
       ]
 
       secrets = concat(
-        [
+        var.db_runtime_secret_arn == "" ? [] : [
           {
             name      = "DB_PASSWORD"
-            valueFrom = "${aws_db_instance.this.master_user_secret[0].secret_arn}:password::"
+            valueFrom = "${var.db_runtime_secret_arn}:password::"
           }
         ],
         var.backend_auth_secret_arn == "" ? [] : [
@@ -140,9 +149,134 @@ resource "aws_ecs_task_definition" "backend" {
     }
   ])
 
+  depends_on = [
+    aws_iam_role_policy.ecs_backend_execution,
+  ]
+
   tags = merge(local.global_tags, {
     Name      = "${local.name}-backend-task"
     Component = "backend"
+  })
+}
+
+resource "aws_ecs_task_definition" "db_bootstrap" {
+  family                   = "${local.name}-db-bootstrap"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_db_bootstrap_execution.arn
+  task_role_arn            = aws_iam_role.ecs_backend_task.arn
+
+  lifecycle {
+    precondition {
+      condition = (
+        !var.deploy_application ||
+        (
+          trimspace(var.db_runtime_secret_arn) != "" &&
+          trimspace(var.db_migrator_secret_arn) != ""
+        )
+      )
+      error_message = "The database bootstrap task requires runtime and migrator Secrets Manager ARNs before application deployment."
+    }
+  }
+
+  container_definitions = jsonencode([
+    {
+      name      = "db-bootstrap"
+      image     = "${aws_ecr_repository.backend.repository_url}:${var.backend_image_tag}"
+      essential = true
+      command   = ["python", "-m", "app.db.bootstrap_roles"]
+
+      environment = [
+        { name = "DB_HOST", value = aws_db_instance.this.address },
+        { name = "DB_PORT", value = tostring(aws_db_instance.this.port) },
+        { name = "DB_NAME", value = var.db_name },
+        { name = "DB_ADMIN_USER", value = var.db_username },
+        { name = "DB_RUNTIME_USER", value = var.db_runtime_username },
+        { name = "DB_MIGRATOR_USER", value = var.db_migrator_username },
+      ]
+
+      secrets = concat(
+        [
+          {
+            name      = "DB_ADMIN_PASSWORD"
+            valueFrom = "${aws_db_instance.this.master_user_secret[0].secret_arn}:password::"
+          }
+        ],
+        var.db_runtime_secret_arn == "" ? [] : [
+          {
+            name      = "DB_RUNTIME_PASSWORD"
+            valueFrom = "${var.db_runtime_secret_arn}:password::"
+          }
+        ],
+        var.db_migrator_secret_arn == "" ? [] : [
+          {
+            name      = "DB_MIGRATOR_PASSWORD"
+            valueFrom = "${var.db_migrator_secret_arn}:password::"
+          }
+        ]
+      )
+    }
+  ])
+
+  depends_on = [
+    aws_iam_role_policy.ecs_db_bootstrap_execution,
+  ]
+
+  tags = merge(local.global_tags, {
+    Name      = "${local.name}-db-bootstrap-task"
+    Component = "database-bootstrap"
+  })
+}
+
+resource "aws_ecs_task_definition" "db_migration" {
+  family                   = "${local.name}-db-migration"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_migration_execution.arn
+  task_role_arn            = aws_iam_role.ecs_backend_task.arn
+
+  lifecycle {
+    precondition {
+      condition     = !var.deploy_application || trimspace(var.db_migrator_secret_arn) != ""
+      error_message = "The database migration task requires db_migrator_secret_arn before application deployment."
+    }
+  }
+
+  container_definitions = jsonencode([
+    {
+      name      = "db-migration"
+      image     = "${aws_ecr_repository.backend.repository_url}:${var.backend_image_tag}"
+      essential = true
+      command   = ["alembic", "upgrade", "head"]
+
+      environment = [
+        { name = "APP_ENV", value = var.environment },
+        { name = "DB_HOST", value = aws_db_instance.this.address },
+        { name = "DB_PORT", value = tostring(aws_db_instance.this.port) },
+        { name = "DB_NAME", value = var.db_name },
+        { name = "DB_USER", value = var.db_migrator_username },
+      ]
+
+      secrets = var.db_migrator_secret_arn == "" ? [] : [
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = "${var.db_migrator_secret_arn}:password::"
+        }
+      ]
+    }
+  ])
+
+  depends_on = [
+    aws_iam_role_policy.ecs_migration_execution,
+  ]
+
+  tags = merge(local.global_tags, {
+    Name      = "${local.name}-db-migration-task"
+    Component = "database-migration"
   })
 }
 
@@ -225,7 +359,7 @@ resource "aws_ecs_service" "backend" {
 
   depends_on = [
     aws_lb_listener_rule.backend,
-    aws_iam_role_policy.ecs_execution,
+    aws_iam_role_policy.ecs_backend_execution,
   ]
 
   tags = merge(local.global_tags, {
