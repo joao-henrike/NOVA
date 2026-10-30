@@ -6,6 +6,7 @@ on:
     paths:
       - "apps/**"
       - "docker-compose.yml"
+      - "scripts/provision-db-credentials.sh"
       - ".github/workflows/deploy-dev.yml"
   workflow_dispatch:
 
@@ -77,6 +78,17 @@ jobs:
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
+
+      - name: Provision restricted database credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/provision-db-credentials.sh
+          source .deploy/db-secret-arns.env
+          {
+            echo "TF_VAR_db_runtime_secret_arn=$DB_RUNTIME_SECRET_ARN"
+            echo "TF_VAR_db_migrator_secret_arn=$DB_MIGRATOR_SECRET_ARN"
+          } >> "$GITHUB_ENV"
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
@@ -163,7 +175,7 @@ jobs:
         run: |
           set -euo pipefail
           terraform show -json cd.tfplan > cd.tfplan.json
-          allowed='["aws_ecs_task_definition.frontend","aws_ecs_task_definition.backend","aws_ecs_service.frontend","aws_ecs_service.backend","aws_appautoscaling_target.frontend","aws_appautoscaling_target.backend"]'
+          allowed='["aws_ecs_task_definition.frontend","aws_ecs_task_definition.backend","aws_ecs_task_definition.db_bootstrap","aws_ecs_task_definition.db_migration","aws_ecs_service.frontend","aws_ecs_service.backend","aws_appautoscaling_target.frontend","aws_appautoscaling_target.backend","aws_iam_role.ecs_backend_execution","aws_iam_role.ecs_migration_execution","aws_iam_role.ecs_db_bootstrap_execution","aws_iam_role_policy.ecs_execution","aws_iam_role_policy.ecs_backend_execution","aws_iam_role_policy.ecs_migration_execution","aws_iam_role_policy.ecs_db_bootstrap_execution"]'
           unexpected="$(jq -r --argjson allowed "$allowed" '[.resource_changes[]? | select(.change.actions != ["no-op"]) | select((.address as $a | ($allowed | index($a))) == null) | .address] | .[]' cd.tfplan.json)"
           deletes="$(jq '[.resource_changes[]? | select(any(.change.actions[]; . == "delete"))] | length' cd.tfplan.json)"
           if [ -n "$unexpected" ]; then
@@ -188,20 +200,52 @@ jobs:
       - name: Wait for application services
         run: aws ecs wait services-stable --cluster "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-cluster" --services "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-frontend" "$PROJECT_NAME-$DEPLOY_ENVIRONMENT-backend"
 
-      - name: Run database migrations
+      - name: Bootstrap restricted database roles and run migrations
+        shell: bash
         run: |
           set -euo pipefail
           cluster="$(terraform output -raw ecs_cluster_name)"
-          task_definition="$(terraform output -raw backend_task_definition_arn)"
           backend_sg="$(terraform output -raw backend_security_group_id)"
           subnets="$(terraform output -json private_app_subnet_ids | jq -c '[.[]]')"
           network_config="$(jq -nc --argjson subnets "$subnets" --arg sg "$backend_sg" '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"DISABLED"}}')"
-          overrides="$(jq -nc '{containerOverrides:[{name:"backend",command:["alembic","upgrade","head"]}]}')"
-          task_arn="$(aws ecs run-task --cluster "$cluster" --task-definition "$task_definition" --launch-type FARGATE --network-configuration "$network_config" --overrides "$overrides" --query 'tasks[0].taskArn' --output text)"
-          test -n "$task_arn" && test "$task_arn" != "None"
-          aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task_arn"
-          exit_code="$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" --query 'tasks[0].containers[?name==`backend`].exitCode | [0]' --output text)"
-          test "$exit_code" = "0"
+
+          run_one_off_task() {
+            local task_definition="$1"
+            local container_name="$2"
+            local label="$3"
+            local task_arn
+            local exit_code
+
+            echo "Starting $label..."
+            task_arn="$(aws ecs run-task \
+              --cluster "$cluster" \
+              --task-definition "$task_definition" \
+              --launch-type FARGATE \
+              --network-configuration "$network_config" \
+              --region "$AWS_REGION" \
+              --query 'tasks[0].taskArn' \
+              --output text)"
+            test -n "$task_arn" && test "$task_arn" != "None"
+
+            aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task_arn" --region "$AWS_REGION"
+            exit_code="$(aws ecs describe-tasks \
+              --cluster "$cluster" \
+              --tasks "$task_arn" \
+              --region "$AWS_REGION" \
+              --query "tasks[0].containers[?name=='$container_name'].exitCode | [0]" \
+              --output text)"
+            if [ "$exit_code" != "0" ]; then
+              aws ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" --region "$AWS_REGION" \
+                --query "tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,exitCode:exitCode,reason:reason}}" \
+                --output json >&2
+              echo "$label failed with exit code $exit_code." >&2
+              exit 1
+            fi
+          }
+
+          run_one_off_task "$(terraform output -raw db_bootstrap_task_definition_arn)" "db-bootstrap" "database role bootstrap"
+          run_one_off_task "$(terraform output -raw db_migration_task_definition_arn)" "db-migration" "Alembic migrations"
+          run_one_off_task "$(terraform output -raw db_bootstrap_task_definition_arn)" "db-bootstrap" "post-migration runtime grants"
 
       - name: Development smoke tests
         run: |
