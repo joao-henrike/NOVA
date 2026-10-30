@@ -50,7 +50,7 @@ locals {
   log_group_arn           = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${local.name}/*:*"
   security_group_arn      = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/*"
   security_group_rule_arn = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group-rule/*"
-  vpc_arn                = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:vpc/*"
+  vpc_arn                 = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:vpc/*"
   scalable_target_arn     = "arn:aws:application-autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:scalable-target/service/${local.name}-cluster/${local.name}-*"
 }
 
@@ -364,7 +364,6 @@ data "aws_iam_policy_document" "github_cd_permissions" {
   }
 
   statement {
-  statement {
     sid       = "CreateOnlyTaggedNOVADevelopmentSecurityGroups"
     effect    = "Allow"
     actions   = ["ec2:CreateSecurityGroup"]
@@ -584,6 +583,7 @@ data "aws_iam_policy_document" "github_cd_permissions" {
     }
   }
 
+  statement {
     sid    = "ActivateOnlyNOVADevelopmentECSAutoscalingTargets"
     effect = "Allow"
     actions = [
