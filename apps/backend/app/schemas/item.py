@@ -8,12 +8,16 @@ from app.models.item import ItemStatus
 
 
 class ItemCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=2000)
     status: ItemStatus = ItemStatus.ACTIVE
 
 
 class ItemUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=2000)
     status: ItemStatus | None = None
