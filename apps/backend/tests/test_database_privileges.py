@@ -159,9 +159,25 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 ).format(sql.Identifier(schema_name))
             )
 
-        # This mirrors the second bootstrap task that runs after Alembic so
-        # runtime receives grants on schema objects created by the migration.
+        # Simulate privilege drift from an earlier deployment. The second
+        # bootstrap must remove these excess grants, not merely add DML grants.
         with psycopg.connect(admin_conninfo) as connection:
+            connection.execute(
+                sql.SQL(
+                    "GRANT TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA {} TO {}"
+                ).format(sql.Identifier(schema_name), sql.Identifier(runtime_role))
+            )
+            connection.execute(
+                sql.SQL(
+                    "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {} TO {}"
+                ).format(sql.Identifier(schema_name), sql.Identifier(runtime_role))
+            )
+            connection.execute(
+                sql.SQL("GRANT CREATE ON SCHEMA {} TO {}").format(
+                    sql.Identifier(schema_name), sql.Identifier(runtime_role)
+                )
+            )
+
             provision_database_roles(
                 connection,
                 database_name=database_name,
@@ -171,6 +187,38 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 migrator_password=migrator_password,
                 schema_name=schema_name,
             )
+
+            excess_table_privileges = connection.execute(
+                """
+                SELECT
+                    has_table_privilege(%s, %s, 'TRUNCATE'),
+                    has_table_privilege(%s, %s, 'REFERENCES'),
+                    has_table_privilege(%s, %s, 'TRIGGER')
+                """,
+                (
+                    runtime_role,
+                    f"{schema_name}.items",
+                    runtime_role,
+                    f"{schema_name}.items",
+                    runtime_role,
+                    f"{schema_name}.items",
+                ),
+            ).fetchone()
+            assert excess_table_privileges == (False, False, False)
+
+            sequence_name = connection.execute(
+                "SELECT pg_get_serial_sequence(%s, 'id')",
+                (f"{schema_name}.migration_created",),
+            ).fetchone()[0]
+            assert sequence_name is not None
+            assert not connection.execute(
+                "SELECT has_sequence_privilege(%s, %s, 'UPDATE')",
+                (runtime_role, sequence_name),
+            ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT has_schema_privilege(%s, %s, 'CREATE')",
+                (runtime_role, schema_name),
+            ).fetchone()[0]
 
         with psycopg.connect(runtime_conninfo) as connection:
             connection.execute(
