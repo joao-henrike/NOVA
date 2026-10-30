@@ -172,6 +172,8 @@ The frontend ECS execution role is ECR-pull-only. The normal backend execution r
 
 The application task roles are separate from task execution roles and remain empty of application AWS permissions. Secrets Manager access is granted to ECS task execution roles only for startup-time secret injection, not to the running application role.
 
+All ECS containers use the `awslogs` driver. Frontend, backend, database bootstrap, database migration, and monitoring workloads write to separate Terraform-managed CloudWatch log groups. Each execution role receives only `logs:CreateLogStream` and `logs:PutLogEvents` for its own group; no container receives CloudWatch Logs read permissions. Retention is 7 days in development and 30 days in production. The ECS task execution roles do not need `logs:CreateLogGroup` because the groups are created by Terraform.
+
 This means the current MVP does not grant the application arbitrary AWS APIs.
 
 ## 10. Terraform-state security

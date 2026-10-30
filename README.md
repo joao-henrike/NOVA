@@ -1035,6 +1035,8 @@ The application database is reachable from the backend security boundary.
 
 The monitoring database is reachable from the monitoring security boundary.
 
+All ECS task logs are centralized in CloudWatch Logs, separated by workload and retained for 7 days in development or 30 days in production.
+
 RDS is not directly exposed through the public ALB.
 
 ---

@@ -587,7 +587,9 @@ The workflow applies only a previously generated Terraform plan whose non-no-op 
 
 The workflow provisions/reuses the runtime and migrator Secrets Manager values before planning. The AWS CD role therefore needs `secretsmanager:DescribeSecret`, `GetSecretValue`, `CreateSecret`, and `PutSecretValue` limited to the two database credential secrets.
 
-After ECS activation it runs three private Fargate tasks in order: database role bootstrap (master login), Alembic migrations (migrator login), then database role bootstrap again (to grant runtime DML access on all post-migration objects). Those one-off tasks use a dedicated no-ingress security group; only PostgreSQL and HTTPS egress are allowed. The normal HTTP backend task receives only the runtime login. The CD plan guard explicitly allows the database bootstrap/migration task definitions and their dedicated execution roles/policies, while still rejecting unrelated resource changes and deletes.
+All ECS task stdout/stderr is sent to CloudWatch Logs through Terraform-managed groups. Retention is 7 days in development and 30 days in production; each ECS execution role can create streams and write events only to its workload's group.
+
+After ECS activation it runs three private Fargate tasks in order: database role bootstrap (master login), Alembic migrations (migrator login), then database role bootstrap again (to grant runtime DML access on all post-migration objects). Those one-off tasks use a dedicated no-ingress security group; only PostgreSQL and HTTPS egress are allowed. The normal HTTP backend task receives only the runtime login. The CD plan guard allows only the application/database/monitoring task definitions and services, their dedicated execution policies, the database-task network rules, and the CloudWatch log groups; unrelated changes and all deletes still fail the guard.
 
 Development deploy and rebuild workflows share one non-cancelling concurrency group so Terraform destroy/apply and secret provisioning cannot overlap.
 
