@@ -56,6 +56,21 @@ data "aws_iam_policy_document" "ecs_execution_permissions" {
       aws_db_instance.this.master_user_secret[0].secret_arn
     ]
   }
+
+  dynamic "statement" {
+    for_each = var.backend_auth_secret_arn == "" ? [] : [var.backend_auth_secret_arn]
+
+    content {
+      sid    = "ReadBackendAuthenticationSecret"
+      effect = "Allow"
+
+      actions = [
+        "secretsmanager:GetSecretValue"
+      ]
+
+      resources = [statement.value]
+    }
+  }
 }
 
 resource "aws_iam_role" "ecs_execution" {

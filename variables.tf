@@ -566,3 +566,21 @@ variable "monitoring_db_backup_retention_period" {
     error_message = "monitoring_db_backup_retention_period must be between 1 and 35 days."
   }
 }
+
+
+variable "backend_auth_secret_arn" {
+  description = "Optional ARN of a Secrets Manager JSON secret containing backend JWT and OAuth settings. Required when deploy_application is true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.backend_auth_secret_arn == "" ||
+      can(regex(
+        "^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:.+$",
+        var.backend_auth_secret_arn,
+      ))
+    )
+    error_message = "backend_auth_secret_arn must be empty or a valid Secrets Manager secret ARN."
+  }
+}

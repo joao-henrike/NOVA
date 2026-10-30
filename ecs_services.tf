@@ -61,6 +61,13 @@ resource "aws_ecs_task_definition" "backend" {
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_backend_task.arn
 
+  lifecycle {
+    precondition {
+      condition     = !var.deploy_application || trimspace(var.backend_auth_secret_arn) != ""
+      error_message = "Set backend_auth_secret_arn before enabling deploy_application; backend JWT/OAuth settings must come from Secrets Manager."
+    }
+  }
+
   container_definitions = jsonencode([
     {
       name      = var.backend_container_name
@@ -101,12 +108,23 @@ resource "aws_ecs_task_definition" "backend" {
         }
       ]
 
-      secrets = [
-        {
-          name      = "DB_PASSWORD"
-          valueFrom = "${aws_db_instance.this.master_user_secret[0].secret_arn}:password::"
-        }
-      ]
+      secrets = concat(
+        [
+          {
+            name      = "DB_PASSWORD"
+            valueFrom = "${aws_db_instance.this.master_user_secret[0].secret_arn}:password::"
+          }
+        ],
+        var.backend_auth_secret_arn == "" ? [] : [
+          for key in local.backend_auth_secret_keys : {
+            name      = key
+            valueFrom = "${var.backend_auth_secret_arn}:${key}::"
+          }
+        ]
+      )
+
+      # Authentication configuration is supplied out-of-band through Secrets Manager.
+      # Do not put OAuth credentials or JWT signing material in Terraform variables.
 
       healthCheck = {
         command = [
