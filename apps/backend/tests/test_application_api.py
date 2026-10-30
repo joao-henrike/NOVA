@@ -324,10 +324,16 @@ class ApplicationApiTest(unittest.TestCase):
 
     def test_cookie_logout_rejects_cross_origin_and_preserves_session(self) -> None:
         _, refresh_token = self._issue_session()
+        self.client.cookies.clear()
+        self.client.cookies.set(
+            "nova_refresh_token",
+            refresh_token,
+            domain="testserver",
+            path="/api/auth",
+        )
 
         rejected = self.client.post(
             "/api/auth/logout",
-            cookies={"nova_refresh_token": refresh_token},
             headers={"Origin": "http://attacker.test"},
         )
         self.assertEqual(rejected.status_code, 403)
@@ -342,10 +348,10 @@ class ApplicationApiTest(unittest.TestCase):
 
         accepted = self.client.post(
             "/api/auth/logout",
-            cookies={"nova_refresh_token": refresh_token},
             headers={"Origin": "https://testserver"},
         )
         self.assertEqual(accepted.status_code, 204)
+        self.client.cookies.clear()
 
         with self.session_factory() as session:
             record = (
