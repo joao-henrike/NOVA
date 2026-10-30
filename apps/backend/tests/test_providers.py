@@ -223,9 +223,11 @@ class ProviderSettingsTest(unittest.TestCase):
     def test_provider_identity_rejects_invalid_subject_and_oversized_fields(self) -> None:
         invalid_subjects = (None, "", "  ", 123)
         for subject in invalid_subjects:
-            with self.subTest(subject=subject):
-                with self.assertRaisesRegex(ProviderAuthenticationError, "subject"):
-                    claims_to_identity({"sub": subject})
+            with (
+                self.subTest(subject=subject),
+                self.assertRaisesRegex(ProviderAuthenticationError, "subject"),
+            ):
+                claims_to_identity({"sub": subject})
 
         with self.assertRaisesRegex(ProviderAuthenticationError, "subject is too long"):
             claims_to_identity({"sub": "S" * 256})

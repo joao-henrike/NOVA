@@ -185,7 +185,7 @@ class AuthSecurityTest(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(RuntimeError, "configuration is incomplete"):
-                Settings(_env_file=None).sqlalchemy_database_url
+                _ = Settings(_env_file=None).sqlalchemy_database_url
 
     def test_provider_and_signing_configuration_validation(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "Google authentication is not configured"):

@@ -131,15 +131,17 @@ class AuthRateLimitTest(unittest.TestCase):
     def test_non_positive_rate_limit_or_window_is_rejected(self) -> None:
         with self.session_factory() as session:
             for limit, window_seconds in ((0, 60), (1, 0), (-1, 60)):
-                with self.subTest(limit=limit, window_seconds=window_seconds):
-                    with self.assertRaisesRegex(ValueError, "must be positive"):
-                        check_rate_limit(
-                            session,
-                            scope="invalid",
-                            client_ip="203.0.113.1",
-                            limit=limit,
-                            window_seconds=window_seconds,
-                        )
+                with (
+                    self.subTest(limit=limit, window_seconds=window_seconds),
+                    self.assertRaisesRegex(ValueError, "must be positive"),
+                ):
+                    check_rate_limit(
+                        session,
+                        scope="invalid",
+                        client_ip="203.0.113.1",
+                        limit=limit,
+                        window_seconds=window_seconds,
+                    )
 
     def test_limits_are_isolated_by_scope_and_client(self) -> None:
         now = datetime(2026, 10, 30, 12, 0, 0, tzinfo=UTC)
