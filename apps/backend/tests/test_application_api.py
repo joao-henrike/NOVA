@@ -300,6 +300,56 @@ class ApplicationApiTest(unittest.TestCase):
         )
         self.assertEqual(revoked_replacement.status_code, 401)
 
+    def test_cookie_refresh_rejects_cross_origin_and_rotates_same_origin(self) -> None:
+        _, refresh_token = self._issue_session()
+        self.client.cookies.clear()
+        self.client.cookies.set(
+            "nova_refresh_token",
+            refresh_token,
+            path="/api/auth",
+        )
+
+        rejected = self.client.post(
+            "/api/auth/refresh",
+            json={},
+            headers={"Origin": "http://attacker.test"},
+        )
+        self.assertEqual(rejected.status_code, 403)
+
+        with self.session_factory() as session:
+            record = (
+                session.query(RefreshToken)
+                .filter_by(token_hash=hash_refresh_token(refresh_token))
+                .one()
+            )
+            self.assertIsNone(record.revoked_at)
+
+        rotated = self.client.post(
+            "/api/auth/refresh",
+            json={},
+            headers={"Origin": "https://testserver"},
+        )
+        self.assertEqual(rotated.status_code, 200)
+        self.assertEqual(rotated.headers["cache-control"], "no-store")
+        replacement_token = rotated.cookies.get("nova_refresh_token")
+        self.assertTrue(replacement_token)
+        self.assertNotEqual(replacement_token, refresh_token)
+        self.client.cookies.clear()
+
+        with self.session_factory() as session:
+            old_record = (
+                session.query(RefreshToken)
+                .filter_by(token_hash=hash_refresh_token(refresh_token))
+                .one()
+            )
+            replacement_record = (
+                session.query(RefreshToken)
+                .filter_by(token_hash=hash_refresh_token(replacement_token))
+                .one()
+            )
+            self.assertIsNotNone(old_record.revoked_at)
+            self.assertIsNone(replacement_record.revoked_at)
+
     def test_logout_revokes_refresh_and_access_tokens(self) -> None:
         access_token, refresh_token = self._issue_session()
         headers = {"Authorization": f"Bearer {access_token}"}
