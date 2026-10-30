@@ -181,6 +181,7 @@ HttpOnly refresh cookie
 refresh-token hashing
 refresh-token rotation
 refresh-token reuse detection
+PostgreSQL-backed per-client authentication rate limits
 explicit account-linking requirement
 no provider credentials committed to source
 ```
@@ -240,6 +241,7 @@ Current migrations include:
 0001_create_items
 0002_add_authentication
 0003_scope_items_to_users
+0004_auth_rate_limit_buckets
 ```
 
 ## Required configuration
@@ -334,3 +336,10 @@ The ECS execution role receives secretsmanager:GetSecretValue for this secret AR
 This configures credential delivery; it does not create Google/Apple OAuth client registrations. Apple web sign-in also remains dependent on an HTTPS callback domain and an Apple-registered Service ID. The current HTTP-only ALB is not sufficient for production OAuth callbacks.
 
 For production, provider credentials and the JWT signing secret must come from the secret-management layer rather than repository files.
+
+
+### Authentication rate limits
+
+Authentication endpoints use PostgreSQL-backed fixed-window limits shared between ECS tasks. Defaults are 10 OAuth login starts, 20 callbacks, 30 refresh requests, and 60 logout requests per client address per five minutes. Rejected requests return HTTP 429 with Retry-After.
+
+Non-local deployments must keep the backend private behind the ALB. Client address extraction trusts the final ALB-appended X-Forwarded-For address; do not expose the backend directly or change ALB forwarding behavior without revisiting this trust boundary.
