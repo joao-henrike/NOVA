@@ -148,6 +148,14 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                     sql.Identifier(migrator_role)
                 )
             )
+            # Simulate stale direct database grants from an older deployment.
+            connection.execute(
+                sql.SQL("GRANT TEMPORARY ON DATABASE {} TO {}, {}").format(
+                    sql.Identifier(database_name),
+                    sql.Identifier(runtime_role),
+                    sql.Identifier(migrator_role),
+                )
+            )
 
             # Create inherited privilege groups as the non-superuser
             # provisioner. The runtime group receives excessive schema access;
@@ -211,6 +219,14 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 "SELECT has_database_privilege(%s, %s, 'TEMP')",
                 (runtime_role, database_name),
             ).fetchone()[0]
+            assert connection.execute(
+                "SELECT has_database_privilege(%s, %s, 'CONNECT')",
+                (migrator_role, database_name),
+            ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT has_database_privilege(%s, %s, 'TEMP')",
+                (migrator_role, database_name),
+            ).fetchone()[0]
             assert not connection.execute(
                 "SELECT has_database_privilege(%s, %s, 'CONNECT')",
                 (guest_role, database_name),
@@ -218,6 +234,14 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
             assert not connection.execute(
                 "SELECT has_database_privilege(%s, %s, 'TEMP')",
                 (guest_role, database_name),
+            ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT has_schema_privilege(%s, %s, 'USAGE')",
+                (guest_role, schema_name),
+            ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT has_schema_privilege(%s, %s, 'CREATE')",
+                (guest_role, schema_name),
             ).fetchone()[0]
 
             assert not connection.execute(
