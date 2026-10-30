@@ -67,6 +67,15 @@ resource "aws_vpc_security_group_egress_rule" "alb_to_backend" {
   description                  = "ALB to backend targets"
 }
 
+resource "aws_vpc_security_group_egress_rule" "alb_to_grafana" {
+  security_group_id            = aws_security_group.alb.id
+  referenced_security_group_id = aws_security_group.monitoring.id
+  from_port                    = var.grafana_container_port
+  to_port                      = var.grafana_container_port
+  ip_protocol                  = "tcp"
+  description                  = "ALB to Grafana target only"
+}
+
 resource "aws_vpc_security_group_ingress_rule" "frontend_from_alb" {
   security_group_id            = aws_security_group.frontend.id
   referenced_security_group_id = aws_security_group.alb.id

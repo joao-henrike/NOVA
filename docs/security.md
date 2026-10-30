@@ -50,7 +50,9 @@ Current groups:
 cloudstart-<env>-alb-sg
 cloudstart-<env>-frontend-sg
 cloudstart-<env>-backend-sg
+cloudstart-<env>-monitoring-sg
 cloudstart-<env>-rds-sg
+cloudstart-<env>-monitoring-db-sg
 ```
 
 ### Allowed ingress
@@ -59,16 +61,23 @@ cloudstart-<env>-rds-sg
 Internet -> ALB :80
 ALB     -> Frontend :80
 ALB     -> Backend  :8000
+ALB     -> Grafana  :3000
 Backend -> RDS      :5432
+Monitoring -> Monitoring RDS :5432
 ```
 
 ### Current egress
 
 ```text
+ALB      -> Frontend :80
+ALB      -> Backend  :8000
+ALB      -> Grafana  :3000
 Frontend -> Internet :443
 Backend  -> Internet :443
-Backend  -> RDS     :5432
-RDS      -> Internet :all
+Backend  -> App RDS  :5432
+Monitoring -> Monitoring RDS :5432
+Monitoring -> Internet :443
+Monitoring RDS -> Internet :all
 ```
 
 These egress rules are the actual current configuration; no stronger future restriction should be documented as already implemented.
