@@ -159,7 +159,7 @@ resource "aws_lb_listener_rule" "grafana" {
     ? aws_lb_listener.http[0].arn
     : aws_lb_listener.https[0].arn
   )
-  priority     = 20
+  priority = 20
 
   action {
     type             = "forward"

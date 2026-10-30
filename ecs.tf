@@ -143,7 +143,7 @@ resource "aws_lb_listener_rule" "backend" {
     ? aws_lb_listener.http[0].arn
     : aws_lb_listener.https[0].arn
   )
-  priority     = 10
+  priority = 10
 
   action {
     type             = "forward"
