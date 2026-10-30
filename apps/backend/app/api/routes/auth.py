@@ -42,18 +42,35 @@ service = AuthService()
 
 
 def _validate_redirect_uri(uri: str, *, apple: bool = False) -> None:
-    parsed = urlparse(uri)
+    try:
+        parsed = urlparse(uri)
+    except ValueError as exc:
+        raise RuntimeError("Authentication redirect URI is invalid.") from exc
 
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise RuntimeError("Authentication redirect URI must be an absolute HTTP(S) URL.")
+
+    if parsed.username or parsed.password:
+        raise RuntimeError("Authentication redirect URI must not contain user information.")
 
     if parsed.fragment:
         raise RuntimeError("Authentication redirect URI must not contain a fragment.")
 
+    is_local_host = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    is_local_http = (
+        settings.app_env.lower() == "local"
+        and parsed.scheme == "http"
+        and is_local_host
+    )
+    if parsed.scheme != "https" and not is_local_http:
+        raise RuntimeError(
+            "HTTP authentication redirect URIs are allowed only for localhost in local development."
+        )
+
     if apple:
         if parsed.scheme != "https":
             raise RuntimeError("Apple web authentication requires HTTPS.")
-        if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
+        if is_local_host:
             raise RuntimeError(
                 "Apple web authentication requires a registered domain."
             )

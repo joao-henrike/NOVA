@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 
 import httpx
 import jwt
+from google.auth.exceptions import TransportError
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token
 from jwt import PyJWKClient
@@ -110,10 +111,10 @@ def verify_google_id_token(
     try:
         claims = id_token.verify_oauth2_token(
             token,
-            Request(),
+            Request(timeout=10),
             settings.google_client_id,
         )
-    except ValueError as exc:
+    except (ValueError, TransportError) as exc:
         raise ProviderAuthenticationError(
             "Google ID token validation failed."
         ) from exc
