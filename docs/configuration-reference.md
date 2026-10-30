@@ -318,3 +318,12 @@ The bootstrap outputs are:
 | lock_table_name | DynamoDB table name used for Terraform state locking compatibility. |
 | region | AWS region used for the backend resources. |
 
+
+
+## 15. OIDC readiness boundary
+
+The GitHub OIDC role is an external AWS IAM resource; its trust relationship and permissions are not stored in this repository. The development workflows use the `development` GitHub Environment and enforce account `760396521507`. The role trust must be narrowly bound to this repository and the intended development workflow context; do not use a broad organization-wide or `repo:*` trust condition.
+
+The repository variable `AWS_CD_ROLE_ARN` is required by the normal development CD and is also used by the optional live-AWS stage in Extreme Validation. A missing value causes the CD job to be skipped and the Extreme Validation AWS checks to be reported as skipped; it does not mean the local CI has failed.
+
+At the 30 October 2026 validation snapshot (commit `cdb9a431826bb3440df367381242a9838b4729a5`), the Extreme Validation logs showed this variable empty. See the [CI/CD evidence section](ci-cd.md#latest-recorded-validation-evidence). Confirm the live GitHub repository setting before treating OIDC deployment as ready.

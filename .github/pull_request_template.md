@@ -36,7 +36,7 @@ Describe what changed and why.
 - [ ] Checkov passes or findings are explicitly reviewed
 - [ ] Trivy IaC scan passes
 - [ ] Gitleaks reports no secrets
-- [ ] `terraform-docs` generation check passes
+- [ ] Documentation tables, links, and examples were checked against the current Terraform variables/outputs and workflow inputs
 - [ ] Container CI passes when application/container files changed
 - [ ] `docker compose config --quiet` passes when Compose changes
 - [ ] `terraform plan` reviewed when the credentialed plan gate is enabled

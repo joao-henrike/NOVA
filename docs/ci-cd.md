@@ -102,7 +102,7 @@ Application Compose integration
 Monitoring Compose integration
 Terraform root + bootstrap
 TFLint
-Terraform configuration plan preview
+Terraform dependency graph and plan-input contract
 Repository contract
 Secret-pattern checks
 GitHub Actions workflow contracts
@@ -294,3 +294,16 @@ development-only public ALB HTTP ingress
 ```
 
 These exceptions are technical debt and must be removed as the corresponding controls are implemented.
+
+## Latest recorded validation evidence
+
+The following is a timestamped repository-run observation, not a claim about the current live AWS runtime:
+
+| Workflow | Commit | Result | Interpretation |
+| --- | --- | --- | --- |
+| [NOVA CI](https://github.com/joao-henrike/NOVA/actions/runs/41123601138) | `cdb9a431826bb3440df367381242a9838b4729a5` | Success | All seven CI jobs completed successfully. |
+| [NOVA — Extreme Validation](https://github.com/joao-henrike/NOVA/actions/runs/41123600983) | `cdb9a431826bb3440df367381242a9838b4729a5` | Job success; coverage partial | Local checks completed with zero recorded failures, but nine live AWS checks were marked `SKIP`. |
+
+The extreme-validation logs for that run showed `AWS_CD_ROLE_ARN` empty. The OIDC step was therefore skipped, and the workflow did not verify AWS identity, state-bucket access, remote Terraform initialization, or a live AWS plan. The bucket name is present in the tracked `config/dev.env`; the missing role variable was the observed blocker.
+
+**Interpretation rule:** a green workflow conclusion is not proof of complete AWS validation when the workflow summary says `Coverage: PARTIAL` or lists skipped AWS checks. Re-run the workflow after the external OIDC role and GitHub repository variable are configured. Do not infer live infrastructure health from these CI results.

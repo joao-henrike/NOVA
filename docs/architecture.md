@@ -2,6 +2,12 @@
 
 > **Source of truth:** the Terraform configuration and application files in this repository snapshot. This document describes what the MVP actually declares. It does not incorporate future proposals.
 
+## Visual reference
+
+![CloudStart MVP architecture diagram](../CloudStart_MVP_Arquitetura_Atual.drawio.png)
+
+> This PNG is retained unchanged from the repository's `main` branch. It is a visual aid, not a substitute for the current Terraform definitions. When the image and code differ, the code and the implementation details below take precedence.
+
 ## 1. Architectural boundary
 
 The current repository implements a small web application platform on AWS:
@@ -104,7 +110,7 @@ ALB
 
 The listener's default action is the frontend target group. The backend path rule has priority 10.
 
-There is no HTTPS listener, ACM certificate, WAF, Route 53 record, or edge distribution in the current Terraform.
+The committed development configuration leaves `acm_certificate_arn` and `alb_domain_name` empty, so its active listener is HTTP on port 80 and it has no TLS termination. Terraform does define conditional HTTPS and HTTP-redirect listeners when an already-issued ACM certificate ARN and matching hostname are supplied. The stack does not issue certificates, validate domains, or create Route 53 records. WAF and an edge distribution are not implemented.
 
 ## 6. Frontend runtime
 

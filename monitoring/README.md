@@ -1,5 +1,7 @@
 # CloudStart Monitoring — Zabbix + Grafana
 
+> Repository-wide documentation: [NOVA documentation index](../docs/README.md) · [Architecture](../docs/architecture.md) · [Security model](../docs/security.md) · [Deployment](../docs/deployment.md).
+
 The current MVP uses a containerized Zabbix + Grafana monitoring plane.
 
 ## Components

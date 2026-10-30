@@ -45,7 +45,7 @@ Terraform can attach an already-issued ACM certificate to the ALB, but the commi
 
 Future capabilities remain outside the current implementation boundary.
 
-**Operational documentation:** [Deployment guide](docs/deployment.md) · [CI/CD](docs/ci-cd.md) · [Architecture](docs/architecture.md) · [Security model](docs/security.md) · [Current-state inventory](docs/current-state.md) · [Configuration reference](docs/configuration-reference.md) · [Local development](docs/local-development.md).
+**Documentation map:** [Documentation index](docs/README.md) · [Deployment guide](docs/deployment.md) · [CI/CD](docs/ci-cd.md) · [Architecture](docs/architecture.md) · [Security model](docs/security.md) · [Accepted security exceptions](docs/security-exceptions.md) · [Current-state inventory](docs/current-state.md) · [Configuration reference](docs/configuration-reference.md) · [Local development](docs/local-development.md) · [Backend](apps/backend/README.md) · [Frontend](apps/frontend/README.md) · [Monitoring](monitoring/README.md) · [Bootstrap](bootstrap/README.md) · [Operational scripts](scripts/README.md).
 
 ## 2. Repository source of truth
 
@@ -219,6 +219,10 @@ The frontend AWS Nginx configuration is separate from the local Compose configur
               | PostgreSQL 16       |
               +----------------------+
 ```
+
+![CloudStart MVP architecture diagram](CloudStart_MVP_Arquitetura_Atual.drawio.png)
+
+> The checked-in PNG is preserved unchanged from `main` as a visual reference. The Terraform and the detailed [architecture document](docs/architecture.md) remain authoritative if the diagram and current code ever differ.
 
 Frontend, backend, and monitoring workloads run in private application subnets.
 
@@ -1222,9 +1226,17 @@ Frontend task
 Backend task
 ```
 
-The current audit identified IAM policies that require a deeper least-privilege review.
+The current repository now uses workload-specific ECS execution policies:
 
-The auditor's automated rule was too broad to prove that the policies were actually overprivileged, so the policies must be reviewed by `Action`, `Resource`, and `Condition` before changing them.
+| Execution role | Intended permissions |
+| --- | --- |
+| Legacy `ecs_execution` | Frontend image pull and frontend logs; it retains conditional backend access only while `deploy_application = false` for the baseline task definition. |
+| `ecs_backend_execution` | Backend image pull, backend log group writes, runtime DB secret, and backend authentication secret. |
+| `ecs_migration_execution` | Backend image pull, migration log group writes, and the migrator DB secret. |
+| `ecs_db_bootstrap_execution` | Backend image pull, bootstrap log group writes, and the RDS master plus runtime/migrator DB secrets required by the one-off bootstrap. |
+| `ecs_monitoring_execution` | Monitoring log group writes, monitoring DB secret, and Grafana administrator secret. |
+
+Frontend, backend, and monitoring task roles are separate from execution roles and have no additional application AWS permissions in the current implementation. The database bootstrap and Alembic task definitions omit `task_role_arn`, so their containers receive no ECS task-role credentials. The external GitHub OIDC deployment role is a separate control-plane identity and still requires operator-side trust-policy and least-privilege review. See [Security model](docs/security.md) and [CI/CD](docs/ci-cd.md).
 
 ---
 
@@ -1931,57 +1943,27 @@ wrong security group
 
 ---
 
-## 51. Extreme audit
+## 51. Repository audit utilities
 
-The repository contains:
+The repository contains two operator-facing, read-only audit scripts:
 
-```text
-audit-nova-extreme.sh
-```
-
-Normal:
+**Full NOVA / CloudStart audit** — `audit-nova.sh`:
 
 ```bash
-./audit-nova-extreme.sh
+bash audit-nova.sh
 ```
 
-Deep:
+It inspects local tooling and repository configuration and, when an AWS identity is available, queries the configured account's infrastructure. It does not run `terraform apply`, create resources, restart services, or modify AWS resources. Its report is written to `nova-audit-YYYYMMDD-HHMMSS/` in the current working directory.
+
+**Frontend forensic audit** — `audit-frontend.sh`:
 
 ```bash
-AUDIT_DEEP=1 ./audit-nova-extreme.sh
+bash audit-frontend.sh
 ```
 
-The audit performs read-only checks against:
+It correlates the frontend source and image with ECS task/service state, CloudWatch logs, ALB target health, security groups, DNS, and HTTP reachability. Its artifacts are written under `/tmp/nova-frontend-audit-<timestamp>/`.
 
-```text
-Git
-Terraform
-Docker
-ECR
-ECS
-ALB
-Target Groups
-VPC
-Subnets
-Routes
-NAT
-Security Groups
-RDS
-Secrets Manager
-IAM
-Autoscaling
-remote state
-CI/CD
-CloudTrail
-GuardDuty
-repository patterns
-```
-
-The output is written into a timestamped:
-
-```text
-audit-nova-extreme-YYYYMMDD-HHMMSS/
-```
+These scripts are diagnostic tools, not deployment gates. A report reflects the time and AWS identity under which it was generated; it is not proof of a later runtime state.
 
 ---
 

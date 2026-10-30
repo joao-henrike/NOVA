@@ -385,3 +385,15 @@ The repository implements a Terraform-defined AWS foundation, a minimal two-serv
 It is not yet a complete production business application or a production-grade delivery platform. Production CD, high-availability database configuration, formal disaster recovery, full business authorization, financial processing, and enterprise security services remain outside the current implementation.
 
 The configuration reference in docs/configuration-reference.md records every root Terraform input, bootstrap input, secret name, GitHub variable, workflow entry point, and deployment boundary. It must be updated alongside the source whenever those interfaces change.
+
+
+## 11. Latest recorded validation evidence
+
+The latest recorded CI evidence for the audited repository snapshot is dated **30 October 2026**, commit `cdb9a431826bb3440df367381242a9838b4729a5`:
+
+- [NOVA CI](https://github.com/joao-henrike/NOVA/actions/runs/41123601138): successful; all seven jobs passed.
+- [NOVA — Extreme Validation](https://github.com/joao-henrike/NOVA/actions/runs/41123600983): successful job conclusion with **partial coverage**; zero recorded failures and nine AWS checks skipped.
+
+The extreme-validation logs show that `AWS_CD_ROLE_ARN` was empty for that run. As a result, OIDC assumption and the live AWS identity, S3 backend, and Terraform-plan checks were not executed. The repository's `config/dev.env` contains the expected development bucket name, but that does not replace AWS identity validation.
+
+This is historical CI evidence tied to the cited commit. It does not establish that AWS resources exist, that ECS services are running, or that the account is currently healthy. Re-run validation after the external GitHub/AWS OIDC configuration is completed.

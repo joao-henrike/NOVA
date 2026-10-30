@@ -2,6 +2,8 @@
 
 Python/FastAPI backend for the CloudStart MVP.
 
+> Repository-wide documentation: [NOVA documentation index](../../docs/README.md) · [Architecture](../../docs/architecture.md) · [Security model](../../docs/security.md) · [Configuration reference](../../docs/configuration-reference.md) · [Deployment](../../docs/deployment.md).
+
 The backend keeps the existing health contract used by the ALB/frontend and adds a structured persistence layer, a protected technical CRUD slice, and Sign in with Google / Sign in with Apple authentication.
 
 ## Stack

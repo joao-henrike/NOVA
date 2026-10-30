@@ -244,16 +244,12 @@ Zabbix/Grafana monitoring task + monitoring RDS + Grafana ALB route
 
 Build the same images used by the repository's Container CI:
 
-### Frontend
+Use an immutable tag for a manual recovery build. A full Git commit SHA avoids collisions with immutable ECR tags and follows the same image-identity convention as automated development releases:
 
 ```bash
-docker build -t cloudstart/frontend:v0.1.0 apps/frontend
-```
-
-### Backend
-
-```bash
-docker build -t cloudstart/backend:v0.1.0 apps/backend
+IMAGE_TAG="$(git rev-parse HEAD)"
+docker build --pull -t "cloudstart-dev-frontend:$IMAGE_TAG" apps/frontend
+docker build --pull -t "cloudstart-dev-backend:$IMAGE_TAG" apps/backend
 ```
 
 The development CD workflow builds, scans, and publishes application images automatically. The manual commands below remain useful for local/operator recovery.
@@ -273,18 +269,18 @@ This command pattern is an operational procedure; the repository does not hardco
 
 ## 12. Tag and push images
 
-Tag the local images with the immutable ECR repository URLs:
+Tag the local images with the immutable ECR repository URLs. Use the exact tag that was used to build each image:
 
 ```bash
-docker tag cloudstart/frontend:v0.1.0 <frontend_ecr_repository_url>:v0.1.0
-docker tag cloudstart/backend:v0.1.0 <backend_ecr_repository_url>:v0.1.0
+docker tag "cloudstart-dev-frontend:$IMAGE_TAG" "$(terraform output -raw frontend_ecr_repository_url):$IMAGE_TAG"
+docker tag "cloudstart-dev-backend:$IMAGE_TAG" "$(terraform output -raw backend_ecr_repository_url):$IMAGE_TAG"
 ```
 
 Push:
 
 ```bash
-docker push <frontend_ecr_repository_url>:v0.1.0
-docker push <backend_ecr_repository_url>:v0.1.0
+docker push "$(terraform output -raw frontend_ecr_repository_url):$IMAGE_TAG"
+docker push "$(terraform output -raw backend_ecr_repository_url):$IMAGE_TAG"
 ```
 
 The current ECR repositories reject tag mutation because they are configured with immutable tags.
@@ -490,7 +486,7 @@ After applying Terraform, the `grafana_url` output points to the monitoring UI e
 http://<alb-dns>/grafana/
 ```
 
-The public ALB listener remains HTTP-only in the current MVP. HTTPS/ACM is still outside the current implementation.
+The committed development configuration is HTTP-only because its ACM inputs are empty. Terraform can enable HTTPS and redirect HTTP when an already-issued certificate ARN and matching hostname are supplied; certificate issuance, DNS, and domain validation remain operator-managed.
 
 ### Local Docker monitoring
 
