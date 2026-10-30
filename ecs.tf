@@ -18,6 +18,8 @@ resource "aws_lb" "this" {
   internal                   = false
   drop_invalid_header_fields = true
   load_balancer_type         = "application"
+  xff_header_processing_mode = "append"
+  enable_xff_client_port     = false
   security_groups            = [aws_security_group.alb.id]
   subnets                    = [for subnet in aws_subnet.public : subnet.id]
   enable_deletion_protection = var.alb_deletion_protection
