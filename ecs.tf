@@ -77,6 +77,8 @@ resource "aws_lb_target_group" "backend" {
 
 #trivy:ignore:AWS-0054
 resource "aws_lb_listener" "http" {
+  count = var.acm_certificate_arn == "" ? 1 : 0
+
   load_balancer_arn = aws_lb.this.arn
   port              = 80
   protocol          = "HTTP"
@@ -91,8 +93,56 @@ resource "aws_lb_listener" "http" {
   })
 }
 
+resource "aws_lb_listener" "http_redirect" {
+  count = var.acm_certificate_arn == "" ? 0 : 1
+
+  load_balancer_arn = aws_lb.this.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      host        = "#{host}"
+      path        = "/#{path}"
+      query       = "#{query}"
+      status_code = "HTTP_301"
+    }
+  }
+
+  tags = merge(local.global_tags, {
+    Name = "${local.name}-http-redirect-listener"
+  })
+}
+
+resource "aws_lb_listener" "https" {
+  count = var.acm_certificate_arn == "" ? 0 : 1
+
+  load_balancer_arn = aws_lb.this.arn
+  port              = 443
+  protocol          = "HTTPS"
+  certificate_arn   = var.acm_certificate_arn
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend.arn
+  }
+
+  tags = merge(local.global_tags, {
+    Name = "${local.name}-https-listener"
+  })
+}
+
 resource "aws_lb_listener_rule" "backend" {
-  listener_arn = aws_lb_listener.http.arn
+  listener_arn = (
+    var.acm_certificate_arn == ""
+    ? aws_lb_listener.http[0].arn
+    : aws_lb_listener.https[0].arn
+  )
   priority     = 10
 
   action {

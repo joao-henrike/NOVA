@@ -310,14 +310,34 @@ Get the ALB DNS output:
 terraform output -raw alb_dns_name
 ```
 
-The current public listener is HTTP (development MVP only):
+The committed development baseline uses HTTP. Its base URL is:
 
 ```bash
-ALB_DNS="$(terraform output -raw alb_dns_name)"
-curl -i "http://${ALB_DNS}/"
-curl -i "http://${ALB_DNS}/api/health"
-curl -i "http://${ALB_DNS}/api/health/db"
+terraform output -raw alb_application_url
 ```
+
+For an HTTPS deployment, configure both Terraform variables in a protected environment-specific tfvars file before planning:
+
+```hcl
+acm_certificate_arn = "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
+alb_domain_name     = "app.example.com"
+```
+
+The ACM certificate must already be issued in the same region as the ALB and cover `alb_domain_name`. Configure the DNS provider to point that hostname to the ALB DNS name returned by `terraform output -raw alb_dns_name`; DNS records and certificate issuance are intentionally outside this stack.
+
+With both values configured, port 443 serves the frontend, backend API, and Grafana, while port 80 redirects to HTTPS. With both empty, the current HTTP-only development listener is retained and port 443 remains closed.
+
+Validate the configured public path:
+
+```bash
+APP_URL="$(terraform output -raw alb_application_url)"
+curl -i "${APP_URL}"
+curl -i "${APP_URL}api/health"
+curl -i "${APP_URL}api/health/db"
+curl -i "${APP_URL}grafana/"
+```
+
+When TLS is enabled, also confirm the port-80 response is HTTP 301 and that the certificate hostname matches `alb_domain_name`.
 
 Expected routing:
 
@@ -325,9 +345,10 @@ Expected routing:
 /                 -> frontend
 /api/health       -> backend
 /api/health/db    -> backend -> PostgreSQL connectivity check
+/grafana/         -> Grafana
 ```
 
-The current implementation does not expose HTTPS on the ALB.
+This is optional Terraform support only. It does not mean a certificate, DNS record, or HTTPS endpoint has already been provisioned.
 
 ## 15. Operational checks
 

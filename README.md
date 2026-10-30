@@ -695,31 +695,34 @@ directly to the Internet.
 
 ---
 
-## 17. HTTPS status
+## 17. HTTPS / ACM configuration
 
-The current ALB exposes:
+The committed development baseline leaves both optional variables empty, so it continues to expose HTTP on port 80:
 
-```text
-HTTP :80
+```hcl
+acm_certificate_arn = ""
+alb_domain_name     = ""
 ```
 
-There is currently no:
+Terraform now supports an optional HTTPS mode. To enable it, first obtain an **issued ACM certificate in the same AWS region as the ALB** and configure a hostname covered by that certificate:
 
-```text
-HTTPS :443
-ACM certificate
-TLS listener
+```hcl
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
+alb_domain_name     = "app.example.com"
 ```
 
-Therefore the current public path is:
+Keep the real ARN and hostname in a protected environment-specific tfvars file when appropriate; do not copy the example ARN. The DNS provider must separately point the hostname to the ALB DNS name from the `alb_dns_name` output. This repository does not request ACM certificates, prove domain ownership, or create Route 53 records.
+
+When both values are configured, Terraform creates an HTTPS listener on port 443 with the issued certificate, moves the application and Grafana listener rules to HTTPS, and changes port 80 into an HTTP 301 redirect that preserves the original host, path, and query. The ALB security group permits public 443 ingress only in this mode.
+
+When both values are empty, the existing HTTP development listener remains active and no 443 ingress rule is created. The application is not TLS-protected until an operator supplies a valid certificate, hostname, and DNS record, then applies the reviewed plan.
+
+For real Google and Apple sign-in, provider redirect URIs must use the same registered HTTPS hostname, for example:
 
 ```text
-HTTP only
+https://app.example.com/api/auth/google/callback
+https://app.example.com/api/auth/apple/callback
 ```
-
-This is a known hardening gap and a planned next security step.
-
-The application should not be considered production-hardened until TLS termination has been implemented and validated.
 
 ---
 
@@ -2290,7 +2293,7 @@ The audit script itself therefore requires maintenance.
 [PENDING] backend target healthy
 [PENDING] Grafana target healthy
 [PENDING] Grafana timeout investigation
-[PENDING] HTTPS/ACM
+[PENDING] ACM certificate, DNS hostname, and HTTPS runtime validation (Terraform TLS mode is now optional)
 [PENDING] state bucket full Public Access Block
 [PENDING] IAM least-privilege review
 [PENDING] VPC Flow Logs
@@ -2886,8 +2889,8 @@ The architectural principle is:
 | Private DB subnets  | Implemented     | Provisioned             | Verify                           |
 | IGW                 | Implemented     | Provisioned             | Verify                           |
 | NAT Gateways        | Implemented     | 2                       | Verify                           |
-| ALB                 | Implemented     | Public HTTP :80         | Verify                           |
-| HTTPS               | Not implemented | N/A                     | Future hardening                 |
+| ALB                 | Implemented     | HTTP :80 by default     | Verify                           |
+| HTTPS               | Optional        | ACM :443 when configured | Certificate, DNS, and runtime validation |
 | Frontend ECS        | Implemented     | 2 tasks                 | Runtime validation               |
 | Backend ECS         | Implemented     | 2 tasks                 | Runtime validation               |
 | Monitoring ECS      | Implemented     | 1 task                  | Runtime validation               |
@@ -2908,7 +2911,7 @@ The architectural principle is:
 | CloudTrail          | Not implemented | N/A                     | Hardening                        |
 | GuardDuty           | Not implemented | N/A                     | Hardening                        |
 | WAF                 | Not implemented | N/A                     | Future                           |
-| ACM/HTTPS           | Not implemented | N/A                     | Future                           |
+| ACM/HTTPS           | Optional        | Existing ACM cert + DNS hostname required | Apply and verify TLS mode |
 
 ---
 

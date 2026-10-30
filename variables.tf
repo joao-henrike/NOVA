@@ -413,6 +413,40 @@ variable "rds_deletion_protection" {
   default     = false
 }
 
+variable "acm_certificate_arn" {
+  description = "Optional ARN of an already-issued ACM certificate in aws_region. When set, the ALB enables HTTPS and redirects HTTP to HTTPS."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.acm_certificate_arn == "" ||
+      can(regex(
+        "^arn:[^:]+:acm:${var.aws_region}:[0-9]{12}:certificate/[0-9a-fA-F-]{36}$",
+        var.acm_certificate_arn,
+      ))
+    )
+    error_message = "acm_certificate_arn must be empty or an ACM certificate ARN in aws_region."
+  }
+}
+
+variable "alb_domain_name" {
+  description = "DNS hostname covered by acm_certificate_arn. Required when HTTPS is enabled; DNS must be pointed to the ALB outside this stack."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      (var.acm_certificate_arn == "" && var.alb_domain_name == "") ||
+      (
+        var.acm_certificate_arn != "" &&
+        can(regex("^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$", var.alb_domain_name))
+      )
+    )
+    error_message = "Set both acm_certificate_arn and a valid alb_domain_name to enable HTTPS, or leave both empty."
+  }
+}
+
 
 variable "monitoring_desired_count" {
   description = "Number of ECS monitoring tasks. The stack contains a stateful Zabbix server, so the MVP keeps one task by default."

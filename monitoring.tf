@@ -154,7 +154,11 @@ resource "aws_lb_target_group" "grafana" {
 }
 
 resource "aws_lb_listener_rule" "grafana" {
-  listener_arn = aws_lb_listener.http.arn
+  listener_arn = (
+    var.acm_certificate_arn == ""
+    ? aws_lb_listener.http[0].arn
+    : aws_lb_listener.https[0].arn
+  )
   priority     = 20
 
   action {

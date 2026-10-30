@@ -29,8 +29,22 @@ output "private_db_subnet_ids" {
 }
 
 output "alb_dns_name" {
-  description = "Public DNS name of the Application Load Balancer."
+  description = "AWS-generated public DNS name of the Application Load Balancer."
   value       = aws_lb.this.dns_name
+}
+
+output "alb_application_url" {
+  description = "Application base URL. Uses the configured HTTPS hostname when ACM is enabled, otherwise the development HTTP ALB DNS name."
+  value = (
+    var.acm_certificate_arn == ""
+    ? "http://${aws_lb.this.dns_name}/"
+    : "https://${var.alb_domain_name}/"
+  )
+}
+
+output "alb_domain_name" {
+  description = "Configured public hostname for HTTPS, or an empty string when TLS is not enabled."
+  value       = var.alb_domain_name
 }
 
 output "frontend_ecr_repository_url" {
@@ -97,8 +111,12 @@ output "rds_master_user_secret_arn" {
 
 
 output "grafana_url" {
-  description = "Grafana URL exposed through the current public ALB listener."
-  value       = "http://${aws_lb.this.dns_name}/grafana/"
+  description = "Grafana URL exposed through the configured public ALB listener."
+  value = (
+    var.acm_certificate_arn == ""
+    ? "http://${aws_lb.this.dns_name}/grafana/"
+    : "https://${var.alb_domain_name}/grafana/"
+  )
 }
 
 output "monitoring_ecs_service_name" {

@@ -211,15 +211,16 @@ The current OIDC deployment path is restricted to the development environment. T
 
 ## 12. Current public security limitations
 
-Because the current ALB has an HTTP listener on port 80, the current MVP does not provide HTTPS/TLS termination.
+The committed development baseline has both `acm_certificate_arn` and `alb_domain_name` empty, so that baseline is HTTP-only and does not provide TLS termination.
+
+Terraform supports an optional HTTPS mode when an operator supplies an already-issued ACM certificate in the ALB's AWS region and the hostname covered by that certificate. In that mode, the ALB listens on 443 and redirects HTTP 80 to HTTPS. The repository does not issue certificates, complete domain validation, or create DNS records. Until the operator configures and applies those prerequisites, HTTPS must not be described as an active protection.
 
 There is also no current:
 
 ```text
 WAF
-ACM certificate
 CloudFront
-Route 53
+Route 53 resources managed by this stack
 API Gateway
 ```
 
