@@ -185,6 +185,33 @@ def _clear_state_cookie(response: Response, provider: AuthProvider) -> None:
     )
 
 
+def _extract_apple_profile_name(user_data: str | None) -> str | None:
+    """Read Apple's optional display name without trusting form-supplied email."""
+    if not user_data:
+        return None
+
+    try:
+        apple_user = json.loads(user_data)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    if not isinstance(apple_user, dict):
+        return None
+
+    name_data = apple_user.get("name")
+    if not isinstance(name_data, dict):
+        return None
+
+    first = name_data.get("firstName")
+    last = name_data.get("lastName")
+    full_name = " ".join(
+        part.strip()
+        for part in (first, last)
+        if isinstance(part, str) and part.strip()
+    )
+    return full_name[:200] or None
+
+
 def _authentication_response(
     *,
     response: Response,
@@ -201,7 +228,7 @@ def _authentication_response(
     )
     result = JSONResponse(
         content=payload.model_dump(mode="json"),
-        headers={"Cache-Control": "no-store"},
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
     )
     service.set_refresh_cookie(result, refresh_token)
     _clear_state_cookie(result, provider)
@@ -338,30 +365,11 @@ def apple_callback(
             state_record.nonce,
         )
 
-        if user_data:
-            try:
-                apple_user = json.loads(user_data)
-            except json.JSONDecodeError:
-                apple_user = {}
-
-            if isinstance(apple_user, dict):
-                if not claims.get("email") and isinstance(
-                    apple_user.get("email"),
-                    str,
-                ):
-                    claims["email"] = apple_user["email"]
-
-                name_data = apple_user.get("name")
-                if isinstance(name_data, dict):
-                    first = name_data.get("firstName", "")
-                    last = name_data.get("lastName", "")
-                    full_name = " ".join(
-                        part
-                        for part in (first, last)
-                        if isinstance(part, str) and part.strip()
-                    ).strip()
-                    if full_name and not claims.get("name"):
-                        claims["name"] = full_name
+        # Apple POSTs this optional profile object through the browser.
+        # Its email is not a signed ID-token claim and is never an identity input.
+        apple_name = _extract_apple_profile_name(user_data)
+        if apple_name and not claims.get("name"):
+            claims["name"] = apple_name
 
         user = service.sign_in_from_claims(
             db,
@@ -414,6 +422,8 @@ def refresh(
         raise HTTPException(status_code=401, detail="Invalid refresh token.") from exc
 
     service.set_refresh_cookie(response, new_refresh)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
     return TokenResponse(
         access_token=access_token,
         expires_in=expires_in,
