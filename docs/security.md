@@ -247,7 +247,7 @@ Session-family revocation
 Immediate rejection of access tokens after family revocation
 ```
 
-Apple's browser-posted `user` object is not a signed identity assertion. The backend reads only its optional display name and never uses its email field; account email is accepted only from the provider's verified ID-token claim. Unverified addresses do not reserve the unique account email. All `/api/*` responses use `Cache-Control: no-store`, `Pragma: no-cache`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`, including user-scoped item data and health responses. This prevents private API responses from being cached by browsers or intermediaries.
+Apple's browser-posted `user` object is not a signed identity assertion. The backend reads only its optional display name and never uses its email field; account email is accepted only from the provider's verified ID-token claim. Unverified addresses do not reserve the unique account email. All `/api/*` responses use `Cache-Control: no-store`, `Pragma: no-cache`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`, including user-scoped item data and health responses. This prevents private API responses from being cached by browsers or intermediaries. Cookie-based logout additionally requires an exact same-origin `Origin`/`Host` match (and HTTPS outside local development), preventing a same-site sibling subdomain from revoking a user's session with a cross-origin form POST. API clients that provide the refresh token explicitly in the JSON body do not need browser-origin metadata.
 
 The current backend still does not implement:
 
