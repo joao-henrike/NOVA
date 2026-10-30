@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -19,7 +20,7 @@ class ItemUpdate(BaseModel):
 
     @field_validator("name", "status", mode="before")
     @classmethod
-    def reject_null_for_required_database_fields(cls, value):
+    def reject_null_for_required_database_fields(cls, value: Any) -> Any:
         if value is None:
             raise ValueError("This field cannot be null.")
         return value
