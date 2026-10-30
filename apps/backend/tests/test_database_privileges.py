@@ -17,8 +17,10 @@ from app.db.bootstrap_roles import (
     _set_current_user_role_option,
     _transfer_schema_objects,
     _validate_role,
-    main as bootstrap_main,
     provision_database_roles,
+)
+from app.db.bootstrap_roles import (
+    main as bootstrap_main,
 )
 
 

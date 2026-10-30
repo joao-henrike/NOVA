@@ -1,9 +1,8 @@
 import unittest
-
-import httpx
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
 
+import httpx
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from google.auth.exceptions import TransportError
