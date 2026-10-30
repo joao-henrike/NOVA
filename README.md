@@ -500,7 +500,7 @@ DB_PASSWORD (runtime secret)
 
 It does not receive the RDS master password or the migration password. Its PostgreSQL grants are DML-only: SELECT, INSERT, UPDATE, DELETE, and sequence usage.
 
-The one-off database migration task uses `cloudstart_migrator` and a separate Secrets Manager password. The one-off bootstrap task alone receives the RDS-managed master secret to create/update both roles and reapply grants after Alembic. The migration task and bootstrap task use separate ECS execution roles; the running app task role has no Secrets Manager permission.
+The one-off database migration task uses `cloudstart_migrator` and a separate Secrets Manager password. The one-off bootstrap task alone receives the RDS-managed master secret to create/update both roles and reapply grants after Alembic. The migration task and bootstrap task use separate ECS execution roles and intentionally omit `task_role_arn`, so neither process receives AWS task credentials. Their execution roles handle only image pulls, workload-specific logs, and startup-time secret injection; the running app task role has no Secrets Manager permission. Re-running bootstrap first revokes stale direct runtime ACLs, then reapplies only DML and sequence usage/select privileges.
 
 Database flow:
 
@@ -1336,6 +1336,8 @@ The current ECS identity model separates:
 ECS execution role
 Frontend task role
 Backend task role
+Database bootstrap task: no task role
+Database migration task: no task role
 Monitoring execution role
 Monitoring task role
 ```
