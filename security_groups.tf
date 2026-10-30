@@ -108,16 +108,6 @@ resource "aws_vpc_security_group_ingress_rule" "frontend_from_alb" {
   description                  = "Frontend traffic from ALB only"
 }
 
-#trivy:ignore:AWS-0104
-resource "aws_vpc_security_group_egress_rule" "frontend_https" {
-  security_group_id = aws_security_group.frontend.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 443
-  to_port           = 443
-  ip_protocol       = "tcp"
-  description       = "Frontend outbound HTTPS"
-}
-
 resource "aws_vpc_security_group_ingress_rule" "backend_from_alb" {
   security_group_id            = aws_security_group.backend.id
   referenced_security_group_id = aws_security_group.alb.id
@@ -185,10 +175,3 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_database_tasks" {
   description                  = "PostgreSQL from one-off database tasks only"
 }
 
-#trivy:ignore:AWS-0104
-resource "aws_vpc_security_group_egress_rule" "rds_all" {
-  security_group_id = aws_security_group.rds.id
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
-  description       = "Default outbound traffic"
-}

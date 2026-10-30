@@ -69,18 +69,18 @@ Monitoring -> Monitoring RDS :5432
 ### Current egress
 
 ```text
-ALB      -> Frontend :80
-ALB      -> Backend  :8000
-ALB      -> Grafana  :3000
-Frontend -> Internet :443
-Backend  -> Internet :443
-Backend  -> App RDS  :5432
-Monitoring -> Monitoring RDS :5432
-Monitoring -> Internet :443
-Monitoring RDS -> Internet :all
+ALB             -> Frontend :80
+ALB             -> Backend  :8000
+ALB             -> Grafana  :3000
+Backend         -> Internet :443
+Backend         -> App RDS  :5432
+Database tasks  -> Internet :443
+Database tasks  -> App RDS  :5432
+Monitoring      -> Monitoring RDS :5432
+Monitoring      -> Internet :443
 ```
 
-These egress rules are the actual current configuration; no stronger future restriction should be documented as already implemented.
+The frontend and both RDS security groups have no declared egress rules. Security groups are stateful, so return traffic for allowed inbound/initiated connections is automatically permitted; RDS does not need unrestricted outbound access to reply to PostgreSQL clients. The frontend serves static assets and has no runtime external HTTPS dependency.
 
 ## 4. ECS public exposure
 

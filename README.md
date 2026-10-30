@@ -621,6 +621,7 @@ The current network isolation uses dedicated security groups for:
 ALB
 Frontend
 Backend
+One-off database tasks
 Application RDS
 Monitoring
 Monitoring RDS
