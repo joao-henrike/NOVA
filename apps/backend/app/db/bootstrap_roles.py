@@ -252,12 +252,8 @@ def _transfer_schema_objects(
                 WHEN 'a' THEN 'AGGREGATE'
                 ELSE 'FUNCTION'
             END,
-            format(
-                '%I.%I(%s)',
-                n.nspname,
-                p.proname,
-                pg_get_function_identity_arguments(p.oid)
-            ),
+            quote_ident(n.nspname) || '.' || quote_ident(p.proname)
+                || '(' || pg_get_function_identity_arguments(p.oid) || ')',
             pg_get_userbyid(p.proowner)
         FROM pg_proc AS p
         JOIN pg_namespace AS n ON n.oid = p.pronamespace
