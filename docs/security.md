@@ -238,11 +238,16 @@ Google authentication
 Apple authentication
 OAuth state validation
 OIDC nonce validation
+Provider subject IDs as canonical account identity
+Verified provider claims as the only email source
+Apple browser profile data accepted for display name only
 CloudStart access tokens bound to refresh-token families
 Refresh-token rotation and reuse detection
 Session-family revocation
 Immediate rejection of access tokens after family revocation
 ```
+
+Apple's browser-posted `user` object is not a signed identity assertion. The backend reads only its optional display name and never uses its email field; account email is accepted only from the provider's verified ID-token claim. Unverified addresses do not reserve the unique account email. Successful token responses use `Cache-Control: no-store` and `Pragma: no-cache`.
 
 The current backend still does not implement:
 
