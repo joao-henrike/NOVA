@@ -54,8 +54,16 @@ finish_checks() {
   awk -F '\t' '{status = ($2 == "SKIP" ? "SKIP" : ($2 == 0 ? "PASS" : "FAIL (" $2 ")")); printf "%-45s %s\n", $1, status}' "$RESULTS_FILE"
 
   local failures
-  failures="$(awk -F '\t' '$2 != 0 && $2 != "SKIP" {count++} END {print count+0}' "$RESULTS_FILE")"
+  local skipped
+  failures="$(awk -F '\\t' '$2 != 0 && $2 != "SKIP" {count++} END {print count+0}' "$RESULTS_FILE")"
+  skipped="$(awk -F '\\t' '$2 == "SKIP" {count++} END {print count+0}' "$RESULTS_FILE")"
   echo
   echo "TOTAL FAILED CHECKS: $failures"
+  echo "TOTAL SKIPPED CHECKS: $skipped"
+  if [ "$skipped" -gt 0 ]; then
+    echo "VALIDATION COVERAGE: PARTIAL ($skipped checks were not executed)"
+  else
+    echo "VALIDATION COVERAGE: COMPLETE (all recorded checks were executed)"
+  fi
   return "$failures"
 }
