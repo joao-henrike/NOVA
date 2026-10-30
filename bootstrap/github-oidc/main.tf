@@ -4,10 +4,8 @@ locals {
   name                = "${var.project_name}-${var.environment}"
   github_oidc_subject = "repo:joao-henrike@${var.github_owner_id}/NOVA@${var.github_repository_id}:environment:${var.github_environment}"
   state_bucket_arn    = "arn:aws:s3:::${var.state_bucket_name}"
-  state_file_arns = [
-    "${local.state_bucket_arn}/${var.state_key}",
-    "${local.state_bucket_arn}/${var.state_key}.tflock",
-  ]
+  state_object_arn      = "${local.state_bucket_arn}/${var.state_key}"
+  state_lock_object_arn = "${local.state_bucket_arn}/${var.state_key}.tflock"
   ecr_repository_arns = [
     "arn:aws:ecr:${var.aws_region}:${data.aws_caller_identity.current.account_id}:repository/${local.name}-frontend",
     "arn:aws:ecr:${var.aws_region}:${data.aws_caller_identity.current.account_id}:repository/${local.name}-backend",
@@ -51,6 +49,7 @@ locals {
   ])
   log_group_arn       = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${local.name}/*:*"
   security_group_arn  = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/*"
+  security_group_rule_arn = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group-rule/*"
   scalable_target_arn = "arn:aws:application-autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:scalable-target/service/${local.name}-cluster/${local.name}-*"
 }
 
@@ -61,11 +60,12 @@ locals {
     : aws_iam_openid_connect_provider.github[0].arn
   )
   github_oidc_provider_has_sts_audience = (
-    var.existing_github_oidc_provider_arn == "" ||
-    contains(
-      data.aws_iam_openid_connect_provider.existing_github[0].client_id_list,
-      "sts.amazonaws.com",
-    )
+    var.existing_github_oidc_provider_arn == ""
+    ? true
+    : contains(
+        data.aws_iam_openid_connect_provider.existing_github[0].client_id_list,
+        "sts.amazonaws.com",
+      )
   )
 }
 
@@ -183,10 +183,17 @@ data "aws_iam_policy_document" "github_cd_permissions" {
   }
 
   statement {
-    sid       = "ReadWriteOnlyCanonicalTerraformStateAndLock"
+    sid       = "ReadWriteOnlyCanonicalTerraformState"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = [local.state_object_arn]
+  }
+
+  statement {
+    sid       = "ManageOnlyCanonicalTerraformLockFile"
     effect    = "Allow"
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-    resources = local.state_file_arns
+    resources = [local.state_lock_object_arn]
   }
 
   statement {
@@ -348,7 +355,6 @@ data "aws_iam_policy_document" "github_cd_permissions" {
     effect = "Allow"
     actions = [
       "logs:CreateLogGroup",
-      "logs:DeleteLogGroup",
       "logs:PutRetentionPolicy",
       "logs:TagResource",
       "logs:UntagResource",
@@ -376,12 +382,20 @@ data "aws_iam_policy_document" "github_cd_permissions" {
   }
 
   statement {
-    sid    = "TagOnlyNOVADevelopmentSecurityGroups"
-    effect = "Allow"
-    actions = [
-      "ec2:CreateTags",
-    ]
-    resources = [local.security_group_arn]
+    sid       = "TagOnlyNOVADevelopmentResourcesDuringCreation"
+    effect    = "Allow"
+    actions   = ["ec2:CreateTags"]
+    resources = [local.security_group_arn, local.security_group_rule_arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:CreateAction"
+      values = [
+        "CreateSecurityGroup",
+        "AuthorizeSecurityGroupIngress",
+        "AuthorizeSecurityGroupEgress",
+      ]
+    }
 
     condition {
       test     = "StringEquals"
@@ -412,13 +426,103 @@ data "aws_iam_policy_document" "github_cd_permissions" {
   }
 
   statement {
-    sid    = "ChangeOnlyTaggedNOVADevelopmentSecurityGroups"
+    sid    = "ManageTagsOnlyOnOwnedNOVAResources"
+    effect = "Allow"
+    actions = [
+      "ec2:CreateTags",
+      "ec2:DeleteTags",
+    ]
+    resources = [local.security_group_arn, local.security_group_rule_arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Environment"
+      values   = [var.environment]
+    }
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "aws:TagKeys"
+      values = [
+        "Name",
+        "Project",
+        "Environment",
+        "ManagedBy",
+        "Repository",
+        "Owner",
+        "CostCenter",
+        "Component",
+      ]
+    }
+  }
+
+  statement {
+    sid    = "AuthorizeOnlyTaggedNOVADevelopmentSecurityGroups"
     effect = "Allow"
     actions = [
       "ec2:AuthorizeSecurityGroupEgress",
       "ec2:AuthorizeSecurityGroupIngress",
-      "ec2:DeleteSecurityGroup",
-      "ec2:DeleteTags",
+    ]
+    resources = [local.security_group_arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Environment"
+      values   = [var.environment]
+    }
+  }
+
+  statement {
+    sid    = "AuthorizeOnlyTaggedNOVADevelopmentSecurityGroupRules"
+    effect = "Allow"
+    actions = [
+      "ec2:AuthorizeSecurityGroupEgress",
+      "ec2:AuthorizeSecurityGroupIngress",
+    ]
+    resources = [local.security_group_rule_arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Environment"
+      values   = [var.environment]
+    }
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "aws:TagKeys"
+      values = [
+        "Project",
+        "Environment",
+        "ManagedBy",
+        "Repository",
+        "Owner",
+        "CostCenter",
+      ]
+    }
+  }
+
+  statement {
+    sid    = "RevokeRulesOnlyOnTaggedNOVADevelopmentGroups"
+    effect = "Allow"
+    actions = [
       "ec2:RevokeSecurityGroupEgress",
       "ec2:RevokeSecurityGroupIngress",
     ]

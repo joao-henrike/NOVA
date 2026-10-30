@@ -206,7 +206,7 @@ Optional Google/Apple OAuth secrets are listed in docs/configuration-reference.m
 The role is provisioned by the isolated Terraform stack in `bootstrap/github-oidc/`; its trust policy is restricted to the immutable GitHub owner/repository IDs, the `development` Environment, and audience `sts.amazonaws.com`. The expected OIDC subject is:
 
 ```text
-repo:joao-henrique@133373332/NOVA@1393500090:environment:development
+repo:joao-henrike@133373332/NOVA@1393500090:environment:development
 ```
 
 The repository was created after July 15, 2026, so the trust policy uses GitHub's immutable owner/repository ID subject format. The GitHub `development` Environment must restrict deployments to branch `Joao`. Do not replace this subject with a name-only subject or remove the audience condition.
@@ -226,7 +226,7 @@ After the stack succeeds, publish its role ARN as a **repository Actions variabl
 
 ```bash
 gh variable set AWS_CD_ROLE_ARN \\
-  --repo joao-henrique/NOVA \\
+  --repo joao-henrike/NOVA \\
   --body "$(terraform -chdir=bootstrap/github-oidc output -raw github_actions_cd_role_arn)"
 ```
 

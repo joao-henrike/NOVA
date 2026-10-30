@@ -210,6 +210,9 @@ jobs:
       - name: GitHub OIDC validate
         working-directory: bootstrap/github-oidc
         run: terraform validate -no-color
+
+      - name: GitHub OIDC immutable subject contract
+        run: bash scripts/test-github-oidc-subject.sh
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a
         with:

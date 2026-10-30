@@ -16,7 +16,7 @@ The role trusts only:
 The trusted subject is:
 
 ```text
-repo:joao-henrique@133373332/NOVA@1393500090:environment:development
+repo:joao-henrike@133373332/NOVA@1393500090:environment:development
 ```
 
 The repository was created after July 15, 2026, so its default OIDC subject contains immutable owner/repository IDs. The role must not be configured with the older name-only subject. The GitHub `development` Environment should also restrict deployment branches to `Joao`.
@@ -26,7 +26,7 @@ The repository was created after July 15, 2026, so its default OIDC subject cont
 The inline policy is designed for the existing `deploy-dev.yml` workflow and the read-only AWS validation in `extreme-validation.yml`. It grants:
 
 - Read-only metadata access required for Terraform refresh/plan across the existing NOVA stack.
-- Read/write access only to the canonical state object and its S3 lock file.
+- Read/write access only to the canonical state object; delete access is limited to the S3 lock file.
 - Image push access only to `cloudstart-dev-frontend` and `cloudstart-dev-backend`.
 - Create/read/update access only to the three application Secrets Manager secrets.
 - ECS task-definition registration and service updates only in the `cloudstart-dev` cluster.
@@ -34,7 +34,7 @@ The inline policy is designed for the existing `deploy-dev.yml` workflow and the
 - PassRole only for the NOVA ECS task roles and only to `ecs-tasks.amazonaws.com`.
 - IAM role/policy changes only for the named NOVA ECS execution roles.
 - CloudWatch log-group changes only under `/ecs/cloudstart-dev/`.
-- Security-group changes only for Project=cloudstart, Environment=dev resources.
+- Security-group changes only for Project=cloudstart, Environment=dev resources; SG rule permissions require the corresponding resource tags and the fixed project tag-key allowlist.
 - Application Auto Scaling changes only for NOVA ECS service desired-count targets.
 
 It does **not** grant general administrator access, broad RDS/VPC/ALB mutation, IAM user/key management, account/billing administration, or infrastructure destruction. The state-bucket bootstrap remains a separate one-time administrative operation.
