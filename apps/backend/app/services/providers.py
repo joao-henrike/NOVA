@@ -231,16 +231,31 @@ def as_bool(value: Any) -> bool:
 def claims_to_identity(
     claims: dict[str, Any],
 ) -> tuple[str, str | None, bool, str | None]:
-    subject = str(claims["sub"])
+    subject_value = claims.get("sub")
+    if not isinstance(subject_value, str) or not subject_value.strip():
+        raise ProviderAuthenticationError("Provider identity has no valid subject.")
 
-    email = claims.get("email")
+    subject = subject_value.strip()
+    if len(subject) > 255:
+        raise ProviderAuthenticationError("Provider identity subject is too long.")
+
+    email_verified = as_bool(claims.get("email_verified", False))
+    email_value = claims.get("email")
     email = (
-        email.strip().lower()
-        if isinstance(email, str) and email.strip()
+        email_value.strip().lower()
+        if email_verified and isinstance(email_value, str) and email_value.strip()
+        else None
+    )
+    if email is not None and len(email) > 320:
+        raise ProviderAuthenticationError("Provider email address is too long.")
+
+    name_value = claims.get("name")
+    name = (
+        name_value.strip()[:200]
+        if isinstance(name_value, str) and name_value.strip()
         else None
     )
 
-    email_verified = as_bool(claims.get("email_verified", False))
-    name = claims.get("name")
-
+    # An unverified address must not reserve a unique account email or block
+    # the legitimate owner from signing in with another identity provider.
     return subject, email, email_verified, name
