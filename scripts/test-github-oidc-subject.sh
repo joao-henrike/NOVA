@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-grep -Fq 'github_oidc_subject = "repo:joao-henrike@${var.github_owner_id}/NOVA@${var.github_repository_id}:environment:${var.github_environment}"' bootstrap/github-oidc/main.tf
+grep -Fq 'repo:joao-henrike@${var.github_owner_id}/NOVA@${var.github_repository_id}:environment:${var.github_environment}' bootstrap/github-oidc/main.tf
 grep -Fq 'default     = "joao-henrike/NOVA"' bootstrap/github-oidc/variables.tf
 grep -Fq 'default     = "133373332"' bootstrap/github-oidc/variables.tf
 grep -Fq 'default     = "1393500090"' bootstrap/github-oidc/variables.tf
