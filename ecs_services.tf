@@ -440,9 +440,9 @@ resource "aws_appautoscaling_target" "frontend" {
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 
-  # Preserve the existing min during migration; new targets start at zero until activation.
+  # Preserve existing scaling bounds during migration; new targets start at zero until activation.
   lifecycle {
-    ignore_changes = [min_capacity]
+    ignore_changes = [min_capacity, max_capacity]
   }
 
   depends_on = [aws_ecs_service.frontend]
