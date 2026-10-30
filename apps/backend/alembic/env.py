@@ -11,7 +11,15 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
-from app.models import AuthIdentity, AuthProvider, Item, OAuthState, RefreshToken, User  # noqa: E402,F401
+from app.models import (
+    AuthIdentity,
+    AuthProvider,
+    AuthRateLimitBucket,
+    Item,
+    OAuthState,
+    RefreshToken,
+    User,
+)  # noqa: E402,F401
 
 
 config = context.config
