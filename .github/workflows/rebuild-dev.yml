@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          scripts/provision-db-credentials.sh
+          bash scripts/provision-db-credentials.sh
           source .deploy/db-secret-arns.env
           {
             echo "TF_VAR_db_runtime_secret_arn=$DB_RUNTIME_SECRET_ARN"
