@@ -85,6 +85,20 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema_name))
             )
             connection.execute(
+                sql.SQL("GRANT ALL PRIVILEGES ON SCHEMA {} TO PUBLIC").format(
+                    sql.Identifier(schema_name)
+                )
+            )
+            connection.execute(
+                sql.SQL(
+                    "CREATE FUNCTION {}.private_value() RETURNS text "
+                    "LANGUAGE sql SECURITY DEFINER AS {}"
+                ).format(
+                    sql.Identifier(schema_name),
+                    sql.Literal("SELECT 'private-data'::text"),
+                )
+            )
+            connection.execute(
                 sql.SQL(
                     "CREATE TABLE {}.items (id integer PRIMARY KEY, name text NOT NULL)"
                 ).format(sql.Identifier(schema_name))
@@ -207,6 +221,29 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
             ).fetchone()
             assert owner == (migrator_role,)
 
+            function_owner = connection.execute(
+                """
+                SELECT pg_get_userbyid(p.proowner)
+                FROM pg_proc AS p
+                JOIN pg_namespace AS n ON n.oid = p.pronamespace
+                WHERE n.nspname = %s AND p.proname = 'private_value'
+                """,
+                (schema_name,),
+            ).fetchone()
+            assert function_owner == (migrator_role,)
+            assert connection.execute(
+                "SELECT has_schema_privilege(%s, %s, 'USAGE')",
+                (runtime_role, schema_name),
+            ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT has_schema_privilege(%s, %s, 'CREATE')",
+                (runtime_role, schema_name),
+            ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT has_function_privilege(%s, %s, 'EXECUTE')",
+                (runtime_role, f"{schema_name}.private_value()"),
+            ).fetchone()[0]
+
         runtime_conninfo = _connection_info(
             user=runtime_role,
             password=runtime_password,
@@ -267,6 +304,11 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                     sql.Identifier(schema_name), sql.Identifier(runtime_role)
                 )
             )
+            connection.execute(
+                sql.SQL("GRANT ALL PRIVILEGES ON SCHEMA {} TO PUBLIC").format(
+                    sql.Identifier(schema_name)
+                )
+            )
             # Recreate the temporary SET capability to inject excess table and
             # sequence grants as their actual owner, then return to the admin.
             connection.execute(
@@ -286,6 +328,21 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 sql.SQL(
                     "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {} TO {}"
                 ).format(sql.Identifier(schema_name), sql.Identifier(runtime_role))
+            )
+            connection.execute(
+                sql.SQL(
+                    "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {} TO PUBLIC"
+                ).format(sql.Identifier(schema_name))
+            )
+            connection.execute(
+                sql.SQL(
+                    "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {} TO PUBLIC"
+                ).format(sql.Identifier(schema_name))
+            )
+            connection.execute(
+                sql.SQL(
+                    "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA {} TO PUBLIC"
+                ).format(sql.Identifier(schema_name))
             )
             connection.execute("RESET ROLE")
 
@@ -330,6 +387,29 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 "SELECT has_schema_privilege(%s, %s, 'CREATE')",
                 (runtime_role, schema_name),
             ).fetchone()[0]
+            assert not connection.execute(
+                "SELECT has_function_privilege(%s, %s, 'EXECUTE')",
+                (runtime_role, f"{schema_name}.private_value()"),
+            ).fetchone()[0]
+
+        # New SECURITY DEFINER functions created by Alembic/migrator must not
+        # inherit PostgreSQL's default EXECUTE grant to PUBLIC.
+        with psycopg.connect(migrator_conninfo) as connection:
+            connection.execute(
+                sql.SQL(
+                    "CREATE FUNCTION {}.future_value() RETURNS text "
+                    "LANGUAGE sql SECURITY DEFINER AS {}"
+                ).format(
+                    sql.Identifier(schema_name),
+                    sql.Literal("SELECT 'future-private-data'::text"),
+                )
+            )
+
+        with psycopg.connect(admin_conninfo) as connection:
+            assert not connection.execute(
+                "SELECT has_function_privilege(%s, %s, 'EXECUTE')",
+                (runtime_role, f"{schema_name}.future_value()"),
+            ).fetchone()[0]
 
         with psycopg.connect(runtime_conninfo) as connection:
             connection.execute(
@@ -343,6 +423,26 @@ def test_runtime_role_is_dml_only_and_migrator_can_manage_schema() -> None:
                 ).format(sql.Identifier(schema_name))
             ).fetchone()
             assert row == ("runtime-after-migration",)
+
+        with (
+            pytest.raises(psycopg.errors.InsufficientPrivilege),
+            psycopg.connect(runtime_conninfo) as connection,
+        ):
+            connection.execute(
+                sql.SQL("SELECT {}.private_value()").format(
+                    sql.Identifier(schema_name)
+                )
+            ).fetchone()
+
+        with (
+            pytest.raises(psycopg.errors.InsufficientPrivilege),
+            psycopg.connect(runtime_conninfo) as connection,
+        ):
+            connection.execute(
+                sql.SQL("SELECT {}.future_value()").format(
+                    sql.Identifier(schema_name)
+                )
+            ).fetchone()
 
         with psycopg.connect(provisioner_conninfo) as connection:
             connection.execute(
