@@ -8,6 +8,8 @@ The `bootstrap/` stack creates the protected S3 bucket used by the root Terrafor
 
 The root backend uses S3-native lock files (`use_lockfile = true`). The DynamoDB table is **not** the active root state-lock mechanism.
 
+The GitHub Actions OIDC provider and least-privilege development deployment role are deliberately maintained in a separate stack: [`bootstrap/github-oidc/README.md`](github-oidc/README.md). It does not create or administer the S3 state bucket.
+
 ## Resources declared
 
 | Resource | Configuration |
