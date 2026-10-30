@@ -53,6 +53,48 @@ def _ensure_login_role(
     connection.execute(statement)
 
 
+def _revoke_role_memberships(
+    connection: psycopg.Connection,
+    *,
+    role_name: str,
+) -> None:
+    """Remove inherited role memberships so grants cannot bypass direct ACLs."""
+    memberships = connection.execute(
+        """
+        SELECT DISTINCT granted_role.rolname
+        FROM pg_auth_members AS membership
+        JOIN pg_roles AS granted_role ON granted_role.oid = membership.roleid
+        JOIN pg_roles AS member_role ON member_role.oid = membership.member
+        WHERE member_role.rolname = %s
+        """,
+        (role_name,),
+    ).fetchall()
+
+    for (granted_role,) in memberships:
+        connection.execute(
+            sql.SQL("REVOKE {} FROM {}").format(
+                sql.Identifier(granted_role),
+                sql.Identifier(role_name),
+            )
+        )
+
+    remaining = connection.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM pg_auth_members AS membership
+            JOIN pg_roles AS member_role ON member_role.oid = membership.member
+            WHERE member_role.rolname = %s
+        )
+        """,
+        (role_name,),
+    ).fetchone()
+    if remaining is None or remaining[0]:
+        raise RuntimeError(
+            f"Unable to remove all inherited role memberships from {role_name}."
+        )
+
+
 def _transfer_schema_objects(
     connection: psycopg.Connection,
     *,
@@ -169,6 +211,11 @@ def provision_database_roles(
         role_name=migrator_role,
         password=migrator_password,
     )
+
+    # Role membership can confer privileges that direct schema/table ACLs do
+    # not reveal. Reconcile both logins before granting their intended access.
+    _revoke_role_memberships(connection, role_name=runtime_role)
+    _revoke_role_memberships(connection, role_name=migrator_role)
 
     connection.execute(
         sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
