@@ -143,6 +143,40 @@ class AuthRateLimitTest(unittest.TestCase):
 
         self.assertEqual(get_request_client_ip(request), "203.0.113.15")
 
+    def test_cloud_mode_rejects_missing_forwarded_address(self) -> None:
+        settings.app_env = "dev"
+        request = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/",
+                "headers": [],
+                "client": ("10.0.0.5", 44321),
+                "server": ("10.0.0.6", 8000),
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "Missing ALB-forwarded"):
+            get_request_client_ip(request)
+
+    def test_cloud_mode_rejects_invalid_appended_address(self) -> None:
+        settings.app_env = "dev"
+        request = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/",
+                "headers": [
+                    (b"x-forwarded-for", b"198.51.100.20, not-an-ip")
+                ],
+                "client": ("10.0.0.5", 44321),
+                "server": ("10.0.0.6", 8000),
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "Invalid ALB-forwarded"):
+            get_request_client_ip(request)
+
     def test_local_mode_does_not_trust_forwarded_for(self) -> None:
         settings.app_env = "local"
         request = Request(
