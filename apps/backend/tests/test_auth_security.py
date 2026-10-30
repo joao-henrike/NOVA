@@ -105,6 +105,17 @@ class AuthSecurityTest(unittest.TestCase):
         self.assertEqual(email, "user@example.com")
         self.assertTrue(verified)
 
+    def test_email_cannot_be_marked_verified_when_provider_omits_it(self) -> None:
+        _, email, verified, _ = claims_to_identity(
+            {
+                "sub": "provider-without-email",
+                "email_verified": True,
+            }
+        )
+
+        self.assertIsNone(email)
+        self.assertFalse(verified)
+
     def test_provider_profile_fields_fit_database_columns(self) -> None:
         _, email, verified, name = claims_to_identity(
             {
