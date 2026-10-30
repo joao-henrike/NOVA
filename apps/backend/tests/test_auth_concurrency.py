@@ -132,7 +132,7 @@ def test_concurrent_refresh_attempts_revoke_the_token_family(
 
 
 
-def test_refresh_family_cleanup_uses_postgresql_and_preserves_replay_history(
+def test_expired_refresh_cleanup_on_postgresql_preserves_live_sessions(
     postgres_session_factory,
 ) -> None:
     original_secret = settings.auth_jwt_secret_key
@@ -192,7 +192,7 @@ def test_refresh_family_cleanup_uses_postgresql_and_preserves_replay_history(
             )
             session.commit()
 
-            # Issuing a new session runs the cleanup against PostgreSQL.
+            # Issuing a new session runs cleanup against PostgreSQL.
             service.issue_session(session, user=user)
 
             assert session.scalar(
@@ -207,25 +207,30 @@ def test_refresh_family_cleanup_uses_postgresql_and_preserves_replay_history(
                     RefreshToken.token_hash == hash_refresh_token(expired_ancestor_token),
                 )
                 .limit(1)
-            ) is not None
+            ) is None
 
-            # The expired ancestor is still recognized as a replay signal
-            # because its family has a token that remains within its lifetime.
+            # An expired ancestor is rejected without revoking a still-live
+            # descendant. The current refresh token must remain usable.
             with pytest.raises(AuthenticationError):
                 service.rotate_refresh_token(
                     session,
                     refresh_token=expired_ancestor_token,
                 )
 
-            family_tokens = list(
-                session.scalars(
-                    select(RefreshToken).where(
-                        RefreshToken.family_id == active_family_id
-                    )
+            active_record = session.scalar(
+                select(RefreshToken).where(
+                    RefreshToken.token_hash == hash_refresh_token(current_token)
                 )
             )
-            assert family_tokens
-            assert all(token.revoked_at is not None for token in family_tokens)
+            assert active_record is not None
+            assert active_record.revoked_at is None
+
+            rotated_user, _, replacement_token, _ = service.rotate_refresh_token(
+                session,
+                refresh_token=current_token,
+            )
+            assert rotated_user.id == user.id
+            assert replacement_token
 
     finally:
         if user_id is not None:
