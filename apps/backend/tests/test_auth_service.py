@@ -1,5 +1,6 @@
 import unittest
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -201,6 +202,84 @@ class AuthServiceTest(unittest.TestCase):
 
             session.refresh(record)
             self.assertIsNotNone(record.revoked_at)
+
+    def test_expired_families_are_pruned_but_active_family_history_is_kept(self) -> None:
+        with self.session_factory() as session:
+            user = User(
+                email=f"retention-{uuid4()}@example.com",
+                email_verified=True,
+            )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
+            _, current_token, _ = self.auth.issue_session(session, user=user)
+            current_record = session.query(RefreshToken).filter_by(
+                token_hash=hash_refresh_token(current_token)
+            ).one()
+            active_family_id = current_record.family_id
+
+            now = datetime.now(UTC)
+            expired_ancestor_token = "expired-ancestor-refresh-token"
+            expired_ancestor = RefreshToken(
+                user_id=user.id,
+                family_id=active_family_id,
+                token_hash=hash_refresh_token(expired_ancestor_token),
+                expires_at=now - timedelta(seconds=1),
+                revoked_at=now - timedelta(seconds=2),
+            )
+            expired_family_id = uuid4()
+            expired_family_records = [
+                RefreshToken(
+                    user_id=user.id,
+                    family_id=expired_family_id,
+                    token_hash=hash_refresh_token(f"expired-family-{index}"),
+                    expires_at=now - timedelta(days=1),
+                    revoked_at=now - timedelta(days=2),
+                )
+                for index in range(2)
+            ]
+            session.add_all([expired_ancestor, *expired_family_records])
+            session.commit()
+
+            # Creating a new session runs bounded cleanup.
+            self.auth.issue_session(session, user=user)
+
+            self.assertEqual(
+                session.query(RefreshToken)
+                .filter_by(family_id=expired_family_id)
+                .count(),
+                0,
+            )
+            retained_family = (
+                session.query(RefreshToken)
+                .filter_by(family_id=active_family_id)
+                .all()
+            )
+            self.assertEqual(len(retained_family), 2)
+            self.assertTrue(
+                any(
+                    row.token_hash == hash_refresh_token(expired_ancestor_token)
+                    for row in retained_family
+                )
+            )
+
+            # An expired ancestor remains a replay signal while a later token
+            # in the same family is still within its validity window.
+            with self.assertRaises(AuthenticationError):
+                self.auth.rotate_refresh_token(
+                    session,
+                    refresh_token=expired_ancestor_token,
+                )
+
+            session.expire_all()
+            retained_family = (
+                session.query(RefreshToken)
+                .filter_by(family_id=active_family_id)
+                .all()
+            )
+            self.assertTrue(retained_family)
+            self.assertTrue(all(row.revoked_at is not None for row in retained_family))
 
     def test_inactive_user_cannot_refresh(self) -> None:
         with self.session_factory() as session:
