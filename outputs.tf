@@ -73,8 +73,13 @@ output "backend_ecs_service_name" {
 }
 
 output "backend_security_group_id" {
-  description = "Security group ID used by the backend ECS service and private migration tasks."
+  description = "Security group ID used by the backend HTTP ECS service."
   value       = aws_security_group.backend.id
+}
+
+output "database_tasks_security_group_id" {
+  description = "No-ingress security group ID used by one-off database bootstrap and migration tasks."
+  value       = aws_security_group.database_tasks.id
 }
 
 output "frontend_task_definition_arn" {

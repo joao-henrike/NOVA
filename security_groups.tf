@@ -30,6 +30,17 @@ resource "aws_security_group" "backend" {
   })
 }
 
+resource "aws_security_group" "database_tasks" {
+  name        = "${local.name}-database-tasks-sg"
+  description = "No-ingress security group for one-off database bootstrap and migration tasks."
+  vpc_id      = aws_vpc.this.id
+
+  tags = merge(local.global_tags, {
+    Name      = "${local.name}-database-tasks-sg"
+    Component = "database"
+  })
+}
+
 resource "aws_security_group" "rds" {
   name        = "${local.name}-rds-sg"
   description = "Security group for the private RDS database."
@@ -134,6 +145,27 @@ resource "aws_vpc_security_group_egress_rule" "backend_to_rds" {
   description                  = "Backend to PostgreSQL"
 }
 
+# One-off database tasks need HTTPS for ECR/S3 image pulls and Secrets Manager
+# injection, plus PostgreSQL. They deliberately have no inbound rules.
+#trivy:ignore:AWS-0104
+resource "aws_vpc_security_group_egress_rule" "database_tasks_https" {
+  security_group_id = aws_security_group.database_tasks.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+  description       = "Database task outbound HTTPS for ECR and Secrets Manager"
+}
+
+resource "aws_vpc_security_group_egress_rule" "database_tasks_to_rds" {
+  security_group_id            = aws_security_group.database_tasks.id
+  referenced_security_group_id = aws_security_group.rds.id
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  description                  = "One-off database tasks to application PostgreSQL"
+}
+
 resource "aws_vpc_security_group_ingress_rule" "rds_from_backend" {
   security_group_id            = aws_security_group.rds.id
   referenced_security_group_id = aws_security_group.backend.id
@@ -141,6 +173,15 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_backend" {
   to_port                      = 5432
   ip_protocol                  = "tcp"
   description                  = "PostgreSQL from backend only"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "rds_from_database_tasks" {
+  security_group_id            = aws_security_group.rds.id
+  referenced_security_group_id = aws_security_group.database_tasks.id
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  description                  = "PostgreSQL from one-off database tasks only"
 }
 
 #trivy:ignore:AWS-0104

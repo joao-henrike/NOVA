@@ -115,7 +115,6 @@ ensure_password_secret() {
       --description "$description" \
       --secret-string "file://$secret_file" \
       --region "$AWS_REGION" \
-      --tags Key=Project,Value=CloudStart Key=Environment,Value=dev Key=Component,Value=database-credentials \
       --query ARN \
       --output text)"
   fi

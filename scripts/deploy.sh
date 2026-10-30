@@ -246,9 +246,9 @@ run_one_off_database_task() {
   fi
 }
 
-backend_sg="$(terraform output -raw backend_security_group_id)"
+database_sg="$(terraform output -raw database_tasks_security_group_id)"
 subnets="$(terraform output -json private_app_subnet_ids | jq -c '[.[]]')"
-network_config="$(jq -nc --argjson subnets "$subnets" --arg sg "$backend_sg" '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"DISABLED"}}')"
+network_config="$(jq -nc --argjson subnets "$subnets" --arg sg "$database_sg" '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"DISABLED"}}')"
 
 run_one_off_database_task \
   "$(terraform output -raw db_bootstrap_task_definition_arn)" \

@@ -155,6 +155,8 @@ The RDS master password is injected only into the one-off database role-bootstra
 
 The normal backend task uses the dedicated `cloudstart_runtime` PostgreSQL login. Its password comes from the external Secrets Manager secret referenced by `db_runtime_secret_arn`. The Alembic task uses `cloudstart_migrator`, with a different secret referenced by `db_migrator_secret_arn`. Terraform stores only these ARNs, never the secret values.
 
+Bootstrap and migration tasks run with a dedicated security group that has no ingress rules. Its egress is restricted to TCP 5432 toward the application RDS security group and HTTPS toward AWS image/secret services through the private-subnet NAT route. It does not reuse the backend HTTP security group and cannot receive ALB traffic.
+
 The bootstrap task has a separate ECS execution role and is the only application task permitted to read the RDS-managed master secret. It creates/updates the restricted PostgreSQL roles and transfers existing application schema object ownership to the migrator. The deployment process runs bootstrap, Alembic, then bootstrap again to grant runtime DML privileges on newly-created tables and sequences.
 
 JWT and Google/Apple OAuth settings remain injected from a separate Secrets Manager JSON secret when `backend_auth_secret_arn` is configured. The backend deployment guard requires all three application secret ARNs when `deploy_application = true`.

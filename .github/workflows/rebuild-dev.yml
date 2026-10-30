@@ -19,7 +19,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: nova-rebuild-development
+  group: nova-development-infrastructure
   cancel-in-progress: false
 
 env:
@@ -401,9 +401,9 @@ jobs:
         run: |
           set -euo pipefail
           cluster="$(terraform output -raw ecs_cluster_name)"
-          backend_sg="$(terraform output -raw backend_security_group_id)"
+          database_sg="$(terraform output -raw database_tasks_security_group_id)"
           subnets="$(terraform output -json private_app_subnet_ids | jq -c '[.[]]')"
-          network_config="$(jq -nc --argjson subnets "$subnets" --arg sg "$backend_sg" '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"DISABLED"}}')"
+          network_config="$(jq -nc --argjson subnets "$subnets" --arg sg "$database_sg" '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"DISABLED"}}')"
 
           run_one_off_task() {
             local task_definition="$1"
