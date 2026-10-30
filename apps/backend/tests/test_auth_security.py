@@ -79,6 +79,46 @@ class AuthSecurityTest(unittest.TestCase):
         configuration.apple_private_key = "test-private-key"
         configuration.require_apple_config()
 
+    def test_unverified_provider_email_does_not_reserve_account_address(self) -> None:
+        subject, email, verified, _ = claims_to_identity(
+            {
+                "sub": "unverified-provider-subject",
+                "email": "victim@example.com",
+                "email_verified": False,
+                "name": "Attacker-controlled profile name",
+            }
+        )
+
+        self.assertEqual(subject, "unverified-provider-subject")
+        self.assertIsNone(email)
+        self.assertFalse(verified)
+
+    def test_verified_provider_email_is_normalized(self) -> None:
+        _, email, verified, _ = claims_to_identity(
+            {
+                "sub": "verified-provider-subject",
+                "email": " USER@EXAMPLE.COM ",
+                "email_verified": "true",
+            }
+        )
+
+        self.assertEqual(email, "user@example.com")
+        self.assertTrue(verified)
+
+    def test_provider_profile_fields_fit_database_columns(self) -> None:
+        _, email, verified, name = claims_to_identity(
+            {
+                "sub": "profile-subject",
+                "email": "not-verified@example.com",
+                "email_verified": False,
+                "name": "N" * 250,
+            }
+        )
+
+        self.assertIsNone(email)
+        self.assertFalse(verified)
+        self.assertEqual(len(name or ""), 200)
+
     def test_provider_subject_is_canonical_identity(self) -> None:
         subject, email, verified, name = claims_to_identity(
             {
