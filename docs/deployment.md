@@ -4,16 +4,22 @@
 
 ## 1. Prerequisites
 
-Required locally:
+For local validation and deployment, use:
 
-```text
-Terraform 1.16.4
-AWS CLI
-Docker
-Docker Compose
-```
+| Tool | Requirement |
+| --- | --- |
+| Git | Required; deployment is restricted to branch Joao. |
+| Python | 3.12 or newer. |
+| Terraform | 1.16.4 (repository constraint >=1.16.4 and <1.17.0). |
+| AWS CLI | v2 recommended; authenticated to account 760396521507 for this development configuration. |
+| Docker | Working daemon, Buildx, and Compose plugin. |
+| jq | Required by deployment plan guards and scripts. |
+| curl | Required for endpoint smoke tests. |
+| unzip | Required by the local setup bootstrap. |
 
-An AWS identity with permissions to create the Terraform-managed resources is required for local Terraform apply operations.
+Run make setup and make doctor to prepare/check the local toolchain. The bootstrap does not install jq, and make doctor checks it explicitly. Checkov and pip-audit are CI-only tools and are not part of the default local setup.
+
+An AWS identity with permissions to inspect the account, manage the remote-state bootstrap, provision the required Secrets Manager entries, and create/update the Terraform-managed development resources is required for make deploy. GitHub deployment uses the external OIDC role described in docs/ci-cd.md. Neither path stores AWS access keys in the repository.
 
 ## 2. Repository defaults
 
@@ -545,7 +551,7 @@ Destroy canonical dev state
      ↓
 Destroy legacy state:
   cloudstart/redeploy-2026-10-08/terraform.tfstate
-  cloudstart/dev/terraform.tfstate
+  cloudstart/terraform.tfstate
      ↓
 Verify old CloudStart named resources are absent
      ↓
@@ -590,7 +596,7 @@ AWS authentication uses GitHub OIDC. The CD workflow rejects an AWS account othe
 
 The extreme validation workflow that performs live AWS checks is not triggered by pull requests; it runs only on the `Joao` branch (push or manual dispatch). This keeps the job-level OIDC permission away from untrusted PR execution contexts. CI remains the mandatory PR validation path.
 
-The workflow applies only a previously generated Terraform plan whose non-no-op resources are limited to the frontend/backend ECS task definitions and services. Any unrelated resource change or destructive action stops the release.
+The workflow applies only a previously generated Terraform plan whose non-no-op resources are within the explicit application delivery allowlist: frontend/backend/monitoring task definitions and services, frontend/backend autoscaling targets, dedicated ECS execution roles and policies, the no-ingress database-task security group and its rules, and the five workload CloudWatch log groups. Any unlisted resource change or destructive action stops the release.
 
 The workflow provisions/reuses the runtime, migrator, and backend JWT/OAuth Secrets Manager values before planning. The AWS CD role therefore needs `secretsmanager:DescribeSecret`, `GetSecretValue`, `CreateSecret`, and `PutSecretValue` scoped to those three development secrets. Existing JWT signing material is preserved; supplied non-empty OAuth fields are merged without deleting saved values.
 
