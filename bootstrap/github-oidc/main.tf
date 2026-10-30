@@ -1,10 +1,10 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  name                 = "${var.project_name}-${var.environment}"
-  github_oidc_subject  = "repo:joao-henrike@${var.github_owner_id}/NOVA@${var.github_repository_id}:environment:${var.github_environment}"
-  state_bucket_arn     = "arn:aws:s3:::${var.state_bucket_name}"
-  state_file_arns      = [
+  name                = "${var.project_name}-${var.environment}"
+  github_oidc_subject = "repo:joao-henrike@${var.github_owner_id}/NOVA@${var.github_repository_id}:environment:${var.github_environment}"
+  state_bucket_arn    = "arn:aws:s3:::${var.state_bucket_name}"
+  state_file_arns = [
     "${local.state_bucket_arn}/${var.state_key}",
     "${local.state_bucket_arn}/${var.state_key}.tflock",
   ]
@@ -21,7 +21,7 @@ locals {
     for secret_name in local.secret_names :
     "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${secret_name}-*"
   ]
-  ecs_cluster_arn = "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:cluster/${local.name}-cluster"
+  ecs_cluster_arn         = "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:cluster/${local.name}-cluster"
   ecs_task_definition_arn = "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/${local.name}-*:*"
   ecs_one_off_task_definition_arns = [
     "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/${local.name}-db-bootstrap:*",
@@ -49,8 +49,8 @@ locals {
     "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-backend-task",
     "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-monitoring-task",
   ])
-  log_group_arn = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${local.name}/*:*"
-  security_group_arn = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/*"
+  log_group_arn       = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${local.name}/*:*"
+  security_group_arn  = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/*"
   scalable_target_arn = "arn:aws:application-autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:scalable-target/service/${local.name}-cluster/${local.name}-*"
 }
 
@@ -94,8 +94,8 @@ resource "aws_iam_role" "github_actions_cd" {
   max_session_duration = 3600
 
   tags = {
-    Name      = var.role_name
-    Purpose   = "NOVA development application deployment"
+    Name       = var.role_name
+    Purpose    = "NOVA development application deployment"
     Repository = var.github_repository
   }
 
