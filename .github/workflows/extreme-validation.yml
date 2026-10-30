@@ -41,6 +41,7 @@ jobs:
       AWS_REGION: us-east-1
       EXPECTED_AWS_ACCOUNT_ID: "760396521507"
       AWS_CD_ROLE_ARN: ${{ vars.AWS_CD_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'cloudstart-nova-terraform-state-760396521507' }}
       DATABASE_URL: postgresql+psycopg://cloudstart_admin:postgres-extreme-ci-only@127.0.0.1:5432/cloudstart
       DB_HOST: 127.0.0.1
       DB_PORT: "5432"
@@ -284,6 +285,8 @@ jobs:
         if: always()
         env:
           OIDC_OUTCOME: ${{ steps.aws_oidc.outcome }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         shell: bash
         run: |
           # shellcheck disable=SC2016
@@ -304,10 +307,10 @@ jobs:
           record_external_result aws_oidc 0
           run_check aws_role_present bash -c 'test -n "$AWS_CD_ROLE_ARN"'
           run_check aws_state_bucket_present bash -c 'test -n "$TF_STATE_BUCKET"'
-          run_check aws_expected_account bash -c 'test "$EXPECTED_AWS_ACCOUNT_ID" = "760396521507"'
-          run_check aws_grafana_secret_present bash -c 'test -n "$GRAFANA_ADMIN_PASSWORD"'
+          run_check aws_expected_account bash -c 'test "$(aws sts get-caller-identity --query Account --output text)" = "$EXPECTED_AWS_ACCOUNT_ID"'
+          run_check aws_grafana_secret_present bash -c 'test -n "$TF_VAR_grafana_admin_password"'
           run_check aws_identity aws sts get-caller-identity
-          run_check aws_state_bucket_access bash -c 'test -n "$TF_STATE_BUCKET" && aws s3api head-bucket --bucket "$TF_STATE_BUCKET" --region "$AWS_REGION"'
+          run_check aws_state_bucket_access bash -c 'test -n "$TF_STATE_BUCKET" && aws s3api get-bucket-location --bucket "$TF_STATE_BUCKET" --expected-bucket-owner "$EXPECTED_AWS_ACCOUNT_ID" --region "$AWS_REGION" >/dev/null'
           run_check aws_terraform_init bash -c 'terraform init -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION" -backend-config="key=cloudstart/dev/terraform.tfstate" -reconfigure -input=false -no-color'
           run_check aws_terraform_plan bash -c 'terraform plan -refresh=true -lock=true -input=false -no-color -var-file=config/dev.tfvars -var=deploy_application=false -detailed-exitcode; rc=$?; test "$rc" -eq 0 -o "$rc" -eq 2'
           finish_checks
