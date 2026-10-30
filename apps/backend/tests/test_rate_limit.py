@@ -1,5 +1,6 @@
 import unittest
 from datetime import UTC, datetime, timedelta
+from unittest.mock import Mock
 
 from fastapi import Request
 from sqlalchemy import create_engine
@@ -9,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import settings
 from app.db.base import Base
 from app.models.auth import AuthRateLimitBucket
+from app.repositories.rate_limit import AuthRateLimitRepository
 from app.services.rate_limit import (
     RateLimitExceeded,
     check_rate_limit,
@@ -46,6 +48,40 @@ class AuthRateLimitTest(unittest.TestCase):
         with self.session_factory() as session:
             session.query(AuthRateLimitBucket).delete(synchronize_session=False)
             session.commit()
+
+    def test_rate_limit_repository_rejects_unsupported_database_dialect(self) -> None:
+        session = Mock()
+        session.get_bind.return_value.dialect.name = "mysql"
+
+        with self.assertRaisesRegex(RuntimeError, "Unsupported database dialect"):
+            AuthRateLimitRepository().increment_bucket(
+                session,
+                bucket_key="test-bucket",
+                window_start=datetime.now(UTC),
+                now=datetime.now(UTC),
+            )
+
+        session.execute.assert_called_once()
+        session.scalar.assert_not_called()
+        session.commit.assert_not_called()
+
+    def test_rate_limit_repository_rolls_back_when_upsert_returns_no_count(self) -> None:
+        session = Mock()
+        session.get_bind.return_value.dialect.name = "sqlite"
+        session.scalar.return_value = None
+
+        with self.assertRaisesRegex(RuntimeError, "Unable to update"):
+            AuthRateLimitRepository().increment_bucket(
+                session,
+                bucket_key="test-bucket",
+                window_start=datetime.now(UTC),
+                now=datetime.now(UTC),
+            )
+
+        session.execute.assert_called_once()
+        session.scalar.assert_called_once()
+        session.rollback.assert_called_once()
+        session.commit.assert_not_called()
 
     def test_fixed_window_blocks_after_limit_and_resets(self) -> None:
         first_window = datetime(2026, 10, 30, 12, 0, 0, tzinfo=UTC)

@@ -1,7 +1,9 @@
 import unittest
+from unittest.mock import Mock
 from uuid import uuid4
 
 from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -73,6 +75,68 @@ class ItemRepositoryTest(unittest.TestCase):
         self.assertIsNone(
             self.repository.get(self.session, created.id, user_id=self.user_id)
         )
+
+    def test_create_rolls_back_when_commit_fails(self) -> None:
+        session = Mock(spec=Session)
+        session.commit.side_effect = SQLAlchemyError("insert failed")
+
+        with self.assertRaisesRegex(SQLAlchemyError, "insert failed"):
+            self.repository.create(
+                session,
+                user_id=self.user_id,
+                data=ItemCreate(name="Rollback create"),
+            )
+
+        session.add.assert_called_once()
+        session.commit.assert_called_once()
+        session.rollback.assert_called_once()
+        session.refresh.assert_not_called()
+
+    def test_update_rolls_back_when_commit_fails(self) -> None:
+        item = Item(
+            id=uuid4(),
+            user_id=self.user_id,
+            name="Before update",
+            status=ItemStatus.ACTIVE,
+        )
+        session = Mock(spec=Session)
+        session.scalar.return_value = item
+        session.commit.side_effect = SQLAlchemyError("update failed")
+
+        with self.assertRaisesRegex(SQLAlchemyError, "update failed"):
+            self.repository.update(
+                session,
+                item.id,
+                user_id=self.user_id,
+                data=ItemUpdate(name="After update"),
+            )
+
+        self.assertEqual(item.name, "After update")
+        session.commit.assert_called_once()
+        session.rollback.assert_called_once()
+        session.refresh.assert_not_called()
+
+    def test_delete_rolls_back_when_commit_fails(self) -> None:
+        item = Item(
+            id=uuid4(),
+            user_id=self.user_id,
+            name="Delete rollback",
+            status=ItemStatus.ACTIVE,
+        )
+        session = Mock(spec=Session)
+        session.scalar.return_value = item
+        session.commit.side_effect = SQLAlchemyError("delete failed")
+
+        with self.assertRaisesRegex(SQLAlchemyError, "delete failed"):
+            self.repository.delete(
+                session,
+                item.id,
+                user_id=self.user_id,
+            )
+
+        session.delete.assert_called_once_with(item)
+        session.commit.assert_called_once()
+        session.rollback.assert_called_once()
 
     def test_list_filters_by_status(self) -> None:
         self.repository.create(
