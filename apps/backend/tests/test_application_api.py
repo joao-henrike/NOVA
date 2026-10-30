@@ -127,6 +127,7 @@ class ApplicationApiTest(unittest.TestCase):
         )
         self.assertEqual(created.status_code, 201)
         self.assertEqual(created.headers["cache-control"], "no-store")
+        self.assertEqual(created.headers["pragma"], "no-cache")
         self.assertEqual(created.headers["x-content-type-options"], "nosniff")
         self.assertEqual(created.headers["referrer-policy"], "no-referrer")
         item = created.json()
