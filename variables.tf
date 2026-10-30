@@ -59,6 +59,12 @@ variable "deploy_application" {
   default     = false
 }
 
+variable "start_application_services" {
+  description = "Whether frontend/backend ECS services should start during Terraform apply. Set false during an application release so migrations finish before new task revisions receive traffic."
+  type        = bool
+  default     = true
+}
+
 variable "frontend_image_tag" {
   description = "Immutable tag of the frontend image in the CloudStart ECR repository."
   type        = string

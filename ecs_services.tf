@@ -1,8 +1,9 @@
 locals {
-  frontend_desired_count = var.deploy_application ? var.frontend_desired_task_count : 0
-  frontend_min_count     = var.deploy_application ? var.frontend_min_task_count : 0
-  backend_desired_count  = var.deploy_application ? var.backend_desired_task_count : 0
-  backend_min_count      = var.deploy_application ? var.backend_min_task_count : 0
+  application_services_enabled = var.deploy_application && var.start_application_services
+  frontend_desired_count       = local.application_services_enabled ? var.frontend_desired_task_count : 0
+  frontend_min_count           = local.application_services_enabled ? var.frontend_min_task_count : 0
+  backend_desired_count        = local.application_services_enabled ? var.backend_desired_task_count : 0
+  backend_min_count            = local.application_services_enabled ? var.backend_min_task_count : 0
 }
 
 
@@ -372,7 +373,8 @@ resource "aws_ecs_service" "frontend" {
 
 
   lifecycle {
-    ignore_changes = [desired_count]
+    # CD activates the next task revision only after the database migration succeeds.
+    ignore_changes = [desired_count, task_definition]
   }
 
   depends_on = [

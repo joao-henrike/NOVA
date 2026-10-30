@@ -72,6 +72,36 @@ output "backend_ecs_service_name" {
   value       = aws_ecs_service.backend.name
 }
 
+output "frontend_desired_task_count" {
+  description = "Configured frontend ECS desired task count used when activating an application release."
+  value       = var.frontend_desired_task_count
+}
+
+output "frontend_min_task_count" {
+  description = "Configured frontend ECS autoscaling minimum."
+  value       = var.frontend_min_task_count
+}
+
+output "frontend_max_task_count" {
+  description = "Configured frontend ECS autoscaling maximum."
+  value       = var.frontend_max_task_count
+}
+
+output "backend_desired_task_count" {
+  description = "Configured backend ECS desired task count used when activating an application release."
+  value       = var.backend_desired_task_count
+}
+
+output "backend_min_task_count" {
+  description = "Configured backend ECS autoscaling minimum."
+  value       = var.backend_min_task_count
+}
+
+output "backend_max_task_count" {
+  description = "Configured backend ECS autoscaling maximum."
+  value       = var.backend_max_task_count
+}
+
 output "backend_security_group_id" {
   description = "Security group ID used by the backend HTTP ECS service."
   value       = aws_security_group.backend.id
