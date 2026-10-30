@@ -152,7 +152,10 @@ def provision_database_roles(
         raise RuntimeError("Runtime and migration roles must be different.")
     if not _ROLE_PATTERN.fullmatch(schema_name):
         raise RuntimeError("DB_SCHEMA_NAME is not a valid PostgreSQL schema identifier.")
-    current_database = connection.execute("SELECT current_database()").fetchone()[0]
+    database_row = connection.execute("SELECT current_database()").fetchone()
+    if database_row is None:
+        raise RuntimeError("Unable to determine the connected PostgreSQL database.")
+    current_database = database_row[0]
     if current_database != database_name:
         raise RuntimeError("Connected database does not match DB_NAME.")
 
