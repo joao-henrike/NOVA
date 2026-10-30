@@ -181,7 +181,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Ensure remote Terraform state bucket
-        run: scripts/ensure-terraform-state.sh
+        run: scripts/ensure-terraform-state.sh --verify-only
 
       - name: Terraform init
         run: terraform init -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION" -backend-config="key=$TF_STATE_KEY" -reconfigure -input=false -no-color
