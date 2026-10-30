@@ -328,7 +328,6 @@ class ApplicationApiTest(unittest.TestCase):
         self.client.cookies.set(
             "nova_refresh_token",
             refresh_token,
-            domain="testserver",
             path="/api/auth",
         )
 
