@@ -86,6 +86,7 @@ ensure_password_secret() {
       --query SecretString \
       --output text >"$current_file" 2>"$error_file"; then
       if ! jq -e '.password | type == "string" and length >= 32' "$current_file" >/dev/null; then
+        rm -f "$current_file" "$error_file"
         echo "Existing secret $name has an invalid JSON/password structure; refusing to rotate it automatically." >&2
         exit 1
       fi
@@ -96,6 +97,7 @@ ensure_password_secret() {
 
     if ! grep -q "ResourceNotFoundException" "$error_file"; then
       cat "$error_file" >&2
+      rm -f "$current_file" "$error_file"
       echo "Could not read existing secret $name." >&2
       exit 1
     fi
@@ -103,20 +105,30 @@ ensure_password_secret() {
     # A secret container can exist without an AWSCURRENT version.
     secret_file="$(new_secret_file)"
     tmp_files+=("$secret_file")
-    aws secretsmanager put-secret-value \
+    if ! aws secretsmanager put-secret-value \
       --secret-id "$arn" \
       --secret-string "file://$secret_file" \
-      --region "$AWS_REGION" >/dev/null
+      --region "$AWS_REGION" >/dev/null; then
+      rm -f "$secret_file" "$current_file" "$error_file"
+      echo "Could not populate the existing secret container $name." >&2
+      return 1
+    fi
+    rm -f "$secret_file"
   else
     secret_file="$(new_secret_file)"
     tmp_files+=("$secret_file")
-    arn="$(aws secretsmanager create-secret \
+    if ! arn="$(aws secretsmanager create-secret \
       --name "$name" \
       --description "$description" \
       --secret-string "file://$secret_file" \
       --region "$AWS_REGION" \
       --query ARN \
-      --output text)"
+      --output text)"; then
+      rm -f "$secret_file" "$current_file" "$error_file"
+      echo "Could not create secret container $name." >&2
+      return 1
+    fi
+    rm -f "$secret_file"
   fi
 
   case "$arn" in
@@ -131,13 +143,19 @@ ensure_password_secret() {
   printf '%s\n' "$arn"
 }
 
-runtime_arn="$(ensure_password_secret \
-  "cloudstart-dev/database/runtime" \
-  "CloudStart development PostgreSQL DML-only runtime login password")"
+runtime_arn_file="$(mktemp "$SECRET_DIR/db-runtime-arn.XXXXXX")"
+migrator_arn_file="$(mktemp "$SECRET_DIR/db-migrator-arn.XXXXXX")"
+tmp_files+=("$runtime_arn_file" "$migrator_arn_file")
 
-migrator_arn="$(ensure_password_secret \
+ensure_password_secret \
+  "cloudstart-dev/database/runtime" \
+  "CloudStart development PostgreSQL DML-only runtime login password" >"$runtime_arn_file"
+ensure_password_secret \
   "cloudstart-dev/database/migrator" \
-  "CloudStart development PostgreSQL Alembic migration login password")"
+  "CloudStart development PostgreSQL Alembic migration login password" >"$migrator_arn_file"
+
+runtime_arn="$(< "$runtime_arn_file")"
+migrator_arn="$(< "$migrator_arn_file")"
 
 arn_tmp="$(mktemp "$SECRET_DIR/db-secret-arns.XXXXXX")"
 tmp_files+=("$arn_tmp")
