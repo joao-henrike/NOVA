@@ -298,6 +298,7 @@ class ApplicationApiTest(unittest.TestCase):
         try:
             response = self.client.post(
                 "/api/auth/refresh",
+                json={},
                 headers={
                     "Origin": "http://testserver",
                     "X-Forwarded-For": "203.0.113.20",

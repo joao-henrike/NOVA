@@ -1,6 +1,6 @@
 import json
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -17,7 +17,7 @@ class HealthContractTest(unittest.TestCase):
 
     @patch("app.api.routes.health.get_engine")
     def test_database_health_reports_reachable_database(self, get_engine) -> None:
-        engine = Mock()
+        engine = MagicMock()
         connection = Mock()
         engine.connect.return_value.__enter__.return_value = connection
         get_engine.return_value = engine
@@ -41,7 +41,7 @@ class HealthContractTest(unittest.TestCase):
 
     @patch("app.api.routes.health.get_engine")
     def test_database_health_reports_database_errors(self, get_engine) -> None:
-        engine = Mock()
+        engine = MagicMock()
         connection = Mock()
         connection.execute.side_effect = SQLAlchemyError("database unavailable")
         engine.connect.return_value.__enter__.return_value = connection

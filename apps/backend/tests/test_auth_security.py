@@ -161,25 +161,29 @@ class AuthSecurityTest(unittest.TestCase):
 
 
     def test_database_url_supports_explicit_url_and_escaped_credentials(self) -> None:
-        explicit = Settings(database_url="postgresql+psycopg://db.example/nova")
-        self.assertEqual(
-            explicit.sqlalchemy_database_url,
-            "postgresql+psycopg://db.example/nova",
-        )
-
-        composed = Settings(
-            db_host="db.example",
-            db_port=5433,
-            db_name="nova",
-            db_user="user name",
-            db_password="p@ss/word",
-        )
-        self.assertEqual(
-            composed.sqlalchemy_database_url,
-            "postgresql+psycopg://user+name:p%40ss%2Fword@db.example:5433/nova",
-        )
-
         with patch.dict(os.environ, {}, clear=True):
+            explicit = Settings(
+                _env_file=None,
+                database_url="postgresql+psycopg://db.example/nova",
+            )
+            self.assertEqual(
+                explicit.sqlalchemy_database_url,
+                "postgresql+psycopg://db.example/nova",
+            )
+
+            composed = Settings(
+                _env_file=None,
+                db_host="db.example",
+                db_port=5433,
+                db_name="nova",
+                db_user="user name",
+                db_password="p@ss/word",
+            )
+            self.assertEqual(
+                composed.sqlalchemy_database_url,
+                "postgresql+psycopg://user+name:p%40ss%2Fword@db.example:5433/nova",
+            )
+
             with self.assertRaisesRegex(RuntimeError, "configuration is incomplete"):
                 Settings(_env_file=None).sqlalchemy_database_url
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 from uuid import uuid4
 
 import psycopg
@@ -827,14 +827,27 @@ def test_transfer_schema_objects_skips_owned_objects_and_transfers_legacy_object
             ("FUNCTION", "public.legacy_function()", "admin"),
         ],
     )
-    query_results = []
-    for result_rows in rows:
+    def result_for(result_rows):
         result = Mock()
         result.fetchall.return_value = result_rows
-        query_results.append(result)
+        return result
+
+    def execute(statement, *args, **kwargs):
+        query = str(statement)
+        if "FROM pg_tables" in query:
+            return result_for(rows[0])
+        if "relkind = 'S'" in query:
+            return result_for(rows[1])
+        if "relkind = 'v'" in query:
+            return result_for(rows[2])
+        if "relkind = 'm'" in query:
+            return result_for(rows[3])
+        if "pg_get_function_identity_arguments" in query:
+            return result_for(rows[4])
+        return Mock()
 
     connection = Mock()
-    connection.execute.side_effect = query_results + [Mock(), Mock(), Mock(), Mock(), Mock()]
+    connection.execute.side_effect = execute
 
     _transfer_schema_objects(
         connection,
@@ -909,7 +922,7 @@ def test_bootstrap_main_builds_connection_from_environment(monkeypatch) -> None:
     monkeypatch.delenv("DB_SSLMODE", raising=False)
 
     connection = Mock()
-    connection_context = Mock()
+    connection_context = MagicMock()
     connection_context.__enter__.return_value = connection
     connect = Mock(return_value=connection_context)
 
