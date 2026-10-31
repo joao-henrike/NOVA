@@ -329,7 +329,7 @@ data "aws_iam_policy_document" "github_cd_permissions" {
   statement {
     sid       = "RunOnlyDatabaseBootstrapAndMigrationTasks"
     effect    = "Allow"
-    actions   = ["ecs:RunTask", "ecs:TagResource"]
+    actions   = ["ecs:RunTask"]
     resources = local.ecs_one_off_task_definition_arns
 
     condition {

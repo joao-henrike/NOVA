@@ -12,6 +12,7 @@ grep -Fq 'token.actions.githubusercontent.com:aud' bootstrap/github-oidc/main.tf
 grep -Fq 'values   = ["sts.amazonaws.com"]' bootstrap/github-oidc/main.tf
 grep -B1 -A1 'variable = "ecs:task-cpu"' bootstrap/github-oidc/main.tf | grep -Fq 'test     = "NumericEquals"'
 grep -B1 -A1 'variable = "ecs:task-memory"' bootstrap/github-oidc/main.tf | grep -Fq 'test     = "NumericEquals"'
+sed -n '/sid       = "RunOnlyDatabaseBootstrapAndMigrationTasks"/,/^  }/p' bootstrap/github-oidc/main.tf | grep -Fq 'actions   = ["ecs:RunTask"]'
 
 if grep -R -Fq 'repo:joao-henrique@' bootstrap/github-oidc docs; then
   echo "Invalid GitHub OIDC owner login found in trust documentation or configuration." >&2
