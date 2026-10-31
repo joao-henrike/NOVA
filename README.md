@@ -45,7 +45,7 @@ Terraform can attach an already-issued ACM certificate to the ALB, but the commi
 
 Future capabilities remain outside the current implementation boundary.
 
-**Documentation map:** [Documentation index](docs/README.md) · [Deployment guide](docs/deployment.md) · [CI/CD](docs/ci-cd.md) · [Architecture](docs/architecture.md) · [Security model](docs/security.md) · [Accepted security exceptions](docs/security-exceptions.md) · [Current-state inventory](docs/current-state.md) · [Configuration reference](docs/configuration-reference.md) · [Local development](docs/local-development.md) · [Backend](apps/backend/README.md) · [Frontend](apps/frontend/README.md) · [Monitoring](monitoring/README.md) · [Bootstrap](bootstrap/README.md) · [Operational scripts](scripts/README.md).
+**Documentation map:** [Documentation index](docs/README.md) · [Cloud operations orchestrator](docs/operations.md) · [Deployment guide](docs/deployment.md) · [CI/CD](docs/ci-cd.md) · [Architecture](docs/architecture.md) · [Security model](docs/security.md) · [Accepted security exceptions](docs/security-exceptions.md) · [Current-state inventory](docs/current-state.md) · [Configuration reference](docs/configuration-reference.md) · [Local development](docs/local-development.md) · [Backend](apps/backend/README.md) · [Frontend](apps/frontend/README.md) · [Monitoring](monitoring/README.md) · [Bootstrap](bootstrap/README.md) · [Operational scripts](scripts/README.md).
 
 ## 2. Repository source of truth
 
@@ -2689,3 +2689,29 @@ Remote Terraform state is separate. make tf-init requires an existing state buck
 The full local and deployment workflows are documented in docs/local-development.md, docs/deployment.md, and docs/configuration-reference.md.
 
 This keeps local preparation reproducible while preserving a hard boundary between local setup and billable AWS provisioning.
+
+
+---
+
+## Cloud operations orchestrator
+
+TESTE1 introduces NOVA Ops, a command-line control plane for inspecting the live development environment without confusing Terraform declarations with current AWS runtime state.
+
+Start with:
+
+~~~bash
+make ops-help
+make ops
+~~~
+
+It provides an environment overview, ECS desired/running task counts, autoscaling bounds, RDS status, NAT Gateway and ALB inventory, tagged-resource inventory, month-to-date Cost Explorer totals, optional resource-level costs, and CloudWatch logs.
+
+The operator can also stop/start or scale the frontend, backend, and singleton monitoring service; request an ECS restart; and stop/start the two RDS instances after dependency checks and exact interactive confirmation. ECS scaling limits are read from config/dev.tfvars. The monitoring task remains limited to 0 or 1 replica.
+
+This interface does not delete resources, run Terraform apply/destroy, or switch off the ALB, NAT Gateways, VPC, ECR storage, remote Terraform state, snapshots, or log storage. Stopping ECS/RDS therefore does not make the entire environment cost-free. Cost Explorer data and its resource-level opt-in limitations are explained in [Cloud operations](docs/operations.md).
+
+Run the no-AWS mock safety tests with:
+
+~~~bash
+make ops-test
+~~~
