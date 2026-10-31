@@ -365,10 +365,14 @@ resource "aws_ecs_service" "frontend" {
     assign_public_ip = false
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.frontend.arn
-    container_name   = var.frontend_container_name
-    container_port   = 80
+  dynamic "load_balancer" {
+    for_each = var.enable_public_alb ? [1] : []
+
+    content {
+      target_group_arn = aws_lb_target_group.frontend[0].arn
+      container_name   = var.frontend_container_name
+      container_port   = 80
+    }
   }
 
 
@@ -410,10 +414,14 @@ resource "aws_ecs_service" "backend" {
     assign_public_ip = false
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.backend.arn
-    container_name   = var.backend_container_name
-    container_port   = var.backend_container_port
+  dynamic "load_balancer" {
+    for_each = var.enable_public_alb ? [1] : []
+
+    content {
+      target_group_arn = aws_lb_target_group.backend[0].arn
+      container_name   = var.backend_container_name
+      container_port   = var.backend_container_port
+    }
   }
 
 
