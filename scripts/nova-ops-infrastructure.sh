@@ -156,3 +156,141 @@ confirm_exact() {
   read -r typed
   [[ "$typed" == "$expected" ]] || fail "Confirmation mismatch. No infrastructure apply performed."
 }
+
+
+service_desired_count() {
+  aws ecs describe-services --cluster "$CLUSTER" --services "$1" --query 'services[0].desiredCount' --output text --region "$AWS_REGION"
+}
+service_running_count() {
+  aws ecs describe-services --cluster "$CLUSTER" --services "$1" --query 'services[0].runningCount' --output text --region "$AWS_REGION"
+}
+stop_application_service() {
+  local component="$1" service maximum resource_id suspended
+  service="${PROJECT_NAME}-${ENVIRONMENT}-${component}"
+  resource_id="service/$CLUSTER/$service"
+  case "$component" in
+    frontend) maximum="$FRONTEND_MAX" ;;
+    backend) maximum="$BACKEND_MAX" ;;
+    *) fail "Unsupported application ECS service: $component" ;;
+  esac
+  suspended='{"DynamicScalingInSuspended":true,"DynamicScalingOutSuspended":true,"ScheduledScalingSuspended":true}'
+  aws application-autoscaling register-scalable-target --service-namespace ecs --resource-id "$resource_id" --scalable-dimension ecs:service:DesiredCount --min-capacity 0 --max-capacity "$maximum" --suspended-state "$suspended" --region "$AWS_REGION" >/dev/null
+  aws ecs update-service --cluster "$CLUSTER" --service "$service" --desired-count 0 --region "$AWS_REGION" >/dev/null
+  log "Requested $service desiredCount=0; scaling is suspended."
+}
+stop_all_workloads() {
+  local frontend="${PROJECT_NAME}-${ENVIRONMENT}-frontend"
+  local backend="${PROJECT_NAME}-${ENVIRONMENT}-backend"
+  local monitoring="${PROJECT_NAME}-${ENVIRONMENT}-monitoring"
+  stop_application_service backend
+  stop_application_service frontend
+  aws ecs update-service --cluster "$CLUSTER" --service "$monitoring" --desired-count 0 --region "$AWS_REGION" >/dev/null
+  log "Waiting for all ECS services to become stable at zero tasks"
+  aws ecs wait services-stable --cluster "$CLUSTER" --services "$frontend" "$backend" "$monitoring" --region "$AWS_REGION"
+  local service desired running
+  for service in "$frontend" "$backend" "$monitoring"; do
+    desired="$(service_desired_count "$service")"
+    running="$(service_running_count "$service")"
+    [[ "$desired" == 0 && "$running" == 0 ]] || fail "$service has desired=$desired and running=$running. Refusing RDS/network shutdown."
+  done
+}
+database_state() {
+  aws rds describe-db-instances --db-instance-identifier "$1" --query 'DBInstances[0].DBInstanceStatus' --output text --region "$AWS_REGION"
+}
+stop_database_for_shutdown() {
+  local identifier="$1" state
+  state="$(database_state "$identifier")"
+  case "$state" in
+    available) log "Stopping RDS instance $identifier"; aws rds stop-db-instance --db-instance-identifier "$identifier" --region "$AWS_REGION" >/dev/null ;;
+    stopped) log "RDS instance $identifier is already stopped." ;;
+    *) fail "RDS instance $identifier is in state '$state'. Expected available or stopped." ;;
+  esac
+}
+wait_for_database_stopped() {
+  local identifier="$1" state
+  state="$(database_state "$identifier")"
+  [[ "$state" == stopped ]] && return
+  log "Waiting for RDS instance $identifier to stop"
+  aws rds wait db-instance-stopped --db-instance-identifier "$identifier" --region "$AWS_REGION"
+}
+start_database_for_resume() {
+  local identifier="$1" state
+  state="$(database_state "$identifier")"
+  case "$state" in
+    available) log "RDS instance $identifier is already available." ;;
+    stopped) log "Starting RDS instance $identifier"; aws rds start-db-instance --db-instance-identifier "$identifier" --region "$AWS_REGION" >/dev/null ;;
+    starting) log "RDS instance $identifier is already starting." ;;
+    *) fail "RDS instance $identifier is in state '$state'. Resolve transition before starting workloads." ;;
+  esac
+}
+wait_for_database_available() {
+  log "Waiting for RDS instance $1 to become available"
+  aws rds wait db-instance-available --db-instance-identifier "$1" --region "$AWS_REGION"
+}
+start_application_service() {
+  local component="$1" service desired minimum maximum resource_id active_state
+  service="${PROJECT_NAME}-${ENVIRONMENT}-${component}"
+  case "$component" in
+    frontend) desired="$FRONTEND_DESIRED"; minimum="$FRONTEND_MIN"; maximum="$FRONTEND_MAX" ;;
+    backend) desired="$BACKEND_DESIRED"; minimum="$BACKEND_MIN"; maximum="$BACKEND_MAX" ;;
+    *) fail "Unsupported application ECS service: $component" ;;
+  esac
+  resource_id="service/$CLUSTER/$service"
+  active_state='{"DynamicScalingInSuspended":false,"DynamicScalingOutSuspended":false,"ScheduledScalingSuspended":false}'
+  aws application-autoscaling register-scalable-target --service-namespace ecs --resource-id "$resource_id" --scalable-dimension ecs:service:DesiredCount --min-capacity "$minimum" --max-capacity "$maximum" --suspended-state "$active_state" --region "$AWS_REGION" >/dev/null
+  aws ecs update-service --cluster "$CLUSTER" --service "$service" --desired-count "$desired" --region "$AWS_REGION" >/dev/null
+  log "Started $service with desired=$desired, min=$minimum, max=$maximum."
+}
+start_all_workloads() {
+  local monitoring="${PROJECT_NAME}-${ENVIRONMENT}-monitoring"
+  start_application_service backend
+  start_application_service frontend
+  aws ecs update-service --cluster "$CLUSTER" --service "$monitoring" --desired-count "$MONITORING_DESIRED" --region "$AWS_REGION" >/dev/null
+  log "Waiting for ECS services to stabilize"
+  aws ecs wait services-stable --cluster "$CLUSTER" --services "${PROJECT_NAME}-${ENVIRONMENT}-frontend" "${PROJECT_NAME}-${ENVIRONMENT}-backend" "$monitoring" --region "$AWS_REGION"
+}
+shutdown() {
+  load_runtime_variables
+  initialize_terraform
+  create_and_review_plan shutdown
+  confirm_exact "SHUTDOWN ${PROJECT_NAME}-${ENVIRONMENT}"
+  stop_all_workloads
+  stop_database_for_shutdown "$APP_DB"
+  stop_database_for_shutdown "$MONITORING_DB"
+  wait_for_database_stopped "$APP_DB"
+  wait_for_database_stopped "$MONITORING_DB"
+  create_and_review_plan shutdown
+  log "Applying the reviewed infrastructure shutdown plan"
+  terraform apply -input=false -auto-approve "$SECRET_DIR/terraform-ops-shutdown.tfplan"
+  log "NOVA infrastructure shutdown completed"
+  printf '\nRemoved: ECS running tasks, public ALB/listeners/target groups, per-AZ NAT Gateways and their public IPv4 allocations.\n'
+  printf 'Preserved: VPC/subnets/route tables, RDS data (instances stopped), ECR/images, secrets, logs, snapshots, and remote S3 state.\n'
+  printf 'Warning: stopped RDS instances restart automatically after seven consecutive days. Storage, backups, logs, ECR, and secrets may still cost money.\n'
+}
+resume() {
+  load_runtime_variables
+  initialize_terraform
+  create_and_review_plan resume
+  confirm_exact "RESUME ${PROJECT_NAME}-${ENVIRONMENT}"
+  log "Recreating NAT Gateways, public IPv4 addresses, ALB, listeners, and target groups"
+  terraform apply -input=false -auto-approve "$SECRET_DIR/terraform-ops-resume.tfplan"
+  start_database_for_resume "$APP_DB"
+  start_database_for_resume "$MONITORING_DB"
+  wait_for_database_available "$APP_DB"
+  wait_for_database_available "$MONITORING_DB"
+  start_all_workloads
+  local alb_dns
+  alb_dns="$(terraform output -raw alb_dns_name)"
+  log "NOVA environment restored"
+  printf '\nApplication ALB: http://%s/\n' "$alb_dns"
+  printf 'Grafana:         http://%s/grafana/\n' "$alb_dns"
+  printf '\nVerify current state with: make ops ACTION=overview\n'
+}
+main() {
+  case "${1:-}" in
+    shutdown) shutdown ;;
+    resume) resume ;;
+    *) printf 'Usage: %s shutdown|resume\n' "$0" >&2; exit 2 ;;
+  esac
+}
+main "$@"
