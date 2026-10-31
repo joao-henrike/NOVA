@@ -94,8 +94,11 @@ make ops-help
 make ops
 make ops ACTION=overview
 make ops ACTION=costs
+make ops ACTION=costs ARGS='project'
 make ops ACTION=costs ARGS='resources rds'
 make ops ACTION=logs ARGS='backend --since 2h'
+make ops ACTION=stop ARGS='all'
+make ops ACTION=start ARGS='all'
 make ops ACTION=stop ARGS='application'
 make ops ACTION=start ARGS='application'
 make ops ACTION=db ARGS='status'
@@ -103,9 +106,9 @@ make ops ACTION=db ARGS='status'
 
 Before any AWS call, nova-ops.sh verifies the current AWS account against config/dev.env. Do not use it from an unintended AWS profile/account. Service scaling is bounded by the max task counts in config/dev.tfvars. Monitoring is a singleton task and accepts only zero or one replica.
 
-The resource-level Cost Explorer command depends on AWS opt-in/settings for the selected service. The monthly service-level cost output is account-wide; it is not a NOVA-only invoice. See the operations guide for data limitations, IAM permissions, remaining fixed costs, and RDS stop/start behavior.
+The costs command shows the account-wide monthly view; costs project filters by the Project and Environment cost-allocation tags (which must be activated in Billing first). The resource-level Cost Explorer command depends on AWS opt-in/settings for the selected service. See the operations guide for data limitations, IAM permissions, remaining fixed costs, and RDS stop/start behavior.
 
-The orchestrator does not turn off or delete NAT Gateways, the ALB, the VPC, ECR, the S3 Terraform state bucket, snapshots, or CloudWatch log storage. RDS stop requires dependent ECS services at zero and an exact interactive confirmation. Run mocked tests with:
+The orchestrator does not turn off or delete NAT Gateways, the ALB, the VPC, ECR, the S3 Terraform state bucket, snapshots, or CloudWatch log storage. stop all brings all three ECS workloads to zero but leaves the databases running. start all checks/starts both databases and, once both are available, brings the application and monitoring services up. RDS stop requires dependent ECS services at zero (including zero running tasks) and an exact interactive confirmation. Run mocked tests with:
 
 ~~~bash
 make ops-test
