@@ -41,7 +41,7 @@ NOVA Ops commands:
   make ops ACTION=stop ARGS='all|application|frontend|backend|monitoring'   Stop ECS workloads only
   make ops ACTION=shutdown             Stop ECS/RDS and remove billable NAT/ALB resources via Terraform
   make ops ACTION=resume               Recreate NAT/ALB, start RDS, then restore ECS workloads
-  make ops ACTION=start ARGS='all|application|frontend|backend|monitoring'
+  make ops ACTION=start ARGS='all|application|frontend|backend|monitoring'  start all also restores NAT/ALB and RDS
   make ops ACTION=db ARGS='status|stop application|start application'
   make ops ACTION=restart ARGS='frontend|backend|monitoring'
 EOF
@@ -284,7 +284,7 @@ main() {
     menu)
       require aws
       while true; do
-        printf '\nNOVA Ops %s/%s (%s)\n1 Overview\n2 ECS services\n3 Current-month costs\n4 Resource inventory\n5 CloudWatch logs\n6 Stop service\n7 Start service\n8 Scale service\n9 RDS status\n10 Stop RDS\n11 Start RDS\n0 Exit\nChoice: ' "$PROJECT" "$ENVIRONMENT" "$REGION"
+        printf '\nNOVA Ops %s/%s (%s)\n1 Overview\n2 ECS services\n3 Current-month costs\n4 Resource inventory\n5 CloudWatch logs\n6 Stop service\n7 Start service\n8 Scale service\n9 RDS status\n10 Stop RDS\n11 Start RDS\n12 Full infrastructure shutdown\n13 Restore full infrastructure\n0 Exit\nChoice: ' "$PROJECT" "$ENVIRONMENT" "$REGION"
         read -r choice || break
         case "$choice" in
           1) preflight; overview ;;
