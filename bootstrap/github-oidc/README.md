@@ -32,7 +32,7 @@ The inline policy is designed for the existing `deploy-dev.yml` workflow and the
 - Image push access only to `cloudstart-dev-frontend` and `cloudstart-dev-backend`.
 - Create/read/update access only to the three application Secrets Manager secrets.
 - ECS task-definition registration and service updates only in the `cloudstart-dev` cluster.
-- RunTask only for the database-bootstrap and database-migration task definitions, limited to 256 CPU units and 512 MiB.
+- RunTask only for the database-bootstrap and database-migration task definitions, limited to 256 CPU units and 512 MiB with numeric IAM condition operators.
 - PassRole only for the NOVA ECS task roles and only to `ecs-tasks.amazonaws.com`.
 - IAM role/policy changes only for the named NOVA ECS execution roles.
 - CloudWatch log-group changes only under `/ecs/cloudstart-dev/`.

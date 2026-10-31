@@ -339,13 +339,13 @@ data "aws_iam_policy_document" "github_cd_permissions" {
     }
 
     condition {
-      test     = "StringEquals"
+      test     = "NumericEquals"
       variable = "ecs:task-cpu"
       values   = ["256"]
     }
 
     condition {
-      test     = "StringEquals"
+      test     = "NumericEquals"
       variable = "ecs:task-memory"
       values   = ["512"]
     }
