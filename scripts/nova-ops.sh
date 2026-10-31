@@ -56,6 +56,7 @@ overview() {
   database_status
   aws ec2 describe-nat-gateways --filter "Name=tag:Project,Values=$PROJECT" "Name=tag:Environment,Values=$ENVIRONMENT" --query 'NatGateways[].{ID:NatGatewayId,State:State,PublicIP:NatGatewayAddresses[0].PublicIp}' --output table --region "$REGION"
   aws elbv2 describe-load-balancers --names "${PROJECT}-${ENVIRONMENT}-alb" --query 'LoadBalancers[].{Name:LoadBalancerName,State:State.Code,DNS:DNSName}' --output table --region "$REGION"
+  aws elbv2 describe-load-balancers --names "${PROJECT}-${ENVIRONMENT}-alb" --query 'LoadBalancers[].{Name:LoadBalancerName,State:State.Code,DNS:DNSName}' --output table --region "$REGION" || echo 'ALB is not present in this account/region.'
   inventory_count
 }
 inventory_count() {
@@ -107,12 +108,12 @@ costs() {
       echo 'Project-tag costs require Project and Environment cost-allocation tags to be activated in Billing/Cost Explorer.' >&2
       return 0
     }
-    printf '%s\n' "$result" | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\\($p.Total.UnblendedCost.Amount // "0")\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\t\\(.Metrics.UnblendedCost.Amount)\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\t' '{ printf "%-52s %s %.4f\n", $1, $3, $2 }'
+    printf '%s\n' "$result" | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\($p.Total.UnblendedCost.Amount // "0")\t\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\(.Keys[0])\t\(.Metrics.UnblendedCost.Amount)\t\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\t' '{ printf "%-52s %s %.4f\n", $1, $3, $2 }'
     return
   fi
   [[ $# -eq 0 ]] || { echo 'Usage: costs [project|resources ecs|rds|elb|vpc|s3]' >&2; exit 1; }
   printf 'Cost Explorer | all services in the AWS billing account | %s to %s\n' "$start" "$end"
-  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\\($p.Total.UnblendedCost.Amount // "0")\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\t\\(.Metrics.UnblendedCost.Amount)\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\t' '{ printf "%-52s %s %.4f\n", $1, $3, $2 }'
+  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\($p.Total.UnblendedCost.Amount // "0")\t\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\(.Keys[0])\t\(.Metrics.UnblendedCost.Amount)\t\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\t' '{ printf "%-52s %s %.4f\n", $1, $3, $2 }'
   echo 'This total is account-wide, not NOVA-only. Use costs project if cost-allocation tags are active.'
 }
 logs() {
@@ -127,6 +128,7 @@ logs() {
   done
   [[ "$since" =~ ^[0-9]+(s|m|h|d)$ ]] || { echo 'Use --since 30m|2h|1d' >&2; exit 1; }
   if [[ "$target" == all ]]; then
+    [[ "$follow" == false ]] || { echo 'Use --follow with one specific group, not all.' >&2; exit 1; }
     local group_name
     for group_name in frontend backend monitoring db-bootstrap db-migration; do
       echo "===== $group_name ====="
