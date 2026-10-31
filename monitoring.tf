@@ -425,6 +425,11 @@ resource "aws_ecs_service" "monitoring" {
     container_port   = var.grafana_container_port
   }
 
+  lifecycle {
+    # Keep operator stop/start state across Terraform plans; service/task definitions remain Terraform-managed.
+    ignore_changes = [desired_count]
+  }
+
 
   depends_on = [
     aws_lb_listener_rule.grafana,
