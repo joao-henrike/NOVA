@@ -8,7 +8,7 @@ AWS_REGION ?= us-east-1
 
 .DEFAULT_GOAL := start
 
-.PHONY: start setup doctor validate fmt tflint deploy destroy-all inventory-cloud ops ops-help ops-overview ops-services ops-costs ops-inventory ops-logs up down logs restart test migrate smoke tf-init tf-validate tf-plan
+.PHONY: start setup doctor validate fmt tflint deploy destroy-all inventory-cloud ops ops-help ops-overview ops-services ops-costs ops-inventory ops-logs ops-test up down logs restart test migrate smoke tf-init tf-validate tf-plan
 
 # Default entry point after cloning the repository.
 # It prepares the local environment, validates it, and starts the application.
@@ -77,6 +77,9 @@ ops-inventory:
 
 ops-logs:
 	bash scripts/nova-ops.sh logs $(ARGS)
+
+ops-test:
+	bash scripts/test-nova-ops.sh
 
 up:
 	docker compose up -d --build
