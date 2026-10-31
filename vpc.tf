@@ -70,7 +70,7 @@ resource "aws_subnet" "private_db" {
 }
 
 resource "aws_eip" "nat" {
-  for_each = toset(local.azs)
+  for_each = var.enable_nat_gateways ? toset(local.azs) : toset([])
 
   domain = "vpc"
 
@@ -80,7 +80,7 @@ resource "aws_eip" "nat" {
 }
 
 resource "aws_nat_gateway" "this" {
-  for_each = toset(local.azs)
+  for_each = var.enable_nat_gateways ? toset(local.azs) : toset([])
 
   allocation_id = aws_eip.nat[each.key].id
   subnet_id     = aws_subnet.public[each.key].id
@@ -117,9 +117,13 @@ resource "aws_route_table" "private_app" {
 
   vpc_id = aws_vpc.this.id
 
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.this[each.key].id
+  dynamic "route" {
+    for_each = var.enable_nat_gateways ? [1] : []
+
+    content {
+      cidr_block     = "0.0.0.0/0"
+      nat_gateway_id = aws_nat_gateway.this[each.key].id
+    }
   }
 
   tags = merge(local.global_tags, {
