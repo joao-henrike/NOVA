@@ -77,30 +77,30 @@ costs() {
       s3) service='Amazon Simple Storage Service' ;;
       *) echo 'Use ecs, rds, elb, vpc or s3.' >&2; exit 1 ;;
     esac
-    start="$(date -u -d '14 days ago' +%Y-%m-%d)"
+    start="$(date -u -d '13 days ago' +%Y-%m-%d)"
     end="$(date -u -d tomorrow +%Y-%m-%d)"
     filter="$(jq -cn --arg service "$service" '{Dimensions:{Key:"SERVICE",Values:[$service]}}')"
-    printf 'Resource-level cost: %s | last 14 days | USD\n' "$service"
+    printf 'Resource-level cost: %s | last 14 days | billing currency reported by Cost Explorer\n' "$service"
     result="$(aws ce get-cost-and-usage-with-resources --time-period "Start=$start,End=$end" --granularity DAILY --metrics UnblendedCost --filter "$filter" --group-by Type=DIMENSION,Key=RESOURCE_ID --region us-east-1 --output json 2>&1)" || {
       printf '%s\n' "$result" >&2
       echo 'Resource-level costs are not enabled/available for this service. Enable them in Cost Explorer or use costs (service-level).' >&2
       return 0
     }
     printf '%s\n' "$result" | jq -r '
-      [(.ResultsByTime // [])[].Groups[]? | {id:(.Keys[0] // "No resource ID"), amount:((.Metrics.UnblendedCost.Amount // "0") | tonumber)}]
+      [(.ResultsByTime // [])[].Groups[]? | {id:(.Keys[0] // "No resource ID"), amount:((.Metrics.UnblendedCost.Amount // "0") | tonumber), unit:(.Metrics.UnblendedCost.Unit // "unknown")}]
       | group_by(.id)
-      | map({id:.[0].id, amount:(map(.amount) | add)})
+      | map({id:.[0].id, amount:(map(.amount) | add), unit:.[0].unit})
       | sort_by(.amount) | reverse
-      | if length == 0 then "No resource-level data available." else .[] | "\(.id)\t\(.amount)" end
-    ' | awk -F '\t' 'NF == 2 { printf "%-80s USD %.4f\n", $1, $2; next } { print }'
+      | if length == 0 then "No resource-level data available." else .[] | "\(.id)\\t\(.amount)\\t\(.unit)" end
+    ' | awk -F '\\t' 'NF == 3 { printf "%-80s %s %.4f\\n", $1, $3, $2; next } { print }'
     return
   fi
   [[ $# -eq 0 ]] || { echo 'Usage: costs [resources ecs|rds|elb|vpc|s3]' >&2; exit 1; }
   local start end
   start="$(date -u +%Y-%m-01)"
   end="$(date -u -d tomorrow +%Y-%m-%d)"
-  printf 'Cost Explorer | month-to-date | %s to %s | USD\n' "$start" "$end"
-  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\($p.Total.UnblendedCost.Amount // "0")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\(.Keys[0])\t\(.Metrics.UnblendedCost.Amount)")' | awk -F '\t' '{ printf "%-52s USD %.4f\n", $1, $2 }'
+  printf 'Cost Explorer | month-to-date | %s to %s\n' "$start" "$end"
+  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\\t\\($p.Total.UnblendedCost.Amount // "0")\\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\\t\\(.Metrics.UnblendedCost.Amount)\\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\\t' '{ printf "%-52s %s %.4f\\n", $1, $3, $2 }'
   echo 'Cost Explorer totals are account-wide, not NOVA-only.'
 }
 logs() {
