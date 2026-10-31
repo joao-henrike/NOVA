@@ -38,8 +38,8 @@ NOVA Ops commands:
   make ops ACTION=logs ARGS='backend --since 2h'
   make ops ACTION=logs ARGS='backend --since 30m --follow'
   make ops ACTION=scale ARGS='frontend 1'
-  make ops ACTION=stop ARGS='application|frontend|backend|monitoring'
-  make ops ACTION=start ARGS='application|frontend|backend|monitoring'
+  make ops ACTION=stop ARGS='all|application|frontend|backend|monitoring'
+  make ops ACTION=start ARGS='all|application|frontend|backend|monitoring'
   make ops ACTION=db ARGS='status|stop application|start application'
   make ops ACTION=restart ARGS='frontend|backend|monitoring'
 EOF
@@ -207,17 +207,60 @@ stop_start() {
   local action="$1" target="$2"
   case "$target" in
     application)
-      if [[ "$action" == stop ]]; then scale_service frontend 0; scale_service backend 0
-      else scale_service backend "$(read_value "$TFVARS" backend_desired_task_count 2)"; scale_service frontend "$(read_value "$TFVARS" frontend_desired_task_count 2)"; fi
+      if [[ "$action" == stop ]]; then
+        scale_service frontend 0
+        scale_service backend 0
+      else
+        scale_service backend "$(read_value "$TFVARS" backend_desired_task_count 2)"
+        scale_service frontend "$(read_value "$TFVARS" frontend_desired_task_count 2)"
+      fi
       ;;
     frontend|backend|monitoring)
-      if [[ "$action" == stop ]]; then scale_service "$target" 0
-      elif [[ "$target" == monitoring ]]; then scale_service monitoring 1
-      elif [[ "$target" == backend ]]; then scale_service backend "$(read_value "$TFVARS" backend_desired_task_count 2)"
-      else scale_service frontend "$(read_value "$TFVARS" frontend_desired_task_count 2)"; fi
+      if [[ "$action" == stop ]]; then
+        scale_service "$target" 0
+      elif [[ "$target" == monitoring ]]; then
+        scale_service monitoring 1
+      elif [[ "$target" == backend ]]; then
+        scale_service backend "$(read_value "$TFVARS" backend_desired_task_count 2)"
+      else
+        scale_service frontend "$(read_value "$TFVARS" frontend_desired_task_count 2)"
+      fi
       ;;
-    *) echo 'Use application, frontend, backend or monitoring.' >&2; exit 1 ;;
+    all)
+      if [[ "$action" == stop ]]; then
+        stop_start stop application
+        scale_service monitoring 0
+      else
+        start_all
+      fi
+      ;;
+    *) echo 'Use all, application, frontend, backend or monitoring.' >&2; exit 1 ;;
   esac
+}
+
+start_all() {
+  local app_db monitor_db app_state monitor_state state
+  app_db="$(db_identifier application)"
+  monitor_db="$(db_identifier monitoring)"
+  app_state="$(db_state "$app_db")"
+  monitor_state="$(db_state "$monitor_db")"
+  for state in "$app_state" "$monitor_state"; do
+    [[ "$state" == available || "$state" == stopped ]] || {
+      echo "An RDS instance is still transitioning (application=$app_state, monitoring=$monitor_state). Wait and run start all again." >&2
+      return 0
+    }
+  done
+  [[ "$app_state" == available ]] || db_command start application
+  [[ "$monitor_state" == available ]] || db_command start monitoring
+  app_state="$(db_state "$app_db")"
+  monitor_state="$(db_state "$monitor_db")"
+  if [[ "$app_state" != available || "$monitor_state" != available ]]; then
+    echo "RDS startup is asynchronous (application=$app_state, monitoring=$monitor_state). Re-run make ops ACTION=start ARGS=all after both report available."
+    return 0
+  fi
+  stop_start start application
+  scale_service monitoring 1
+  echo 'All workload services have been asked to start. Check services/overview for steady state.'
 }
 db_command() {
   local action="$1" kind="$2" identifier state frontend backend monitoring
@@ -273,7 +316,7 @@ main() {
             logs "$target"
             ;;
           6|7)
-            printf 'Target (application/frontend/backend/monitoring): '
+            printf 'Target (all/application/frontend/backend/monitoring): '
             read -r target || continue
             preflight
             if [[ "$choice" == 6 ]]; then stop_start stop "$target"; else stop_start start "$target"; fi
