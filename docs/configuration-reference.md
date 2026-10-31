@@ -115,13 +115,14 @@ These values are deployment metadata, not credentials.
 
 ## 4. GitHub Actions configuration
 
-The deploy and rebuild workflows use the development Environment.
+The normal deployment workflow uses the GitHub Environment `development`. The destructive rebuild workflow uses the separate `development-rebuild` Environment; do not configure both workflows against the same AWS role or trust boundary.
 
 ### Repository variables
 
 | Variable | Required? | Purpose |
 | --- | --- | --- |
-| AWS_CD_ROLE_ARN | Yes | IAM role assumed through GitHub OIDC. Restrict the trust policy to this repository and the approved branch/environment. |
+| AWS_CD_ROLE_ARN | Yes for deploy and live Extreme Validation | Non-destructive CD IAM role assumed through GitHub OIDC. Its trust policy is scoped to this repository's immutable IDs and the `development` Environment. |
+| AWS_REBUILD_ROLE_ARN | Yes for manual rebuild only | Separate destructive-rebuild IAM role. It is used only with the `development-rebuild` Environment and must not be the CD role. |
 | TF_STATE_BUCKET | No | Overrides the committed development S3 bucket name. If omitted, workflows use cloudstart-nova-terraform-state-760396521507. |
 | TERRAFORM_AWS_REGION | No | Region override used by deploy-dev.yml; default is us-east-1. The manual rebuild workflow is currently fixed to us-east-1. |
 
@@ -129,7 +130,7 @@ The deploy and rebuild workflows use the development Environment.
 
 | Secret | Required? | Purpose |
 | --- | --- | --- |
-| GRAFANA_ADMIN_PASSWORD | Yes for normal CD | Grafana administrator password passed as a sensitive Terraform input. The rebuild workflow generates a fresh value instead. |
+| GRAFANA_ADMIN_PASSWORD | Yes for normal CD and live Extreme Validation | Grafana administrator password passed as a sensitive Terraform input. The destructive rebuild generates a separate temporary value and masks it in workflow logs. |
 | GOOGLE_CLIENT_ID | Optional | Google OAuth client ID. |
 | GOOGLE_CLIENT_SECRET | Optional | Google OAuth client secret. |
 | GOOGLE_REDIRECT_URI | Optional | Exact registered Google callback URL. |
@@ -143,13 +144,16 @@ For each identity provider, provide the complete set of its fields or leave the 
 
 ### AWS permissions for the OIDC role
 
-The role needs permission to:
-- inspect the target AWS account and verify the state bucket owner and region;
-- create/configure the S3 state bucket and bootstrap compatibility resource when missing;
-- manage only the three provisioned application Secrets Manager entries using DescribeSecret, GetSecretValue, CreateSecret, and PutSecretValue;
-- run the Terraform plan/apply and deployment operations required by the explicitly scoped development stack.
+The non-destructive CD role is intentionally restricted. Its policy allows it to:
+- inspect AWS metadata and verify the state bucket owner and region;
+- list only the canonical `cloudstart/dev/*` state prefix, read/write only `cloudstart/dev/terraform.tfstate`, and manage only its `.tflock` object;
+- push images only to the two NOVA development ECR repositories;
+- create/read/update only the three named application Secrets Manager entries;
+- register and activate only NOVA application task definitions/services, pass only the named ECS task roles, and manage the project-scoped execution-role, security-group, autoscaling, and log-group resources needed by application delivery.
 
-The exact IAM policy is external to this repository. Review its Action, Resource, and Condition statements; do not grant broad administrator access merely to make the workflow pass.
+The CD role does **not** create or delete the state bucket, create the bootstrap compatibility table, modify the VPC/RDS/ALB baseline, administer IAM users or keys, or destroy infrastructure. The canonical state bucket must already exist before GitHub CD runs; local `make deploy` uses the separate state-bootstrap path.
+
+The trust policy and permission policy are version-controlled in `bootstrap/github-oidc/main.tf`; the explicit provisioning flow is `scripts/bootstrap-github-oidc-role.sh`. Review their Action, Resource, and Condition statements before the one-time AWS bootstrap. Do not grant broad administrator access merely to make the workflow pass.
 
 ## 5. Backend authentication secret
 
@@ -325,8 +329,8 @@ The bootstrap outputs are:
 
 ## 15. OIDC readiness boundary
 
-The GitHub OIDC role is an external AWS IAM resource; its trust relationship and permissions are not stored in this repository. The development workflows use the `development` GitHub Environment and enforce account `760396521507`. The role trust must be narrowly bound to this repository and the intended development workflow context; do not use a broad organization-wide or `repo:*` trust condition.
+The GitHub OIDC roles are AWS IAM resources, but their intended trust and permission policies are version-controlled in `bootstrap/github-oidc/main.tf`. The one-time non-destructive role bootstrap is performed by `scripts/bootstrap-github-oidc-role.sh` after the operator explicitly confirms `CREATE_GITHUB_OIDC_ROLE`. The CD trust policy is restricted to this repository's immutable owner/repository IDs, the `development` GitHub Environment, and the `sts.amazonaws.com` audience. The live AWS role and the repository variable containing its ARN still need to be provisioned/configured by an authorized operator.
 
-The repository variable `AWS_CD_ROLE_ARN` is required by the normal development CD and is also used by the optional live-AWS stage in Extreme Validation. A missing value causes the CD job to be skipped and the Extreme Validation AWS checks to be reported as skipped; it does not mean the local CI has failed.
+The normal development CD and live-AWS stage in Extreme Validation use the repository Actions variable `AWS_CD_ROLE_ARN`. The destructive rebuild uses the separate `AWS_REBUILD_ROLE_ARN` variable and `development-rebuild` Environment. A missing `AWS_CD_ROLE_ARN` causes the CD job not to run and Extreme Validation to fail closed with the AWS checks marked as skipped; it does not mean local CI failed.
 
-At the 30 October 2026 validation snapshot (commit `cdb9a431826bb3440df367381242a9838b4729a5`), the Extreme Validation logs showed this variable empty. See the [CI/CD evidence section](ci-cd.md#latest-recorded-validation-evidence). Confirm the live GitHub repository setting before treating OIDC deployment as ready.
+At the 30 October 2026 (São Paulo local time) validation snapshot, Extreme Validation run [#272](https://github.com/joao-henrike/NOVA/actions/runs/41148307721) on commit `3c72538750811476a8ddaf7a3880a8cd7a850e2d` showed `AWS_CD_ROLE_ARN` empty. See the [CI/CD evidence section](ci-cd.md#latest-recorded-validation-evidence). Confirm the live GitHub repository variable and AWS role before treating OIDC deployment as ready.
