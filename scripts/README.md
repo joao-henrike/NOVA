@@ -23,6 +23,8 @@ This folder contains local setup, validation, deployment, state-bootstrap, secre
 | `run-gitleaks.sh` | Downloads a pinned Gitleaks binary with checksum verification and scans the Git repository. | Local/CI temporary files; no AWS operations. |
 | `extreme-checks.sh` | Shared GitHub Actions helper for recording independent validation results and skipped checks. | CI evidence files only; it does not provision AWS. |
 | `test-extreme-checks.sh` | Tests that complete, failed, and skipped validation results produce the correct blocking verdict. | Temporary test files only. |
+| `nova-ops.sh` | Interactive/read-only AWS status, cost, inventory, and log inspection plus explicitly requested ECS/RDS controls. | Read-only by default; explicit ECS/RDS changes only. Never deletes resources or runs Terraform apply/destroy. |
+| `test-nova-ops.sh` | Mock AWS contract tests for account guarding, scaling bounds, monitoring singleton, log validation, and RDS confirmation. | Temporary test files only; no AWS account access. |
 
 The root-level `audit-nova.sh` and `audit-frontend.sh` are separate read-only diagnostic tools and are documented in the [root README](../README.md).
 
@@ -79,3 +81,32 @@ Do not use `destroy-all.sh` as a routine validation command. Read [Deployment an
 - Never treat a successful local validation as proof of AWS runtime health.
 - Keep generated state, plans, secret material, and `.deploy/` artifacts out of Git.
 - Review and approve Terraform plans before applying infrastructure changes.
+
+
+## Cloud operations orchestrator
+
+The operator interface is maintained in [Cloud operations](../docs/operations.md). It is independent from the deployment script and does not require the branch-specific local doctor check.
+
+Quick entry points:
+
+~~~bash
+make ops-help
+make ops
+make ops ACTION=overview
+make ops ACTION=costs
+make ops ACTION=costs ARGS='resources rds'
+make ops ACTION=logs ARGS='backend --since 2h'
+make ops ACTION=stop ARGS='application'
+make ops ACTION=start ARGS='application'
+make ops ACTION=db ARGS='status'
+~~~
+
+Before any AWS call, nova-ops.sh verifies the current AWS account against config/dev.env. Do not use it from an unintended AWS profile/account. Service scaling is bounded by the max task counts in config/dev.tfvars. Monitoring is a singleton task and accepts only zero or one replica.
+
+The resource-level Cost Explorer command depends on AWS opt-in/settings for the selected service. The monthly service-level cost output is account-wide; it is not a NOVA-only invoice. See the operations guide for data limitations, IAM permissions, remaining fixed costs, and RDS stop/start behavior.
+
+The orchestrator does not turn off or delete NAT Gateways, the ALB, the VPC, ECR, the S3 Terraform state bucket, snapshots, or CloudWatch log storage. RDS stop requires dependent ECS services at zero and an exact interactive confirmation. Run mocked tests with:
+
+~~~bash
+make ops-test
+~~~
