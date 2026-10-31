@@ -107,12 +107,12 @@ costs() {
       echo 'Project-tag costs require Project and Environment cost-allocation tags to be activated in Billing/Cost Explorer.' >&2
       return 0
     }
-    printf '%s\n' "$result" | jq -r '.ResultsByTime[0] as $p | "TOTAL\\t\\($p.Total.UnblendedCost.Amount // "0")\\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\\t\\(.Metrics.UnblendedCost.Amount)\\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\\t' '{ printf "%-52s %s %.4f\\n", $1, $3, $2 }'
+    printf '%s\n' "$result" | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\\($p.Total.UnblendedCost.Amount // "0")\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\t\\(.Metrics.UnblendedCost.Amount)\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\t' '{ printf "%-52s %s %.4f\n", $1, $3, $2 }'
     return
   fi
   [[ $# -eq 0 ]] || { echo 'Usage: costs [project|resources ecs|rds|elb|vpc|s3]' >&2; exit 1; }
   printf 'Cost Explorer | all services in the AWS billing account | %s to %s\n' "$start" "$end"
-  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\\t\\($p.Total.UnblendedCost.Amount // "0")\\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\\t\\(.Metrics.UnblendedCost.Amount)\\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\\t' '{ printf "%-52s %s %.4f\\n", $1, $3, $2 }'
+  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\\($p.Total.UnblendedCost.Amount // "0")\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\t\\(.Metrics.UnblendedCost.Amount)\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\t' '{ printf "%-52s %s %.4f\n", $1, $3, $2 }'
   echo 'This total is account-wide, not NOVA-only. Use costs project if cost-allocation tags are active.'
 }
 logs() {
