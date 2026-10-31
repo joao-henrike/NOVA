@@ -45,7 +45,7 @@ EOF
 }
 services() {
   aws ecs describe-services --cluster "$CLUSTER" --services "${PROJECT}-${ENVIRONMENT}-frontend" "${PROJECT}-${ENVIRONMENT}-backend" "${PROJECT}-${ENVIRONMENT}-monitoring" --query 'services[].{Name:serviceName,Status:status,Desired:desiredCount,Running:runningCount,Pending:pendingCount}' --output table --region "$REGION"
-  aws application-autoscaling describe-scalable-targets --service-namespace ecs --query 'ScalableTargets[].{Resource:ResourceId,Min:MinCapacity,Max:MaxCapacity,Suspended:suspendedState}' --output table --region "$REGION"
+  aws application-autoscaling describe-scalable-targets --service-namespace ecs --resource-ids "service/$CLUSTER/${PROJECT}-${ENVIRONMENT}-frontend" "service/$CLUSTER/${PROJECT}-${ENVIRONMENT}-backend" --query 'ScalableTargets[].{Resource:ResourceId,Min:MinCapacity,Max:MaxCapacity,Suspended:suspendedState}' --output table --region "$REGION"
 }
 database_status() {
   aws rds describe-db-instances --region "$REGION" --query "DBInstances[?contains(DBInstanceIdentifier, '${PROJECT}-${ENVIRONMENT}')].{Name:DBInstanceIdentifier,Status:DBInstanceStatus,Class:DBInstanceClass,StorageGiB:AllocatedStorage,MultiAZ:MultiAZ}" --output table
@@ -91,8 +91,8 @@ costs() {
       | group_by(.id)
       | map({id:.[0].id, amount:(map(.amount) | add), unit:.[0].unit})
       | sort_by(.amount) | reverse
-      | if length == 0 then "No resource-level data available." else .[] | "\(.id)\\t\(.amount)\\t\(.unit)" end
-    ' | awk -F '\\t' 'NF == 3 { printf "%-80s %s %.4f\\n", $1, $3, $2; next } { print }'
+      | if length == 0 then "No resource-level data available." else .[] | "\(.id)\t\(.amount)\t\(.unit)" end
+    ' | awk -F '\t' 'NF == 3 { printf "%-80s %s %.4f\n", $1, $3, $2; next } { print }'
     return
   fi
   [[ $# -eq 0 ]] || { echo 'Usage: costs [resources ecs|rds|elb|vpc|s3]' >&2; exit 1; }
@@ -100,7 +100,7 @@ costs() {
   start="$(date -u +%Y-%m-01)"
   end="$(date -u -d tomorrow +%Y-%m-%d)"
   printf 'Cost Explorer | month-to-date | %s to %s\n' "$start" "$end"
-  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\\t\\($p.Total.UnblendedCost.Amount // "0")\\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\\t\\(.Metrics.UnblendedCost.Amount)\\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\\t' '{ printf "%-52s %s %.4f\\n", $1, $3, $2 }'
+  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\\($p.Total.UnblendedCost.Amount // "0")\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\t\\(.Metrics.UnblendedCost.Amount)\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\t' '{ printf "%-52s %s %.4f\n", $1, $3, $2 }'
   echo 'Cost Explorer totals are account-wide, not NOVA-only.'
 }
 logs() {
@@ -140,6 +140,9 @@ service_id() {
 }
 desired_count() {
   aws ecs describe-services --cluster "$CLUSTER" --services "$1" --query 'services[0].desiredCount' --output text --region "$REGION"
+}
+running_count() {
+  aws ecs describe-services --cluster "$CLUSTER" --services "$1" --query 'services[0].runningCount' --output text --region "$REGION"
 }
 db_identifier() {
   case "$1" in
@@ -212,10 +215,15 @@ db_command() {
     if [[ "$kind" == application ]]; then
       frontend="$(desired_count "$(service_id frontend)")"
       backend="$(desired_count "$(service_id backend)")"
-      [[ "$frontend" == 0 && "$backend" == 0 ]] || { echo 'Stop frontend and backend ECS tasks before stopping application RDS.' >&2; exit 1; }
+      [[ "$frontend" == 0 && "$backend" == 0 ]] || { echo 'Set frontend and backend desired counts to zero before stopping application RDS.' >&2; exit 1; }
+      frontend="$(running_count "$(service_id frontend)")"
+      backend="$(running_count "$(service_id backend)")"
+      [[ "$frontend" == 0 && "$backend" == 0 ]] || { echo 'Wait until frontend and backend running task counts are both zero before stopping application RDS.' >&2; exit 1; }
     else
       monitoring="$(desired_count "$(service_id monitoring)")"
-      [[ "$monitoring" == 0 ]] || { echo 'Stop monitoring ECS before stopping monitoring RDS.' >&2; exit 1; }
+      [[ "$monitoring" == 0 ]] || { echo 'Set monitoring ECS desired count to zero before stopping monitoring RDS.' >&2; exit 1; }
+      monitoring="$(running_count "$(service_id monitoring)")"
+      [[ "$monitoring" == 0 ]] || { echo 'Wait until monitoring ECS has zero running tasks before stopping monitoring RDS.' >&2; exit 1; }
     fi
     [[ "$state" == available ]] || { echo "$identifier is $state; stop requires available." >&2; exit 1; }
     confirm_exact "STOP $identifier"
@@ -238,7 +246,7 @@ main() {
     menu)
       require aws
       while true; do
-        printf '\\nNOVA Ops %s/%s (%s)\\n1 Overview\\n2 ECS services\\n3 Current-month costs\\n4 Resource inventory\\n5 CloudWatch logs\\n6 Stop service\\n7 Start service\\n8 Scale service\\n9 RDS status\\n10 Stop RDS\\n11 Start RDS\\n0 Exit\\nChoice: ' "$PROJECT" "$ENVIRONMENT" "$REGION"
+        printf '\nNOVA Ops %s/%s (%s)\n1 Overview\n2 ECS services\n3 Current-month costs\n4 Resource inventory\n5 CloudWatch logs\n6 Stop service\n7 Start service\n8 Scale service\n9 RDS status\n10 Stop RDS\n11 Start RDS\n0 Exit\nChoice: ' "$PROJECT" "$ENVIRONMENT" "$REGION"
         read -r choice || break
         case "$choice" in
           1) preflight; overview ;;
@@ -296,6 +304,8 @@ main() {
           [[ $# -eq 1 ]] || { echo 'Usage: restart frontend|backend|monitoring' >&2; exit 1; }
           service="$(service_id "$1")"
           [[ "$(desired_count "$service")" -gt 0 ]] || { echo 'Service is stopped; start it before restart.' >&2; exit 1; }
+          if [[ "$1" == backend ]]; then [[ "$(db_state "$(db_identifier application)")" == available ]] || { echo 'Application RDS must be available.' >&2; exit 1; }; fi
+          if [[ "$1" == monitoring ]]; then [[ "$(db_state "$(db_identifier monitoring)")" == available ]] || { echo 'Monitoring RDS must be available.' >&2; exit 1; }; fi
           aws ecs update-service --cluster "$CLUSTER" --service "$service" --force-new-deployment --region "$REGION" >/dev/null
           ;;
         *) help; echo "Unknown action: $action" >&2; exit 1 ;;
