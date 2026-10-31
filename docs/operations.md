@@ -45,6 +45,7 @@ The script never reads, sources, prints, or writes AWS credentials or applicatio
 | inventory | Resources returned by Resource Groups Tagging API with Project=cloudstart and Environment=dev |
 | costs | Cost Explorer month-to-date total grouped by AWS service, with billing currency reported by Cost Explorer |
 | costs project | Month-to-date charges filtered by Project and Environment cost-allocation tags |
+| costs project | Month-to-date charges filtered by Project and Environment cost-allocation tags |
 
 | costs resources ecs/rds/elb/vpc/s3 | Optional daily resource-ID breakdown for the last 14 days, if AWS resource-level data is enabled for that service |
 | logs GROUP | CloudWatch Logs for a selected ECS task log group; accepts --since 30m, 2h, 1d and --follow |
@@ -72,6 +73,7 @@ NOVA Ops changes runtime capacity; it does not delete resources.
 | stop frontend / start frontend | Sets frontend ECS desired count to zero or back to the configured default |
 | stop backend / start backend | Sets backend ECS desired count to zero or back to the configured default; starting requires application RDS to be available |
 | stop application / start application | Stops or restores both frontend and backend services; startup orders backend before frontend |
+| stop all / start all | Stops all three ECS workloads, or starts both RDS instances (with confirmation if stopped) and then starts all ECS workloads once both databases are available |
 | stop monitoring / start monitoring | Sets the stateful monitoring ECS service to zero or one task |
 | scale frontend N / scale backend N | Changes ECS desired count within the respective max task count in config/dev.tfvars |
 | restart SERVICE | Requests a new ECS deployment for an already-running service |
@@ -90,6 +92,7 @@ Only the two existing database instances are supported:
 Before stopping the application database, both frontend and backend ECS desired counts must be zero. Before stopping the monitoring database, the monitoring ECS service must be zero. The command also requires an interactive exact confirmation:
 
 ~~~bash
+make ops ACTION=stop ARGS='all'          # frontend, backend and monitoring ECS tasks
 make ops ACTION=stop ARGS='application'
 make ops ACTION=stop ARGS='monitoring'
 make ops ACTION=db ARGS='stop application'
@@ -99,8 +102,9 @@ make ops ACTION=db ARGS='stop application'
 To start an RDS instance:
 
 ~~~bash
-make ops ACTION=db ARGS='start application'
-# Type exactly: START cloudstart-dev-db
+make ops ACTION=start ARGS='all'
+# If an RDS instance is stopped, confirm START cloudstart-dev-db and/or START cloudstart-dev-monitoring-db.
+# Once both RDS instances report available, run start all again.
 make ops ACTION=db ARGS='status'
 ~~~
 
