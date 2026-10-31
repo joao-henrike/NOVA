@@ -33,6 +33,7 @@ NOVA Ops commands:
   make ops ACTION=services           ECS service state and autoscaling
   make ops ACTION=inventory          Resource inventory by Project/Environment tags
   make ops ACTION=costs              Month-to-date account costs by AWS service
+  make ops ACTION=costs ARGS='project'        Costs filtered by Project/Environment cost tags
   make ops ACTION=costs ARGS='resources rds'  Optional resource-level cost detail
   make ops ACTION=logs ARGS='backend --since 2h'
   make ops ACTION=logs ARGS='backend --since 30m --follow'
@@ -66,9 +67,12 @@ inventory() {
 }
 costs() {
   require jq
+  local start end filter result
+  start="$(date -u +%Y-%m-01)"
+  end="$(date -u -d tomorrow +%Y-%m-%d)"
   if [[ "${1:-}" == resources ]]; then
     [[ $# -eq 2 ]] || { echo 'Usage: costs resources ecs|rds|elb|vpc|s3' >&2; exit 1; }
-    local service start end filter result
+    local service
     case "$2" in
       ecs) service='Amazon Elastic Container Service' ;;
       rds) service='Amazon Relational Database Service' ;;
@@ -78,12 +82,11 @@ costs() {
       *) echo 'Use ecs, rds, elb, vpc or s3.' >&2; exit 1 ;;
     esac
     start="$(date -u -d '13 days ago' +%Y-%m-%d)"
-    end="$(date -u -d tomorrow +%Y-%m-%d)"
     filter="$(jq -cn --arg service "$service" '{Dimensions:{Key:"SERVICE",Values:[$service]}}')"
-    printf 'Resource-level cost: %s | last 14 days | billing currency reported by Cost Explorer\n' "$service"
+    printf 'Resource-level cost: %s | last 14 days | currency from Cost Explorer\n' "$service"
     result="$(aws ce get-cost-and-usage-with-resources --time-period "Start=$start,End=$end" --granularity DAILY --metrics UnblendedCost --filter "$filter" --group-by Type=DIMENSION,Key=RESOURCE_ID --region us-east-1 --output json 2>&1)" || {
       printf '%s\n' "$result" >&2
-      echo 'Resource-level costs are not enabled/available for this service. Enable them in Cost Explorer or use costs (service-level).' >&2
+      echo 'Resource-level costs are not enabled/available for this service. Enable them in Cost Explorer or use costs project/service.' >&2
       return 0
     }
     printf '%s\n' "$result" | jq -r '
@@ -95,13 +98,22 @@ costs() {
     ' | awk -F '\t' 'NF == 3 { printf "%-80s %s %.4f\n", $1, $3, $2; next } { print }'
     return
   fi
-  [[ $# -eq 0 ]] || { echo 'Usage: costs [resources ecs|rds|elb|vpc|s3]' >&2; exit 1; }
-  local start end
-  start="$(date -u +%Y-%m-01)"
-  end="$(date -u -d tomorrow +%Y-%m-%d)"
-  printf 'Cost Explorer | month-to-date | %s to %s\n' "$start" "$end"
-  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\\($p.Total.UnblendedCost.Amount // "0")\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\t\\(.Metrics.UnblendedCost.Amount)\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\t' '{ printf "%-52s %s %.4f\n", $1, $3, $2 }'
-  echo 'Cost Explorer totals are account-wide, not NOVA-only.'
+  if [[ "${1:-}" == project ]]; then
+    [[ $# -eq 1 ]] || { echo 'Usage: costs project' >&2; exit 1; }
+    filter="$(jq -cn --arg project "$PROJECT" --arg environment "$ENVIRONMENT" '{And:[{Tags:{Key:"Project",Values:[$project]}},{Tags:{Key:"Environment",Values:[$environment]}}]}')"
+    printf 'Cost Explorer | project tags Project=%s, Environment=%s | %s to %s\n' "$PROJECT" "$ENVIRONMENT" "$start" "$end"
+    result="$(aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --filter "$filter" --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json)" || {
+      printf '%s\n' "$result" >&2
+      echo 'Project-tag costs require Project and Environment cost-allocation tags to be activated in Billing/Cost Explorer.' >&2
+      return 0
+    }
+    printf '%s\n' "$result" | jq -r '.ResultsByTime[0] as $p | "TOTAL\\t\\($p.Total.UnblendedCost.Amount // "0")\\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\\t\\(.Metrics.UnblendedCost.Amount)\\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\\t' '{ printf "%-52s %s %.4f\\n", $1, $3, $2 }'
+    return
+  fi
+  [[ $# -eq 0 ]] || { echo 'Usage: costs [project|resources ecs|rds|elb|vpc|s3]' >&2; exit 1; }
+  printf 'Cost Explorer | all services in the AWS billing account | %s to %s\n' "$start" "$end"
+  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\\t\\($p.Total.UnblendedCost.Amount // "0")\\t\\($p.Total.UnblendedCost.Unit // "unknown")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\\(.Keys[0])\\t\\(.Metrics.UnblendedCost.Amount)\\t\\(.Metrics.UnblendedCost.Unit // "unknown")")' | awk -F '\\t' '{ printf "%-52s %s %.4f\\n", $1, $3, $2 }'
+  echo 'This total is account-wide, not NOVA-only. Use costs project if cost-allocation tags are active.'
 }
 logs() {
   local target="${1:-}" since="1h" follow=false
