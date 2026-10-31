@@ -60,7 +60,7 @@ if bash "$TEMP_DIR/repo/scripts/nova-ops.sh" logs unknown >/dev/null 2>&1; then
   exit 1
 fi
 
-if bash "$TEMP_DIR/repo/scripts/nova-ops.sh" db stop application >/dev/null 2>&1; then
+if bash "$TEMP_DIR/repo/scripts/nova-ops.sh" db stop application </dev/null >/dev/null 2>&1; then
   printf 'FAIL: RDS stop ran without an interactive exact confirmation.\n' >&2
   exit 1
 fi
