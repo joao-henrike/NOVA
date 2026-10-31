@@ -1296,7 +1296,7 @@ Joao application/runtime-artifact change or manual dispatch
 
 Automatic CD is limited to development. The push path filter includes application source, migrations, Dockerfiles, relevant Nginx configuration, and docker-compose.yml; documentation, Terraform, scripts, and workflow changes alone do not trigger a push deployment. workflow_dispatch can run the development deploy workflow manually. The job requires AWS_CD_ROLE_ARN; TF_STATE_BUCKET has a committed default and is optional.
 
-The manual rebuild workflow is separate and destructive. It requires confirmation=REBUILD and is never triggered by an ordinary push. There is no automatic production CD.
+The manual rebuild workflow is separate and destructive. It requires the exact `REBUILD` confirmation, the repository Actions variable `AWS_REBUILD_ROLE_ARN`, and the protected `development-rebuild` GitHub Environment (restricted to `Joao`, with required reviewers recommended). It never reuses `AWS_CD_ROLE_ARN` and is never triggered by an ordinary push. There is no automatic production CD.
 
 ## 36. Local development
 
