@@ -55,7 +55,6 @@ overview() {
   services
   database_status
   aws ec2 describe-nat-gateways --filter "Name=tag:Project,Values=$PROJECT" "Name=tag:Environment,Values=$ENVIRONMENT" --query 'NatGateways[].{ID:NatGatewayId,State:State,PublicIP:NatGatewayAddresses[0].PublicIp}' --output table --region "$REGION"
-  aws elbv2 describe-load-balancers --names "${PROJECT}-${ENVIRONMENT}-alb" --query 'LoadBalancers[].{Name:LoadBalancerName,State:State.Code,DNS:DNSName}' --output table --region "$REGION"
   aws elbv2 describe-load-balancers --names "${PROJECT}-${ENVIRONMENT}-alb" --query 'LoadBalancers[].{Name:LoadBalancerName,State:State.Code,DNS:DNSName}' --output table --region "$REGION" || echo 'ALB is not present in this account/region.'
   inventory_count
 }
