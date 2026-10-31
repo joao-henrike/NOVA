@@ -14,6 +14,8 @@ resource "aws_ecs_cluster" "this" {
 
 #trivy:ignore:AWS-0053
 resource "aws_lb" "this" {
+  count = var.enable_public_alb ? 1 : 0
+
   name                       = substr("${local.name}-alb", 0, 32)
   internal                   = false
   drop_invalid_header_fields = true
@@ -30,6 +32,8 @@ resource "aws_lb" "this" {
 }
 
 resource "aws_lb_target_group" "frontend" {
+  count = var.enable_public_alb ? 1 : 0
+
   name        = substr("${local.name}-frontend-tg", 0, 32)
   port        = 80
   protocol    = "HTTP"
@@ -54,6 +58,8 @@ resource "aws_lb_target_group" "frontend" {
 }
 
 resource "aws_lb_target_group" "backend" {
+  count = var.enable_public_alb ? 1 : 0
+
   name        = substr("${local.name}-backend-tg", 0, 32)
   port        = var.backend_container_port
   protocol    = "HTTP"
@@ -79,15 +85,15 @@ resource "aws_lb_target_group" "backend" {
 
 #trivy:ignore:AWS-0054
 resource "aws_lb_listener" "http" {
-  count = var.acm_certificate_arn == "" ? 1 : 0
+  count = var.enable_public_alb && var.acm_certificate_arn == "" ? 1 : 0
 
-  load_balancer_arn = aws_lb.this.arn
+  load_balancer_arn = aws_lb.this[0].arn
   port              = 80
   protocol          = "HTTP"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = aws_lb_target_group.frontend[0].arn
   }
 
   tags = merge(local.global_tags, {
@@ -96,9 +102,9 @@ resource "aws_lb_listener" "http" {
 }
 
 resource "aws_lb_listener" "http_redirect" {
-  count = var.acm_certificate_arn == "" ? 0 : 1
+  count = var.enable_public_alb && var.acm_certificate_arn != "" ? 1 : 0
 
-  load_balancer_arn = aws_lb.this.arn
+  load_balancer_arn = aws_lb.this[0].arn
   port              = 80
   protocol          = "HTTP"
 
@@ -121,9 +127,9 @@ resource "aws_lb_listener" "http_redirect" {
 }
 
 resource "aws_lb_listener" "https" {
-  count = var.acm_certificate_arn == "" ? 0 : 1
+  count = var.enable_public_alb && var.acm_certificate_arn != "" ? 1 : 0
 
-  load_balancer_arn = aws_lb.this.arn
+  load_balancer_arn = aws_lb.this[0].arn
   port              = 443
   protocol          = "HTTPS"
   certificate_arn   = var.acm_certificate_arn
@@ -131,7 +137,7 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = aws_lb_target_group.frontend[0].arn
   }
 
   tags = merge(local.global_tags, {
@@ -140,6 +146,8 @@ resource "aws_lb_listener" "https" {
 }
 
 resource "aws_lb_listener_rule" "backend" {
+  count = var.enable_public_alb ? 1 : 0
+
   listener_arn = (
     var.acm_certificate_arn == ""
     ? aws_lb_listener.http[0].arn
@@ -149,7 +157,7 @@ resource "aws_lb_listener_rule" "backend" {
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
+    target_group_arn = aws_lb_target_group.backend[0].arn
   }
 
   condition {
