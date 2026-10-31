@@ -382,7 +382,6 @@ resource "aws_ecs_service" "frontend" {
   }
 
   depends_on = [
-    aws_lb_listener.http,
     aws_iam_role_policy.ecs_execution,
   ]
 
@@ -431,7 +430,6 @@ resource "aws_ecs_service" "backend" {
   }
 
   depends_on = [
-    aws_lb_listener_rule.backend,
     aws_iam_role_policy.ecs_backend_execution,
   ]
 
