@@ -30,15 +30,17 @@ output "private_db_subnet_ids" {
 
 output "alb_dns_name" {
   description = "AWS-generated public DNS name of the Application Load Balancer."
-  value       = aws_lb.this.dns_name
+  value       = var.enable_public_alb ? aws_lb.this[0].dns_name : null
 }
 
 output "alb_application_url" {
   description = "Application base URL. Uses the configured HTTPS hostname when ACM is enabled, otherwise the development HTTP ALB DNS name."
   value = (
-    var.acm_certificate_arn == ""
-    ? "http://${aws_lb.this.dns_name}/"
-    : "https://${var.alb_domain_name}/"
+    !var.enable_public_alb ? null : (
+      var.acm_certificate_arn == ""
+      ? "http://${aws_lb.this[0].dns_name}/"
+      : "https://${var.alb_domain_name}/"
+    )
   )
 }
 
@@ -158,9 +160,11 @@ output "rds_master_user_secret_arn" {
 output "grafana_url" {
   description = "Grafana URL exposed through the configured public ALB listener."
   value = (
-    var.acm_certificate_arn == ""
-    ? "http://${aws_lb.this.dns_name}/grafana/"
-    : "https://${var.alb_domain_name}/grafana/"
+    !var.enable_public_alb ? null : (
+      var.acm_certificate_arn == ""
+      ? "http://${aws_lb.this[0].dns_name}/grafana/"
+      : "https://${var.alb_domain_name}/grafana/"
+    )
   )
 }
 
@@ -172,4 +176,15 @@ output "monitoring_ecs_service_name" {
 output "monitoring_rds_endpoint" {
   description = "Private RDS endpoint used by the Zabbix monitoring database."
   value       = aws_db_instance.monitoring.endpoint
+}
+
+
+output "nat_gateways_enabled" {
+  description = "Whether per-AZ NAT Gateways and their public IPv4 allocations are currently declared."
+  value       = var.enable_nat_gateways
+}
+
+output "public_alb_enabled" {
+  description = "Whether the public ALB, listeners, and target groups are currently declared."
+  value       = var.enable_public_alb
 }
