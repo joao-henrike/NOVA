@@ -139,6 +139,8 @@ create_and_review_plan() {
     -var='start_application_services=false' \
     -var="enable_nat_gateways=$nat" \
     -var="enable_public_alb=$alb" \
+    -var="frontend_image_tag=$TF_VAR_frontend_image_tag" \
+    -var="backend_image_tag=$TF_VAR_backend_image_tag" \
     -out="$plan_file"
   chmod 600 "$plan_file"
   terraform show -json "$plan_file" > "$plan_json"
