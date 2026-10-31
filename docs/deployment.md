@@ -576,23 +576,35 @@ ALB/API/DB/Grafana smoke tests
 
 The state bucket itself is intentionally retained because it is the Terraform state infrastructure, not part of the ephemeral CloudStart application environment.
 
-Required GitHub configuration:
+Required GitHub configuration for normal, non-destructive application CD:
 
 ```text
-development environment
-AWS_CD_ROLE_ARN variable
-GRAFANA_ADMIN_PASSWORD secret (for normal application CD)
+Repository Actions variable: AWS_CD_ROLE_ARN
+GitHub Environment: development (deployment branch restricted to Joao)
+GitHub Environment secret: GRAFANA_ADMIN_PASSWORD
 ```
 
-Optional provider secrets in the same GitHub Environment are `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, and `APPLE_REDIRECT_URI`. Configure all fields for a provider or leave that provider unused. `TF_STATE_BUCKET` may be set as a repository variable; otherwise the workflow uses the development bucket name in the repository. The OIDC role must be allowed to create the state bucket/bootstrap resources when missing and to create/read/update the three database and backend-auth Secrets Manager secrets.
+The manual destructive rebuild is deliberately separate:
 
-The workflow generates a temporary Grafana administrator password during the rebuild and passes it to Terraform as a sensitive variable. The generated value is stored by the application stack in AWS Secrets Manager and is not printed into the workflow logs.
+```text
+Repository Actions variable: AWS_REBUILD_ROLE_ARN
+GitHub Environment: development-rebuild (Joao only; required reviewers recommended)
+Workflow input: confirmation must be exactly REBUILD
+```
+
+Do not reuse the non-destructive CD role for rebuild. The rebuild workflow uses its own trust relationship and IAM policy. Optional OAuth secrets must be placed in the GitHub Environment used by the workflow that needs them: `development` for normal CD or `development-rebuild` for rebuild. `TF_STATE_BUCKET` may be set as a repository variable; otherwise workflows use the committed development bucket name.
+
+The normal CD role can verify the existing state bucket and read/write only the canonical Terraform state object and lock file; it cannot create the bucket or the bootstrap compatibility resource. Create/verify the bucket first with the local state-bootstrap path. The role's trust and permission policy are maintained in `bootstrap/github-oidc/main.tf`, and it can manage only the required project-scoped application resources and three named application secrets.
+
+The rebuild workflow generates a fresh temporary Grafana administrator password and passes it to Terraform as a sensitive variable. The value is explicitly registered for GitHub Actions log masking before it is added to the job environment; Terraform stores the value in AWS Secrets Manager during a successful rebuild.
 
 ## 21. Automated development CD
 
 Pushes to the `Joao` branch that change application code trigger `.github/workflows/deploy-dev.yml`.
 
-Before enabling the deployment job, configure `AWS_CD_ROLE_ARN` as a repository variable and `GRAFANA_ADMIN_PASSWORD` as a secret in the `development` GitHub Environment. `TF_STATE_BUCKET` is optional because the workflow has a committed development default. Optional Google/Apple provider secrets are listed in the rebuild section above. The CD workflow passes `config/dev.tfvars` and explicit activation overrides to Terraform.
+Before enabling the deployment job, configure `AWS_CD_ROLE_ARN` as a repository Actions variable and `GRAFANA_ADMIN_PASSWORD` as a secret in the `development` GitHub Environment. Restrict that Environment to branch `Joao`. `TF_STATE_BUCKET` is optional because the workflow has a committed development default, but the bucket itself must already exist. Optional Google/Apple OAuth secrets must be stored in the `development` Environment. The CD workflow passes `config/dev.tfvars` and explicit activation overrides to Terraform.
+
+The manual destructive rebuild is independent: it requires `AWS_REBUILD_ROLE_ARN`, the `development-rebuild` Environment, and the exact `REBUILD` confirmation input. Keep that Environment restricted to `Joao` and protected with required reviewers. Neither workflow should reuse the other's AWS role.
 
 AWS authentication uses GitHub OIDC. The CD workflow rejects an AWS account other than `760396521507`.
 
