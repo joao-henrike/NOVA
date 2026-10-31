@@ -78,7 +78,7 @@ NOVA Ops changes runtime capacity; it does not delete resources.
 | scale frontend N / scale backend N | Changes ECS desired count within the respective max task count in config/dev.tfvars |
 | restart SERVICE | Requests a new ECS deployment for an already-running service |
 
-When frontend/backend desired count is set to zero, the script also sets the Application Auto Scaling minimum to zero and suspends dynamic and scheduled scaling for that target. Starting or scaling above zero restores the minimum to the requested count and resumes scaling. The maximum remains bounded by the committed development configuration. Terraform ignores the operator-managed desired count and scaling minimum/maximum for these application services.
+When frontend/backend desired count is set to zero, the script also sets the Application Auto Scaling minimum to zero and suspends dynamic and scheduled scaling for that target. Starting or scaling above zero restores the minimum to the requested count and resumes scaling. The maximum is always written from the committed development configuration. Terraform ignores the ECS desired count for both application services; the frontend scaling target ignores both min/max changes, while the backend target ignores only the minimum and keeps its maximum Terraform-managed.
 
 Monitoring is intentionally a single stateful Fargate task in this MVP. It accepts only zero or one task. Terraform now ignores its operator-managed desired count so a future plan does not automatically undo a deliberate stop.
 
