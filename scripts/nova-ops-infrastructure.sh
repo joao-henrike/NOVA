@@ -281,11 +281,12 @@ resume() {
   wait_for_database_available "$APP_DB"
   wait_for_database_available "$MONITORING_DB"
   start_all_workloads
-  local alb_dns
-  alb_dns="$(terraform output -raw alb_dns_name)"
+  local app_url grafana_url
+  app_url="$(terraform output -raw alb_application_url)"
+  grafana_url="$(terraform output -raw grafana_url)"
   log "NOVA environment restored"
-  printf '\nApplication ALB: http://%s/\n' "$alb_dns"
-  printf 'Grafana:         http://%s/grafana/\n' "$alb_dns"
+  printf '\nApplication: %s\n' "$app_url"
+  printf 'Grafana:     %s\n' "$grafana_url"
   printf '\nVerify current state with: make ops ACTION=overview\n'
 }
 main() {
