@@ -442,7 +442,6 @@ resource "aws_ecs_service" "monitoring" {
 
 
   depends_on = [
-    aws_lb_listener_rule.grafana,
     aws_iam_role_policy.ecs_monitoring_execution,
   ]
 
