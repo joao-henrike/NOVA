@@ -64,27 +64,70 @@ inventory() {
 }
 costs() {
   require jq
+  if [[ "${1:-}" == resources ]]; then
+    [[ $# -eq 2 ]] || { echo 'Usage: costs resources ecs|rds|elb|vpc|s3' >&2; exit 1; }
+    local service start end filter result
+    case "$2" in
+      ecs) service='Amazon Elastic Container Service' ;;
+      rds) service='Amazon Relational Database Service' ;;
+      elb) service='Amazon Elastic Load Balancing' ;;
+      vpc) service='Amazon Virtual Private Cloud' ;;
+      s3) service='Amazon Simple Storage Service' ;;
+      *) echo 'Use ecs, rds, elb, vpc or s3.' >&2; exit 1 ;;
+    esac
+    start="$(date -u -d '14 days ago' +%Y-%m-%d)"
+    end="$(date -u -d tomorrow +%Y-%m-%d)"
+    filter="$(jq -cn --arg service "$service" '{Dimensions:{Key:"SERVICE",Values:[$service]}}')"
+    printf 'Resource-level cost: %s | last 14 days | USD\n' "$service"
+    result="$(aws ce get-cost-and-usage-with-resources --time-period "Start=$start,End=$end" --granularity DAILY --metrics UnblendedCost --filter "$filter" --group-by Type=DIMENSION,Key=RESOURCE_ID --region us-east-1 --output json 2>&1)" || {
+      printf '%s\n' "$result" >&2
+      echo 'Resource-level costs are not enabled/available for this service. Enable them in Cost Explorer or use costs (service-level).' >&2
+      return 0
+    }
+    printf '%s\n' "$result" | jq -r '
+      [(.ResultsByTime // [])[].Groups[]? | {id:(.Keys[0] // "No resource ID"), amount:((.Metrics.UnblendedCost.Amount // "0") | tonumber)}]
+      | group_by(.id)
+      | map({id:.[0].id, amount:(map(.amount) | add)})
+      | sort_by(.amount) | reverse
+      | if length == 0 then "No resource-level data available." else .[] | "\(.id)\t\(.amount)" end
+    ' | awk -F '\t' 'NF == 2 { printf "%-80s USD %.4f\n", $1, $2; next } { print }'
+    return
+  fi
+  [[ $# -eq 0 ]] || { echo 'Usage: costs [resources ecs|rds|elb|vpc|s3]' >&2; exit 1; }
   local start end
   start="$(date -u +%Y-%m-01)"
   end="$(date -u -d tomorrow +%Y-%m-%d)"
-  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\($p.Total.UnblendedCost.Amount // "0")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\(.Keys[0])\t\(.Metrics.UnblendedCost.Amount)")'
+  printf 'Cost Explorer | month-to-date | %s to %s | USD\n' "$start" "$end"
+  aws ce get-cost-and-usage --time-period "Start=$start,End=$end" --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE --region us-east-1 --output json | jq -r '.ResultsByTime[0] as $p | "TOTAL\t\($p.Total.UnblendedCost.Amount // "0")", (($p.Groups // []) | sort_by((.Metrics.UnblendedCost.Amount // "0")|tonumber) | reverse[] | "\(.Keys[0])\t\(.Metrics.UnblendedCost.Amount)")' | awk -F '\t' '{ printf "%-52s USD %.4f\n", $1, $2 }'
   echo 'Cost Explorer totals are account-wide, not NOVA-only.'
 }
 logs() {
-  local target="${1:-}" since="1h"
+  local target="${1:-}" since="1h" follow=false
   shift || true
   while (($#)); do
-    case "$1" in --since) since="$2"; shift 2;; *) echo "Unknown logs option: $1" >&2; exit 1;; esac
+    case "$1" in
+      --since) [[ $# -ge 2 ]] || { echo '--since needs a value.' >&2; exit 1; }; since="$2"; shift 2 ;;
+      --follow) follow=true; shift ;;
+      *) echo "Unknown logs option: $1" >&2; exit 1 ;;
+    esac
   done
   [[ "$since" =~ ^[0-9]+(s|m|h|d)$ ]] || { echo 'Use --since 30m|2h|1d' >&2; exit 1; }
-  local group
-  case "$target" in
-    frontend|backend|monitoring|db-bootstrap|db-migration) group="/ecs/${PROJECT}-${ENVIRONMENT}/$target";;
-    *) echo 'Unknown log group' >&2; exit 1;;
-  esac
-  aws logs tail "$group" --since "$since" --format short --region "$REGION"
+  if [[ "$target" == all ]]; then
+    local group_name
+    for group_name in frontend backend monitoring db-bootstrap db-migration; do
+      echo "===== $group_name ====="
+      aws logs tail "/ecs/${PROJECT}-${ENVIRONMENT}/$group_name" --since "$since" --format short --region "$REGION"
+    done
+    return
+  fi
+  local group="/ecs/${PROJECT}-${ENVIRONMENT}/$target"
+  case "$target" in frontend|backend|monitoring|db-bootstrap|db-migration) ;; *) echo 'Unknown log group.' >&2; exit 1 ;; esac
+  if [[ "$follow" == true ]]; then
+    aws logs tail "$group" --since "$since" --follow --format short --region "$REGION"
+  else
+    aws logs tail "$group" --since "$since" --format short --region "$REGION"
+  fi
 }
-
 service_id() {
   case "$1" in
     frontend) printf '%s' "${PROJECT}-${ENVIRONMENT}-frontend" ;;
