@@ -18,6 +18,7 @@ make ops ACTION=overview
 make ops ACTION=services
 make ops ACTION=inventory
 make ops ACTION=costs
+make ops ACTION=costs ARGS='project'
 make ops ACTION=costs ARGS='resources ecs'
 make ops ACTION=logs ARGS='backend --since 2h'
 make ops ACTION=logs ARGS='backend --since 30m --follow'
@@ -43,6 +44,8 @@ The script never reads, sources, prints, or writes AWS credentials or applicatio
 | services | ECS desired/running/pending counts and frontend/backend autoscaling bounds |
 | inventory | Resources returned by Resource Groups Tagging API with Project=cloudstart and Environment=dev |
 | costs | Cost Explorer month-to-date total grouped by AWS service, with billing currency reported by Cost Explorer |
+| costs project | Month-to-date charges filtered by Project and Environment cost-allocation tags |
+
 | costs resources ecs/rds/elb/vpc/s3 | Optional daily resource-ID breakdown for the last 14 days, if AWS resource-level data is enabled for that service |
 | logs GROUP | CloudWatch Logs for a selected ECS task log group; accepts --since 30m, 2h, 1d and --follow |
 
@@ -56,7 +59,7 @@ Known log groups:
 /ecs/cloudstart-dev/db-migration
 ~~~
 
-Cost Explorer's month-to-date output covers the AWS billing account, not just resources belonging to NOVA. Use the tagged inventory to correlate project resources with service-level costs; the inventory is not itself a bill.
+Cost Explorer's default month-to-date output covers the AWS billing account, not just resources belonging to NOVA. Use costs project to filter by both Project and Environment cost-allocation tags; the inventory is not itself a bill. AWS user-defined cost-allocation tags must first be activated in Billing/Cost Management for the account. Only eligible usage after tag activation is included; do not expect retroactive attribution. See [activating cost allocation tags](https://docs.aws.amazon.com/cost-management/latest/userguide/activating-tags.html).
 
 Resource-level Cost Explorer data is not universally available. It must be enabled for the relevant service in Cost Explorer settings, daily resource history is limited to the most recent 14 days, and new opt-in data can take up to 48 hours to appear. Unsupported or unconfigured resources may appear as No resource ID. See the [AWS resource-level cost data guide](https://docs.aws.amazon.com/cost-management/latest/userguide/ce-per-resource.html) and [GetCostAndUsageWithResources API](https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_GetCostAndUsageWithResources.html). Cost Explorer API usage can incur a per-request fee; see [Cost Explorer pricing](https://aws.amazon.com/aws-cost-management/aws-cost-explorer/pricing/).
 
