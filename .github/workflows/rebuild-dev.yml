@@ -132,6 +132,7 @@ jobs:
           print(secrets.token_urlsafe(32))
           PY
           )"
+          echo "::add-mask::$password"
           {
             echo "TF_VAR_grafana_admin_password<<EOF"
             echo "$password"
