@@ -14,8 +14,8 @@ read_value() {
 }
 PROJECT="$(read_value "$TFVARS" project_name cloudstart)"
 ENVIRONMENT="$(read_value "$TFVARS" environment dev)"
-REGION="$(read_value "$ENVFILE" AWS_REGION us-east-1)"
-EXPECTED_ACCOUNT="$(read_value "$ENVFILE" EXPECTED_AWS_ACCOUNT_ID 760396521507)"
+REGION="${NOVA_AWS_REGION:-$(read_value "$ENVFILE" AWS_REGION us-east-1)}"
+EXPECTED_ACCOUNT="${NOVA_EXPECTED_ACCOUNT_ID:-$(read_value "$ENVFILE" EXPECTED_AWS_ACCOUNT_ID 760396521507)}"
 CLUSTER="${PROJECT}-${ENVIRONMENT}-cluster"
 require() { command -v "$1" >/dev/null 2>&1 || { echo "Missing command: $1" >&2; exit 1; }; }
 preflight() {
@@ -33,7 +33,9 @@ NOVA Ops commands:
   make ops ACTION=services           ECS service state and autoscaling
   make ops ACTION=inventory          Resource inventory by Project/Environment tags
   make ops ACTION=costs              Month-to-date account costs by AWS service
+  make ops ACTION=costs ARGS='resources rds'  Optional resource-level cost detail
   make ops ACTION=logs ARGS='backend --since 2h'
+  make ops ACTION=logs ARGS='backend --since 30m --follow'
   make ops ACTION=scale ARGS='frontend 1'
   make ops ACTION=stop ARGS='application|frontend|backend|monitoring'
   make ops ACTION=start ARGS='application|frontend|backend|monitoring'
@@ -236,13 +238,40 @@ main() {
     menu)
       require aws
       while true; do
-        printf '\nNOVA Ops %s/%s (%s)\n1 Overview\n2 ECS services\n3 Current-month costs\n4 Resource inventory\n0 Exit\nChoice: ' "$PROJECT" "$ENVIRONMENT" "$REGION"
+        printf '\\nNOVA Ops %s/%s (%s)\\n1 Overview\\n2 ECS services\\n3 Current-month costs\\n4 Resource inventory\\n5 CloudWatch logs\\n6 Stop service\\n7 Start service\\n8 Scale service\\n9 RDS status\\n10 Stop RDS\\n11 Start RDS\\n0 Exit\\nChoice: ' "$PROJECT" "$ENVIRONMENT" "$REGION"
         read -r choice || break
         case "$choice" in
           1) preflight; overview ;;
           2) preflight; services ;;
           3) preflight; costs ;;
           4) preflight; inventory ;;
+          5)
+            printf 'Log group (frontend/backend/monitoring/db-bootstrap/db-migration): '
+            read -r target || continue
+            preflight
+            logs "$target"
+            ;;
+          6|7)
+            printf 'Target (application/frontend/backend/monitoring): '
+            read -r target || continue
+            preflight
+            if [[ "$choice" == 6 ]]; then stop_start stop "$target"; else stop_start start "$target"; fi
+            ;;
+          8)
+            printf 'Service (frontend/backend/monitoring): '
+            read -r target || continue
+            printf 'Desired task count: '
+            read -r count || continue
+            preflight
+            scale_service "$target" "$count"
+            ;;
+          9) preflight; database_status ;;
+          10|11)
+            printf 'Database (application/monitoring): '
+            read -r target || continue
+            preflight
+            if [[ "$choice" == 10 ]]; then db_command stop "$target"; else db_command start "$target"; fi
+            ;;
           0) break ;;
           *) echo 'Invalid option.' ;;
         esac
@@ -257,7 +286,12 @@ main() {
         logs) logs "$@" ;;
         scale) [[ $# -eq 2 ]] || { echo 'Usage: scale frontend|backend|monitoring N' >&2; exit 1; }; scale_service "$1" "$2" ;;
         stop|start) [[ $# -eq 1 ]] || { echo "Usage: $action application|frontend|backend|monitoring" >&2; exit 1; }; stop_start "$action" "$1" ;;
-        db) [[ $# -eq 2 ]] || { echo 'Usage: db status|stop|start application|monitoring' >&2; exit 1; }; db_command "$1" "$2" ;;
+        db)
+          if [[ $# -eq 1 && "$1" == status ]]; then database_status
+          elif [[ $# -eq 2 ]]; then db_command "$1" "$2"
+          else echo 'Usage: db status | db stop|start application|monitoring' >&2; exit 1
+          fi
+          ;;
         restart)
           [[ $# -eq 1 ]] || { echo 'Usage: restart frontend|backend|monitoring' >&2; exit 1; }
           service="$(service_id "$1")"
