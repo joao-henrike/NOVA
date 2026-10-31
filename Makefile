@@ -8,7 +8,7 @@ AWS_REGION ?= us-east-1
 
 .DEFAULT_GOAL := start
 
-.PHONY: start setup doctor validate fmt tflint deploy destroy-all inventory-cloud up down logs restart test migrate smoke tf-init tf-validate tf-plan
+.PHONY: start setup doctor validate fmt tflint deploy destroy-all inventory-cloud ops ops-help ops-overview ops-services ops-costs ops-inventory ops-logs ops-test ops-shutdown ops-resume up down logs restart test migrate smoke tf-init tf-validate tf-plan
 
 # Default entry point after cloning the repository.
 # It prepares the local environment, validates it, and starts the application.
@@ -52,6 +52,41 @@ destroy-all:
 # Non-destructive AWS inventory of this project's tagged/named resources.
 inventory-cloud:
 	bash scripts/destroy-all.sh --inventory-only
+
+# Live AWS operations: read-only by default; state changes require explicit ACTION values.
+ACTION ?= menu
+ARGS ?=
+
+ops:
+	bash scripts/nova-ops.sh "$(ACTION)" $(ARGS)
+
+ops-help:
+	bash scripts/nova-ops.sh help
+
+ops-overview:
+	bash scripts/nova-ops.sh overview
+
+ops-services:
+	bash scripts/nova-ops.sh services
+
+ops-costs:
+	bash scripts/nova-ops.sh costs
+
+ops-inventory:
+	bash scripts/nova-ops.sh inventory
+
+ops-logs:
+	bash scripts/nova-ops.sh logs $(ARGS)
+
+ops-test:
+	bash scripts/test-nova-ops.sh
+
+# Full AWS resource shutdown/resume is Terraform-controlled and confirmation-gated.
+ops-shutdown:
+	bash scripts/nova-ops-infrastructure.sh shutdown
+
+ops-resume:
+	bash scripts/nova-ops-infrastructure.sh resume
 
 up:
 	docker compose up -d --build

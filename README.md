@@ -45,7 +45,7 @@ Terraform can attach an already-issued ACM certificate to the ALB, but the commi
 
 Future capabilities remain outside the current implementation boundary.
 
-**Documentation map:** [Documentation index](docs/README.md) · [Deployment guide](docs/deployment.md) · [CI/CD](docs/ci-cd.md) · [Architecture](docs/architecture.md) · [Security model](docs/security.md) · [Accepted security exceptions](docs/security-exceptions.md) · [Current-state inventory](docs/current-state.md) · [Configuration reference](docs/configuration-reference.md) · [Local development](docs/local-development.md) · [Backend](apps/backend/README.md) · [Frontend](apps/frontend/README.md) · [Monitoring](monitoring/README.md) · [Bootstrap](bootstrap/README.md) · [Operational scripts](scripts/README.md).
+**Documentation map:** [Documentation index](docs/README.md) · [Cloud operations orchestrator](docs/operations.md) · [Deployment guide](docs/deployment.md) · [CI/CD](docs/ci-cd.md) · [Architecture](docs/architecture.md) · [Security model](docs/security.md) · [Accepted security exceptions](docs/security-exceptions.md) · [Current-state inventory](docs/current-state.md) · [Configuration reference](docs/configuration-reference.md) · [Local development](docs/local-development.md) · [Backend](apps/backend/README.md) · [Frontend](apps/frontend/README.md) · [Monitoring](monitoring/README.md) · [Bootstrap](bootstrap/README.md) · [Operational scripts](scripts/README.md).
 
 ## 2. Repository source of truth
 
@@ -2689,3 +2689,49 @@ Remote Terraform state is separate. make tf-init requires an existing state buck
 The full local and deployment workflows are documented in docs/local-development.md, docs/deployment.md, and docs/configuration-reference.md.
 
 This keeps local preparation reproducible while preserving a hard boundary between local setup and billable AWS provisioning.
+
+
+---
+
+## Cloud operations orchestrator
+
+TESTE1 introduces NOVA Ops, a CLI control plane for inspecting the live development environment and operating its AWS resources.
+
+Start with:
+
+~~~bash
+make ops-help
+make ops
+make ops ACTION=overview
+make ops ACTION=costs ARGS='project'
+~~~
+
+For routine workload control, `stop all` sets all three ECS services to zero but leaves databases, NAT Gateways, and the ALB running.
+
+For full temporary infrastructure shutdown:
+
+~~~bash
+make ops ACTION=shutdown
+# Type exactly: SHUTDOWN cloudstart-dev
+~~~
+
+This drains all ECS workloads, stops both RDS instances without deleting their data, and applies a guarded Terraform plan to remove the public ALB/listeners/target groups, per-AZ NAT Gateways/EIPs, routes to NAT, and related ALB security rules. The VPC, subnets, RDS data, ECR images, secrets, logs, snapshots, and S3 Terraform state are preserved.
+
+Restore the environment with:
+
+~~~bash
+make ops ACTION=resume
+# Type exactly: RESUME cloudstart-dev
+~~~
+
+This recreates NAT/ALB resources, starts and waits for both RDS instances, then restores frontend/backend/monitoring ECS capacity and autoscaling.
+
+The full operations require branch TESTE1, the expected AWS account, existing Terraform remote state, and the ignored local `.deploy/` secret/ARN metadata created by deployment. Terraform plans are printed and restricted to a resource allowlist; out-of-scope changes fail closed. The automation does not run `terraform destroy` or delete databases.
+
+This is a cost-reduction shutdown, not a zero-cost or indefinite state: stopped RDS instances automatically restart after seven consecutive days, and storage, backups, ECR, CloudWatch Logs, Secrets Manager, and S3 state may continue incurring charges. Details and residual costs are in [Cloud operations](docs/operations.md).
+
+Run the no-AWS mock safety tests with:
+
+~~~bash
+make ops-test
+~~~

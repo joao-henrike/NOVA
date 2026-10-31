@@ -279,6 +279,9 @@ jobs:
       - name: ShellCheck
         run: shellcheck --severity=error -x ./*.sh scripts/*.sh
 
+      - name: NOVA Ops mock safety tests
+        run: bash scripts/test-nova-ops.sh
+
   codeql:
     name: CodeQL
     runs-on: ubuntu-latest

@@ -6,7 +6,7 @@ This is the operator reference for Terraform inputs, bootstrap inputs, environme
 
 ## 1. Terraform root inputs
 
-The root stack declares 64 input variables in variables.tf.
+The root stack declares 66 input variables in variables.tf.
 
 | Name | Type | Default | Sensitive | Purpose |
 | --- | --- | --- | --- | --- |
@@ -15,6 +15,8 @@ The root stack declares 64 input variables in variables.tf.
 | aws_region | string | "us-east-1" | No | AWS region where the MVP infrastructure will be deployed. |
 | availability_zone_count | number | 2 | No | Number of Availability Zones to use for the workload. |
 | vpc_cidr | string | "10.20.0.0/16" | No | Primary IPv4 CIDR block for the VPC. |
+| enable_nat_gateways | bool | true | No | Whether the per-AZ NAT Gateways and public IPv4 allocations should exist. Set false only while application services are not being started. |
+| enable_public_alb | bool | true | No | Whether the public ALB, listeners, and target groups should exist. Set false only while application services are not being started. |
 | deploy_application | bool | false | No | Whether ECS services should run application tasks. Set true after the frontend/backend images have been pushed to ECR. |
 | start_application_services | bool | true | No | Whether frontend/backend ECS services should start during Terraform apply. Release workflows set false so migrations complete before the new task revisions receive traffic. |
 | frontend_image_tag | string | "v0.1.1" | No | Immutable tag of the frontend image in the CloudStart ECR repository. |
@@ -78,6 +80,7 @@ The root stack declares 64 input variables in variables.tf.
 ### Cross-variable requirements
 
 - The committed development baseline has deploy_application = false. In this mode frontend/backend desired and minimum ECS counts are reduced to zero.
+- Normal development deployment keeps enable_nat_gateways = true and enable_public_alb = true. The full NOVA Ops shutdown explicitly sets both false while start_application_services = false; validation prevents disabling either network path while application services are being started.
 - Application release workflows set start_application_services = false during Terraform apply. New task definitions are registered, but existing frontend/backend services keep their current revisions; on first deployment they remain at zero tasks until migrations and runtime grants succeed.
 - The supported deployment paths then run scripts/activate-application-services.sh to switch service revisions and restore the configured desired count and autoscaling bounds. A standalone Terraform apply is not the supported application image rollout path.
 - When deploy_application = true, the runtime, migrator, and RDS master PostgreSQL usernames and password secret ARNs must be distinct.
@@ -214,6 +217,8 @@ scripts/ensure-terraform-state.sh validates the expected AWS account, bucket own
 | make up / make down | Starts/stops the local application Compose stack. | Local Docker only. |
 | make tf-init | Initializes root Terraform against an already-existing bucket. | Reads/locks state; does not create infrastructure. |
 | make deploy | Validates, provisions/reuses secrets and state bucket, plans/applies baseline, builds/pushes images, activates ECS, migrates database, and runs smoke tests. | Creates/changes billable AWS resources. |
+| make ops ACTION=shutdown | Stops ECS, stops both RDS instances, and uses a guarded Terraform apply to remove NAT Gateways/EIPs and public ALB resources. | State-changing; exact confirmation and TESTE1 branch required. Preserves DB data and remote state. |
+| make ops ACTION=resume | Recreates NAT/ALB, starts and waits for RDS, then starts ECS workloads and autoscaling. | State-changing; exact confirmation and TESTE1 branch required. |
 | deploy-dev.yml | Pushes immutable Git-SHA images and applies an allowlisted development plan after CI. | Changes development AWS resources. |
 | rebuild-dev.yml | Manual destructive teardown/rebuild; exact input REBUILD required. | Destroys and recreates CloudStart development resources; state bucket is retained. |
 
@@ -232,6 +237,7 @@ The deploy workflow is triggered by application/runtime artifact paths on branch
 - Bootstrap inputs/resources: bootstrap/variables.tf, bootstrap/main.tf.
 - Development metadata: config/dev.env, config/dev.tfvars.
 - Local deployment: scripts/deploy.sh, scripts/ensure-terraform-state.sh, scripts/provision-db-credentials.sh, scripts/provision-backend-auth-secret.sh.
+- Cloud operations: scripts/nova-ops.sh and scripts/nova-ops-infrastructure.sh; full infrastructure shutdown/resume is restricted to branch TESTE1 and uses the existing S3 backend.
 - GitHub workflows: .github/workflows/ci.yml, .github/workflows/extreme-validation.yml, .github/workflows/deploy-dev.yml, .github/workflows/rebuild-dev.yml.
 
 ## 12. Managed Terraform resource inventory
@@ -313,6 +319,8 @@ The root outputs.tf file currently exposes:
 | grafana_url | No | Grafana URL through the configured ALB listener. |
 | monitoring_ecs_service_name | No | Monitoring ECS service name. |
 | monitoring_rds_endpoint | No | Private endpoint for the monitoring PostgreSQL database. |
+| nat_gateways_enabled | No | Whether per-AZ NAT Gateways are declared in the current Terraform configuration. |
+| public_alb_enabled | No | Whether the public ALB/listeners/target groups are declared in the current Terraform configuration. |
 
 ## 14. Bootstrap Terraform outputs
 

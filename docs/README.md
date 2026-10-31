@@ -11,6 +11,7 @@ This folder contains the project-wide operational and implementation documentati
 | Verify what is implemented versus planned | [Current-state inventory](current-state.md) |
 | Prepare a local checkout or CloudShell | [Local development](local-development.md) |
 | Deploy, operate, inspect, or tear down development | [Deployment and operations](deployment.md) |
+| Operate live AWS services and inspect costs, inventory, and logs | [Cloud operations orchestrator](operations.md) |
 | Understand CI, CD, OIDC, release guards, and workflow evidence | [CI/CD](ci-cd.md) |
 | Review implemented security controls | [Security model](security.md) |
 | Understand accepted Checkov/Trivy exceptions | [Security exceptions](security-exceptions.md) |
