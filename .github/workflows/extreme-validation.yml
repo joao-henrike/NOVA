@@ -89,12 +89,14 @@ jobs:
             echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED_AWS_ACCOUNT_ID"
             echo "TF_STATE_BUCKET=$TF_STATE_BUCKET"
           } >> "$GITHUB_ENV"
-          printf 'validation-%s\n' "$(openssl rand -hex 24)" > "$RUNNER_TEMP/grafana-admin-password"
+          password="validation-$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
           {
             echo "GRAFANA_ADMIN_PASSWORD<<EOF"
-            cat "$RUNNER_TEMP/grafana-admin-password"
+            printf '%s\n' "$password"
             echo "EOF"
           } >> "$GITHUB_ENV"
+          unset password
 
       - name: Execute exhaustive local validation
         continue-on-error: true
@@ -180,6 +182,7 @@ jobs:
           run_check workflow_destructive_confirmation bash -c 'grep -q "CONFIRMATION" .github/workflows/rebuild-dev.yml && grep -q "REBUILD" .github/workflows/rebuild-dev.yml'
           run_check workflow_rebuild_separate_role bash -c 'grep -q "AWS_REBUILD_ROLE_ARN" .github/workflows/rebuild-dev.yml && grep -q "development-rebuild" .github/workflows/rebuild-dev.yml'
           run_check workflow_cd_role_not_used_for_rebuild bash -c '! grep -q "AWS_CD_ROLE_ARN" .github/workflows/rebuild-dev.yml'
+          run_check workflow_generated_grafana_password_masked bash -c 'grep -qF "::add-mask::" .github/workflows/extreme-validation.yml && grep -qF "::add-mask::" .github/workflows/rebuild-dev.yml'
           run_check workflow_cd_state_verify_only bash -c 'grep -q "scripts/ensure-terraform-state.sh --verify-only" .github/workflows/deploy-dev.yml'
           run_check github_oidc_immutable_subject_contract bash scripts/test-github-oidc-subject.sh
           run_check workflow_permissions_present bash -c 'grep -RIn "permissions:" .github/workflows/*.yml >/dev/null'
