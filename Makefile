@@ -8,7 +8,7 @@ AWS_REGION ?= us-east-1
 
 .DEFAULT_GOAL := start
 
-.PHONY: start setup doctor validate fmt tflint deploy destroy-all inventory-cloud ops ops-help ops-overview ops-services ops-costs ops-inventory ops-logs ops-test up down logs restart test migrate smoke tf-init tf-validate tf-plan
+.PHONY: start setup doctor validate fmt tflint deploy destroy-all inventory-cloud ops ops-help ops-overview ops-services ops-costs ops-inventory ops-logs ops-test ops-shutdown ops-resume up down logs restart test migrate smoke tf-init tf-validate tf-plan
 
 # Default entry point after cloning the repository.
 # It prepares the local environment, validates it, and starts the application.
@@ -80,6 +80,13 @@ ops-logs:
 
 ops-test:
 	bash scripts/test-nova-ops.sh
+
+# Full AWS resource shutdown/resume is Terraform-controlled and confirmation-gated.
+ops-shutdown:
+	bash scripts/nova-ops-infrastructure.sh shutdown
+
+ops-resume:
+	bash scripts/nova-ops-infrastructure.sh resume
 
 up:
 	docker compose up -d --build
