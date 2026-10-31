@@ -26,6 +26,18 @@ esac
 MOCK_AWS
 chmod +x "$TEMP_DIR/mock-bin/aws"
 
+# The full-infrastructure controller is syntax-checked and statically guarded without AWS access.
+bash -n "$ROOT_DIR/scripts/nova-ops-infrastructure.sh"
+grep -q 'enable_nat_gateways=$nat' "$ROOT_DIR/scripts/nova-ops-infrastructure.sh"
+grep -q 'enable_public_alb=$alb' "$ROOT_DIR/scripts/nova-ops-infrastructure.sh"
+grep -q 'SHUTDOWN ' "$ROOT_DIR/scripts/nova-ops-infrastructure.sh"
+grep -q 'RESUME ' "$ROOT_DIR/scripts/nova-ops-infrastructure.sh"
+grep -q 'plan_scope_is_safe' "$ROOT_DIR/scripts/nova-ops-infrastructure.sh"
+if grep -qE 'terraform[[:space:]]+destroy' "$ROOT_DIR/scripts/nova-ops-infrastructure.sh"; then
+  printf 'FAIL: the NOVA Ops controller must not call terraform destroy.\\n' >&2
+  exit 1
+fi
+
 export PATH="$TEMP_DIR/mock-bin:$PATH"
 export NOVA_OPS_TEST_LOG="$TEMP_DIR/aws-calls.log"
 
