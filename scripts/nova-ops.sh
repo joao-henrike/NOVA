@@ -38,7 +38,9 @@ NOVA Ops commands:
   make ops ACTION=logs ARGS='backend --since 2h'
   make ops ACTION=logs ARGS='backend --since 30m --follow'
   make ops ACTION=scale ARGS='frontend 1'
-  make ops ACTION=stop ARGS='all|application|frontend|backend|monitoring'
+  make ops ACTION=stop ARGS='all|application|frontend|backend|monitoring'   Stop ECS workloads only
+  make ops ACTION=shutdown             Stop ECS/RDS and remove billable NAT/ALB resources via Terraform
+  make ops ACTION=resume               Recreate NAT/ALB, start RDS, then restore ECS workloads
   make ops ACTION=start ARGS='all|application|frontend|backend|monitoring'
   make ops ACTION=db ARGS='status|stop application|start application'
   make ops ACTION=restart ARGS='frontend|backend|monitoring'
@@ -239,29 +241,9 @@ stop_start() {
 }
 
 start_all() {
-  local app_db monitor_db app_state monitor_state state
-  app_db="$(db_identifier application)"
-  monitor_db="$(db_identifier monitoring)"
-  app_state="$(db_state "$app_db")"
-  monitor_state="$(db_state "$monitor_db")"
-  for state in "$app_state" "$monitor_state"; do
-    [[ "$state" == available || "$state" == stopped ]] || {
-      echo "An RDS instance is still transitioning (application=$app_state, monitoring=$monitor_state). Wait and run start all again." >&2
-      return 0
-    }
-  done
-  [[ "$app_state" == available ]] || db_command start application
-  [[ "$monitor_state" == available ]] || db_command start monitoring
-  app_state="$(db_state "$app_db")"
-  monitor_state="$(db_state "$monitor_db")"
-  if [[ "$app_state" != available || "$monitor_state" != available ]]; then
-    echo "RDS startup is asynchronous (application=$app_state, monitoring=$monitor_state). Re-run make ops ACTION=start ARGS=all after both report available."
-    return 0
-  fi
-  stop_start start application
-  scale_service monitoring 1
-  echo 'All workload services have been asked to start. Check services/overview for steady state.'
+  bash "$ROOT_DIR/scripts/nova-ops-infrastructure.sh" resume
 }
+
 db_command() {
   local action="$1" kind="$2" identifier state frontend backend monitoring
   identifier="$(db_identifier "$kind")"
@@ -336,6 +318,8 @@ main() {
             preflight
             if [[ "$choice" == 10 ]]; then db_command stop "$target"; else db_command start "$target"; fi
             ;;
+          12) preflight; bash "$ROOT_DIR/scripts/nova-ops-infrastructure.sh" shutdown ;;
+          13) preflight; bash "$ROOT_DIR/scripts/nova-ops-infrastructure.sh" resume ;;
           0) break ;;
           *) echo 'Invalid option.' ;;
         esac
@@ -355,6 +339,14 @@ main() {
           elif [[ $# -eq 2 ]]; then db_command "$1" "$2"
           else echo 'Usage: db status | db stop|start application|monitoring' >&2; exit 1
           fi
+          ;;
+        shutdown)
+          [[ $# -eq 0 ]] || fail 'Usage: shutdown'
+          bash "$ROOT_DIR/scripts/nova-ops-infrastructure.sh" shutdown
+          ;;
+        resume)
+          [[ $# -eq 0 ]] || fail 'Usage: resume'
+          bash "$ROOT_DIR/scripts/nova-ops-infrastructure.sh" resume
           ;;
         restart)
           [[ $# -eq 1 ]] || { echo 'Usage: restart frontend|backend|monitoring' >&2; exit 1; }
