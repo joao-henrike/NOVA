@@ -2702,11 +2702,14 @@ Start with:
 ~~~bash
 make ops-help
 make ops
+make ops ACTION=costs ARGS='project'
+make ops ACTION=stop ARGS='all'
+make ops ACTION=start ARGS='all'
 ~~~
 
-It provides an environment overview, ECS desired/running task counts, autoscaling bounds, RDS status, NAT Gateway and ALB inventory, tagged-resource inventory, month-to-date Cost Explorer totals, optional resource-level costs, and CloudWatch logs.
+It provides an environment overview, ECS desired/running task counts, autoscaling bounds, RDS status, NAT Gateway and ALB inventory, tagged-resource inventory, account-wide or Project/Environment-tagged month-to-date Cost Explorer totals, optional resource-level costs, and CloudWatch logs.
 
-The operator can also stop/start or scale the frontend, backend, and singleton monitoring service; request an ECS restart; and stop/start the two RDS instances after dependency checks and exact interactive confirmation. ECS scaling limits are read from config/dev.tfvars. The monitoring task remains limited to 0 or 1 replica.
+The operator can also stop/start or scale the frontend, backend, and singleton monitoring service; stop all workloads together; start all workloads after confirming and waiting for both databases; request an ECS restart; and stop/start the two RDS instances after dependency checks and exact interactive confirmation. ECS scaling limits are read from config/dev.tfvars. The monitoring task remains limited to 0 or 1 replica.
 
 This interface does not delete resources, run Terraform apply/destroy, or switch off the ALB, NAT Gateways, VPC, ECR storage, remote Terraform state, snapshots, or log storage. Stopping ECS/RDS therefore does not make the entire environment cost-free. Cost Explorer data and its resource-level opt-in limitations are explained in [Cloud operations](docs/operations.md).
 
