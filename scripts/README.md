@@ -85,7 +85,7 @@ Do not use `destroy-all.sh` as a routine validation command. Read [Deployment an
 
 ## Cloud operations orchestrator
 
-The operator interface is maintained in [Cloud operations](../docs/operations.md). It is independent from the deployment script and does not require the branch-specific local doctor check.
+The operator interface is maintained in [Cloud operations](../docs/operations.md). It is independent from the deployment script and does not use the branch-restricted `make doctor` check. Read the full operations guide before applying any AWS changes.
 
 Quick entry points:
 
@@ -97,19 +97,29 @@ make ops ACTION=costs
 make ops ACTION=costs ARGS='project'
 make ops ACTION=costs ARGS='resources rds'
 make ops ACTION=logs ARGS='backend --since 2h'
-make ops ACTION=stop ARGS='all'
-make ops ACTION=start ARGS='all'
-make ops ACTION=stop ARGS='application'
-make ops ACTION=start ARGS='application'
+make ops ACTION=stop ARGS='all'       # ECS tasks only; leaves RDS/NAT/ALB running
+make ops ACTION=shutdown              # ECS zero, stop RDS, remove NAT + ALB via Terraform
+make ops ACTION=resume                # recreate NAT + ALB, start RDS, then ECS
 make ops ACTION=db ARGS='status'
-~~~
-
-Before any AWS call, nova-ops.sh verifies the current AWS account against config/dev.env. Do not use it from an unintended AWS profile/account. Service scaling is bounded by the max task counts in config/dev.tfvars. Monitoring is a singleton task and accepts only zero or one replica.
-
-The costs command shows the account-wide monthly view; costs project filters by the Project and Environment cost-allocation tags (which must be activated in Billing first). The resource-level Cost Explorer command depends on AWS opt-in/settings for the selected service. See the operations guide for data limitations, IAM permissions, remaining fixed costs, and RDS stop/start behavior.
-
-The orchestrator does not turn off or delete NAT Gateways, the ALB, the VPC, ECR, the S3 Terraform state bucket, snapshots, or CloudWatch log storage. stop all brings all three ECS workloads to zero but leaves the databases running. start all checks/starts both databases and, once both are available, brings the application and monitoring services up. RDS stop requires dependent ECS services at zero (including zero running tasks) and an exact interactive confirmation. Run mocked tests with:
-
-~~~bash
 make ops-test
 ~~~
+
+Before any AWS call, nova-ops.sh verifies the current AWS account against config/dev.env. Scaling is bounded by the task maximums in config/dev.tfvars. Monitoring is a single stateful task and accepts only zero or one replica.
+
+### Full AWS shutdown and restore
+
+Use `make ops ACTION=shutdown` or `make ops-shutdown` to reduce the recurring cost drivers, not just the Fargate tasks. The command is allowed only on branch TESTE1 and requires the expected AWS account, AWS CLI, Terraform, existing remote state, and the ignored local `.deploy/` secret/ARN files created by deployment.
+
+The command:
+- Creates and prints a refreshed Terraform plan, then requires the exact `SHUTDOWN cloudstart-dev` confirmation.
+- Suspends application autoscaling, sets all ECS services to desired count zero, waits for zero running tasks, and stops/waits for both RDS instances.
+- Re-plans, validates the narrow Terraform allowlist, and applies the optional-resource flags that delete NAT Gateways/EIPs, routes to NAT, public ALB/listeners/target groups, ALB security rules, and ECS target-group attachments.
+- Keeps the VPC, subnets, RDS instances/data, ECR, Secrets Manager, CloudWatch logs, snapshots, and remote state.
+
+Use `make ops ACTION=resume` or `make ops-resume` to recreate NAT/ALB, start both databases, wait until they are available, and then restore ECS capacity/autoscaling. It requires the exact `RESUME cloudstart-dev` confirmation.
+
+Both Terraform plans are fail-closed. Any managed-resource change outside the allowlist, any resource creation during shutdown, or any resource deletion during resume blocks the apply. The scripts never call `terraform destroy`, delete databases, or delete the S3 state backend.
+
+The RDS instances are stopped, not deleted. AWS automatically restarts a stopped RDS instance after seven consecutive days; DB storage/backups, ECR image storage, S3 state, CloudWatch logs, and Secrets Manager may still generate charges. This is not a zero-cost state or an indefinite shutdown mode.
+
+The costs command defaults to the account-wide month-to-date view. `costs project` filters by activated Project/Environment cost-allocation tags; resource-level Cost Explorer details require the relevant AWS opt-in. Read the operations guide for attribution caveats and residual costs.
