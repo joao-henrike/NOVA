@@ -5,7 +5,9 @@
 [![NOVA CI](https://github.com/joao-henrike/NOVA/actions/workflows/ci.yml/badge.svg)](https://github.com/joao-henrike/NOVA/actions/workflows/ci.yml)
 [![NOVA CD - Development](https://github.com/joao-henrike/NOVA/actions/workflows/deploy-dev.yml/badge.svg)](https://github.com/joao-henrike/NOVA/actions/workflows/deploy-dev.yml)
 
-> **Current-state documentation:** this README describes the implementation contained in the `NOVA` repository and the current intended deployment behavior of the `Joao` branch. Planned P2/P3 capabilities are intentionally not presented as implemented architecture.
+> **TESTE1 (3 Nov 2026):** Local `make deploy` and `make doctor` now accept this branch as well as `Joao`. A guarded application plan allows replacements only for named ECS task definitions. `make destroy-all` now preserves manual snapshots of both RDS databases before any deletion and keeps the S3 state bucket; secrets created outside Terraform are kept by default and can be scheduled for 7-day recoverable deletion using `make destroy-all-with-secrets`. Read the [TESTE1 deployment and teardown runbook](docs/TESTE1-DEPLOY-TEARDOWN.md) before AWS changes. CI is not evidence of real AWS operation.
+>
+> **Current-state documentation:** the rest of this README documents the `Joao` implementation baseline and prior development workflow; branch-specific `TESTE1` differences are described in the runbook. Planned P2/P3 capabilities are not presented as implemented architecture.
 >
 > **Important:** repository/IaC state and live AWS runtime state are different concepts. This README explicitly separates them whenever the distinction matters.
 
