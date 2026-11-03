@@ -4,6 +4,9 @@ NOVA Ops is the repository-owned command-line control plane for inspecting, scal
 
 ## Quick start
 
+**Important:** `make ops ACTION=shutdown` is a reversible cost-reduction operation, **not** full deletion. For `make destroy-all`, manual RDS snapshots and exact secret-retention/deletion rules, see [TESTE1 deployment and teardown](TESTE1-DEPLOY-TEARDOWN.md).
+
+
 From the repository root, in AWS CloudShell or an environment with AWS CLI v2 and jq:
 
 ~~~bash
