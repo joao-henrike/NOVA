@@ -1,6 +1,6 @@
 # NOVA — Configuration reference
 
-This is the operator reference for Terraform inputs, bootstrap inputs, environment metadata, and GitHub Actions configuration. Values are read from the current Joao branch. When code changes, update this document in the same change.
+This is the operator reference for Terraform inputs, bootstrap inputs, environment metadata, and GitHub Actions configuration. The `Joao` baseline remains the GitHub CD target; local deployment now accepts `TESTE1` too. For its safe teardown behavior, see [TESTE1 deployment and teardown](TESTE1-DEPLOY-TEARDOWN.md). When code changes, update this document in the same change.
 
 > **Security rule:** never put passwords, access keys, OAuth credentials, private keys, or JWT signing material in tracked files or ordinary Terraform variables. Terraform receives secret ARNs where possible. Sensitive Terraform variables can still be stored in Terraform state; do not treat the sensitive flag as a replacement for Secrets Manager.
 
