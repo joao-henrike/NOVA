@@ -21,8 +21,14 @@ export PATH="$ROOT_DIR/.tools/bin:$PATH"
 export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" AWS_PAGER=""
 
 INVENTORY_ONLY=false
-if [[ "${1:-}" == "--inventory-only" ]]; then INVENTORY_ONLY=true
-elif [[ $# -gt 0 ]]; then echo "Usage: $0 [--inventory-only]" >&2; exit 2; fi
+DELETE_PROJECT_SECRETS=false
+case "${1:-}" in
+  "") ;;
+  --inventory-only) INVENTORY_ONLY=true ;;
+  --delete-project-secrets) DELETE_PROJECT_SECRETS=true ;;
+  *) echo "Usage: $0 [--inventory-only|--delete-project-secrets]" >&2; exit 2 ;;
+esac
+[[ $# -le 1 ]] || { echo "Only one mode is supported." >&2; exit 2; }
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 REPORT_DIR="$ROOT_DIR/.deploy/destroy-all-$STAMP"
@@ -36,6 +42,8 @@ chmod 700 "$ROOT_DIR/.deploy" "$REPORT_DIR" "$WORK_DIR"
 : > "$LOG_FILE"
 printf 'step\tresult\texit_code\n' > "$RESULTS_FILE"
 FAILED_STEPS=0
+INVENTORY_COMPLETE=false
+REMAINING_COUNT=-1
 
 log() { printf '[%s] %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG_FILE"; }
 run_step() {
@@ -147,6 +155,9 @@ Will run Terraform destroy for all configured states and remove the local
 Compose stacks/volumes in this checkout. The Terraform state bucket is kept.
 EOF
 CONFIRM="DESTROY cloudstart $ACTUAL_ACCOUNT $AWS_REGION"
+if [[ "$DELETE_PROJECT_SECRETS" == true ]]; then
+  CONFIRM="$CONFIRM DELETE_SECRETS"
+fi
 read -r -p "Type exactly '$CONFIRM' to continue: " answer
 [[ "$answer" == "$CONFIRM" ]] || { log "Confirmation mismatch; no deletion performed."; exit 2; }
 
@@ -169,7 +180,14 @@ if [[ -n "$LEGACY_TF_STATE_KEYS" ]]; then
   done
 fi
 
-log "Stage 1: Terraform destroy across current and legacy states."
+log "Stage 1: Fail-closed snapshots of both RDS instances before Terraform destroy."
+if ! bash "$ROOT_DIR/scripts/snapshot-rds-before-destroy.sh" 2>&1 |
+   tee "$REPORT_DIR/snapshots-preserved.txt" | tee -a "$LOG_FILE"; then
+  log "Snapshot preparation failed. No Terraform destroy attempted."
+  exit 1
+fi
+
+log "Stage 2: Terraform destroy across current and legacy states."
 idx=0
 for key in "${STATE_KEYS[@]}"; do
   idx=$((idx + 1))
@@ -184,11 +202,23 @@ for key in "${STATE_KEYS[@]}"; do
   elif grep -Eqi '404|Not Found|NoSuchKey|not found' "$err"; then
     log "No current state object at $key; skipping."
   else
-    run_step "state_inspection_$idx" cat "$err" || true
+    log "FAIL: could not inspect remote state $key; refusing a clean outcome."
+    cat "$err" | tee -a "$LOG_FILE"
+    printf 'state_inspection_%s\tFAIL\t1\n' "$idx" >> "$RESULTS_FILE"
+    FAILED_STEPS=$((FAILED_STEPS + 1))
   fi
 done
 
-log "Stage 2: local Docker Compose teardown."
+if [[ "$DELETE_PROJECT_SECRETS" == true ]]; then
+  if [[ "$FAILED_STEPS" -eq 0 ]]; then
+    log "Stage 3: optional scheduled deletion of three exact application secrets."
+    run_step "delete_project_secrets" bash "$ROOT_DIR/scripts/delete-project-secrets.sh" || true
+  else
+    log "Skipping application secret deletion because state/terraform steps failed."
+  fi
+fi
+
+log "Stage 4: local Docker Compose teardown."
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   run_step "local_application_compose_down" docker compose -f docker-compose.yml down --volumes --remove-orphans || true
   run_step "local_monitoring_compose_down" docker compose -f docker-compose.monitoring.yml down --volumes --remove-orphans || true
@@ -209,13 +239,13 @@ else
   FAILED_STEPS=$((FAILED_STEPS + 1))
 fi
 
-log "Stage 3: independent AWS post-destroy inventory."
+log "Stage 5: independent AWS post-destroy inventory."
 inventory_aws | tee "$AFTER_FILE"
 
 scope_resources() {
   local data
   data="$(aws resourcegroupstaggingapi get-resources --tag-filters Key=Project,Values=cloudstart Key=Environment,Values=dev --resources-per-page 100 --output json)" || return 1
-  jq -r '.ResourceTagMappingList[]?.ResourceARN' <<< "$data"
+  jq -r '.ResourceTagMappingList[]?.ResourceARN | select((test(":snapshot:cloudstart-dev-(db|monitoring-db)-pre-destroy-[0-9]+$") or test(":secret:cloudstart-dev/(database/(runtime|migrator)|backend/authentication)(-[A-Za-z0-9]+)?$")) | not)' <<< "$data"
   data="$(aws ecs list-clusters --output json)" || return 1
   jq -r '.clusterArns[]? | select(contains("cloudstart-dev"))' <<< "$data"
   data="$(aws elbv2 describe-load-balancers --output json)" || return 1
@@ -231,7 +261,7 @@ scope_resources() {
   data="$(aws ecr describe-repositories --output json)" || return 1
   jq -r '.repositories[]? | select(.repositoryName|startswith("cloudstart-dev")) | .repositoryArn' <<< "$data"
   data="$(aws secretsmanager list-secrets --output json)" || return 1
-  jq -r '.SecretList[]? | select((.Name|startswith("cloudstart-dev/")) or (.Name|startswith("cloudstart-dev-"))) | .ARN' <<< "$data"
+  jq -r '.SecretList[]? | select((.Name|startswith("cloudstart-dev/")) or (.Name|startswith("cloudstart-dev-"))) | select(.Name != "cloudstart-dev/database/runtime" and .Name != "cloudstart-dev/database/migrator" and .Name != "cloudstart-dev/backend/authentication") | .ARN' <<< "$data"
   data="$(aws iam list-roles --output json)" || return 1
   jq -r '.Roles[]? | select(.RoleName|startswith("cloudstart-dev-")) | .Arn' <<< "$data"
   data="$(aws lambda list-functions --output json)" || return 1
@@ -239,7 +269,7 @@ scope_resources() {
   data="$(aws ssm describe-parameters --output json)" || return 1
   jq -r '.Parameters[]? | select((.Name|startswith("/cloudstart-dev/")) or (.Name|startswith("/cloudstart/dev/"))) | .Name' <<< "$data"
   data="$(aws rds describe-db-snapshots --snapshot-type manual --output json)" || return 1
-  jq -r '.DBSnapshots[]? | select(.DBSnapshotIdentifier|startswith("cloudstart-dev")) | .DBSnapshotIdentifier' <<< "$data"
+  jq -r '.DBSnapshots[]? | select(.DBSnapshotIdentifier|startswith("cloudstart-dev")) | select((.DBSnapshotIdentifier|test("^cloudstart-dev-(db|monitoring-db)-pre-destroy-[0-9]+$"))|not) | .DBSnapshotIdentifier' <<< "$data"
   data="$(aws logs describe-log-groups --output json)" || return 1
   jq -r '.logGroups[]? | select((.logGroupName|startswith("/ecs/cloudstart-dev")) or (.logGroupName|startswith("cloudstart-dev"))) | .logGroupName' <<< "$data"
   data="$(aws ec2 describe-vpcs --output json)" || return 1
@@ -272,6 +302,7 @@ else
 fi
 
 log "FINAL: failed_steps=$FAILED_STEPS remaining_scoped_resources=$REMAINING_COUNT inventory_complete=$INVENTORY_COMPLETE"
+log "Intentionally preserved: S3 state backend and manual RDS snapshots. Three external app secrets are preserved unless explicit deletion is requested."
 log "Before: $BEFORE_FILE"
 log "After: $AFTER_FILE"
 log "Log: $LOG_FILE"
@@ -295,6 +326,8 @@ if [[ "$INVENTORY_COMPLETE" != true || "$REMAINING_COUNT" -ne 0 || "$FAILED_STEP
   exit 1
 fi
 echo
-echo "Terraform-managed resources were destroyed, local Compose stacks were removed, and the post-scan found no scoped leftovers."
-echo "Preserved backend bucket: $TF_STATE_BUCKET. Current state keys were hidden; versioned history remains recoverable."
+echo "Terraform-managed resources were destroyed, local Compose stacks were removed, and the post-scan found no *unexpected* scoped leftovers."
+echo "Preserved: S3 backend $TF_STATE_BUCKET and manual RDS snapshots (see snapshots-preserved.txt)."
+echo "Application secrets: $([[ "$DELETE_PROJECT_SECRETS" == true ]] && echo 'deletion scheduled (7-day recovery)' || echo 'preserved by default')."
+echo "Current state keys were hidden; versioned history remains recoverable."
 echo "Report: $REPORT_DIR"

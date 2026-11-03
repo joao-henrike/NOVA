@@ -21,6 +21,8 @@ resource "aws_security_group" "monitoring_db" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "monitoring_from_alb" {
+  count = var.enable_public_alb ? 1 : 0
+
   security_group_id            = aws_security_group.monitoring.id
   referenced_security_group_id = aws_security_group.alb.id
   from_port                    = var.grafana_container_port
@@ -123,6 +125,8 @@ resource "aws_secretsmanager_secret_version" "grafana_admin" {
 }
 
 resource "aws_lb_target_group" "grafana" {
+  count = var.enable_public_alb ? 1 : 0
+
   name        = substr("${local.name}-grafana-tg", 0, 32)
   port        = var.grafana_container_port
   protocol    = "HTTP"
@@ -147,6 +151,8 @@ resource "aws_lb_target_group" "grafana" {
 }
 
 resource "aws_lb_listener_rule" "grafana" {
+  count = var.enable_public_alb ? 1 : 0
+
   listener_arn = (
     var.acm_certificate_arn == ""
     ? aws_lb_listener.http[0].arn
@@ -156,7 +162,7 @@ resource "aws_lb_listener_rule" "grafana" {
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.grafana.arn
+    target_group_arn = aws_lb_target_group.grafana[0].arn
   }
 
   condition {
@@ -419,15 +425,23 @@ resource "aws_ecs_service" "monitoring" {
     assign_public_ip = false
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.grafana.arn
-    container_name   = "grafana"
-    container_port   = var.grafana_container_port
+  dynamic "load_balancer" {
+    for_each = var.enable_public_alb ? [1] : []
+
+    content {
+      target_group_arn = aws_lb_target_group.grafana[0].arn
+      container_name   = "grafana"
+      container_port   = var.grafana_container_port
+    }
+  }
+
+  lifecycle {
+    # Keep operator stop/start state across Terraform plans; service/task definitions remain Terraform-managed.
+    ignore_changes = [desired_count]
   }
 
 
   depends_on = [
-    aws_lb_listener_rule.grafana,
     aws_iam_role_policy.ecs_monitoring_execution,
   ]
 

@@ -1,6 +1,8 @@
 # NOVA Operational Scripts
 
-> Repository-wide documentation: [NOVA documentation index](../docs/README.md) · [Deployment guide](../docs/deployment.md) · [Local development](../docs/local-development.md) · [Security model](../docs/security.md).
+> **Operational source of truth:** [TESTE1 runbook](../docs/TESTE1-DEPLOY-TEARDOWN.md). This file catalogs helper scripts and their side effects, not an independent deployment/teardown process.
+>
+> References: [Documentation index](../docs/README.md) · [Deployment technical reference](../docs/deployment.md) · [Local bootstrap](../docs/local-development.md) · [Security model](../docs/security.md).
 
 This folder contains local setup, validation, deployment, state-bootstrap, secret-provisioning, and CI helper scripts. Read the side-effect classification before running a script.
 
@@ -19,10 +21,16 @@ This folder contains local setup, validation, deployment, state-bootstrap, secre
 | `test-github-oidc-subject.sh` | Verifies the immutable GitHub owner/repository IDs and OIDC subject format against the repository contract. | Read-only checks. |
 | `deploy.sh` | End-to-end development deployment: validates account, prepares state/secrets, plans/applies infrastructure, builds/pushes immutable images, migrates, activates ECS, and smoke-tests. | **State-changing and potentially billable AWS operations.** |
 | `activate-application-services.sh` | Switches frontend/backend ECS services to the registered task revisions after migrations and runtime grants succeed, preserves current running capacity (or uses the configured initial count), restores autoscaling bounds, waits for stability, and verifies the active task-definition ARNs. | **Changes ECS task revisions and capacity.** Requires initialized Terraform state and AWS credentials. |
-| `destroy-all.sh` | Destroys resources tracked in the configured current/legacy states, stops local Compose stacks, then inventories remaining project resources. | **Destructive.** Requires exact account/region confirmation. Does not directly delete arbitrary untracked leftovers. |
+| `destroy-all.sh` | Creates/verifies RDS snapshots, destroys current/legacy states, removes local Compose and reports leftovers. | **Destructive.** Requires exact confirmation; keeps S3 state, snapshots and by default three external app secrets. |
+| `snapshot-rds-before-destroy.sh` | Creates/waits for manual RDS snapshots; starts stopped DBs if necessary. | May incur RDS and snapshot charges. |
+| `delete-project-secrets.sh` | Optionally schedules only three named application secrets for deletion. | 7-day recovery window. |
+| `check-application-plan.sh` | Rejects unexpected Terraform application plan changes; permits task-definition revisions. | Read-only. |
+| `test-deployment-contracts.sh` | Validates allowlist and mocked snapshot failure without AWS. | Local tests only. |
 | `run-gitleaks.sh` | Downloads a pinned Gitleaks binary with checksum verification and scans the Git repository. | Local/CI temporary files; no AWS operations. |
 | `extreme-checks.sh` | Shared GitHub Actions helper for recording independent validation results and skipped checks. | CI evidence files only; it does not provision AWS. |
 | `test-extreme-checks.sh` | Tests that complete, failed, and skipped validation results produce the correct blocking verdict. | Temporary test files only. |
+| `nova-ops.sh` | Interactive/read-only AWS status, cost, inventory, and log inspection plus explicitly requested ECS/RDS controls. | Read-only by default; explicit ECS/RDS changes only. Never deletes resources or runs Terraform apply/destroy. |
+| `test-nova-ops.sh` | Mock AWS contract tests for account guarding, scaling bounds, monitoring singleton, log validation, and RDS confirmation. | Temporary test files only; no AWS account access. |
 
 The root-level `audit-nova.sh` and `audit-frontend.sh` are separate read-only diagnostic tools and are documented in the [root README](../README.md).
 
@@ -63,13 +71,13 @@ Confirm the account is `760396521507` and the region is the intended development
 
 ## Destructive teardown
 
-The `destroy-all.sh` script requires the exact phrase:
+The `destroy-all.sh` script requires the exact phrase (append ` DELETE_SECRETS` for `make destroy-all-with-secrets`):
 
 ```text
 DESTROY cloudstart <actual-account-id> <aws-region>
 ```
 
-It inventories before teardown, destroys Terraform-managed resources across configured state keys, stops local Compose stacks, and inventories afterward. It preserves the remote state bucket and its versioned history. Any project resource outside the known Terraform states is reported rather than deleted through an arbitrary AWS API call.
+It inventories before teardown, preserves and verifies manual RDS snapshots, destroys Terraform-managed resources across configured state keys, stops local Compose stacks, and inventories afterward. Snapshot errors stop the destroy before it begins. Snapshots and S3 state are retained; the three external app secrets are retained unless optional recoverable deletion is confirmed. It preserves the remote state bucket and its versioned history. Any project resource outside the known Terraform states is reported rather than deleted through an arbitrary AWS API call.
 
 Do not use `destroy-all.sh` as a routine validation command. Read [Deployment and Operations](../docs/deployment.md) and inspect its implementation before approving a teardown.
 
@@ -79,3 +87,45 @@ Do not use `destroy-all.sh` as a routine validation command. Read [Deployment an
 - Never treat a successful local validation as proof of AWS runtime health.
 - Keep generated state, plans, secret material, and `.deploy/` artifacts out of Git.
 - Review and approve Terraform plans before applying infrastructure changes.
+
+
+## Cloud operations orchestrator
+
+The operator interface is maintained in [Cloud operations](../docs/operations.md). It is independent from the deployment script and does not use the branch-restricted `make doctor` check. Read the full operations guide before applying any AWS changes.
+
+Quick entry points:
+
+~~~bash
+make ops-help
+make ops
+make ops ACTION=overview
+make ops ACTION=costs
+make ops ACTION=costs ARGS='project'
+make ops ACTION=costs ARGS='resources rds'
+make ops ACTION=logs ARGS='backend --since 2h'
+make ops ACTION=stop ARGS='all'       # ECS tasks only; leaves RDS/NAT/ALB running
+make ops ACTION=shutdown              # ECS zero, stop RDS, remove NAT + ALB via Terraform
+make ops ACTION=resume                # recreate NAT + ALB, start RDS, then ECS
+make ops ACTION=db ARGS='status'
+make ops-test
+~~~
+
+Before any AWS call, nova-ops.sh verifies the current AWS account against config/dev.env. Scaling is bounded by the task maximums in config/dev.tfvars. Monitoring is a single stateful task and accepts only zero or one replica.
+
+### Full AWS shutdown and restore
+
+Use `make ops ACTION=shutdown` or `make ops-shutdown` to reduce the recurring cost drivers, not just the Fargate tasks. The command is allowed only on branch TESTE1 and requires the expected AWS account, AWS CLI, Terraform, existing remote state, and the ignored local `.deploy/` secret/ARN files created by deployment.
+
+The command:
+- Creates and prints a refreshed Terraform plan, then requires the exact `SHUTDOWN cloudstart-dev` confirmation.
+- Suspends application autoscaling, sets all ECS services to desired count zero, waits for zero running tasks, and stops/waits for both RDS instances.
+- Re-plans, validates the narrow Terraform allowlist, and applies the optional-resource flags that delete NAT Gateways/EIPs, routes to NAT, public ALB/listeners/target groups, ALB security rules, and ECS target-group attachments.
+- Keeps the VPC, subnets, RDS instances/data, ECR, Secrets Manager, CloudWatch logs, snapshots, and remote state.
+
+Use `make ops ACTION=resume` or `make ops-resume` to recreate NAT/ALB, start both databases, wait until they are available, and then restore ECS capacity/autoscaling. It requires the exact `RESUME cloudstart-dev` confirmation.
+
+Both Terraform plans are fail-closed. Any managed-resource change outside the allowlist, any resource creation during shutdown, or any resource deletion during resume blocks the apply. The scripts never call `terraform destroy`, delete databases, or delete the S3 state backend.
+
+The RDS instances are stopped, not deleted. AWS automatically restarts a stopped RDS instance after seven consecutive days; DB storage/backups, ECR image storage, S3 state, CloudWatch logs, and Secrets Manager may still generate charges. This is not a zero-cost state or an indefinite shutdown mode.
+
+The costs command defaults to the account-wide month-to-date view. `costs project` filters by activated Project/Environment cost-allocation tags; resource-level Cost Explorer details require the relevant AWS opt-in. Read the operations guide for attribution caveats and residual costs.

@@ -1,21 +1,23 @@
 # Local Development and Environment Bootstrap
 
-This document is the canonical procedure for preparing a new Linux/CloudShell checkout of NOVA.
+This document covers **local bootstrap and developer workflows**. The single operational procedure for AWS deployment/teardown is the [TESTE1 runbook](TESTE1-DEPLOY-TEARDOWN.md). `make start`/`make up` runs local Docker, not AWS.
 
 The repository is designed so that project-specific CLI tools and Python dependencies are installed inside the repository workspace without requiring a global Terraform or Python package installation.
 
 ## 1. Supported workflow
 
-The working branch for the current project cycle is:
+The operational branch for the current project cycle is:
 
 ```text
-Joao
+TESTE1
 ```
+
+GitHub Actions OIDC/CD remains restricted to `Joao`; this document concerns local workspaces.
 
 Start from a fresh clone:
 
 ```bash
-git clone --branch Joao --single-branch https://github.com/joao-henrike/NOVA.git
+git clone --branch TESTE1 --single-branch https://github.com/joao-henrike/NOVA.git
 cd NOVA
 ```
 
@@ -306,12 +308,12 @@ Secrets, AWS credentials, Terraform state, `.tfvars`, and certificates must neve
 
 ## 13. CloudShell
 
-AWS CloudShell is a supported execution environment for this repository.
+AWS CloudShell is an intended execution environment **when Python 3.12+, a working Docker daemon/Buildx/Compose, and sufficient disk space are available**. These prerequisites are not guaranteed in every CloudShell environment. Follow the [TESTE1 runbook](TESTE1-DEPLOY-TEARDOWN.md) for AWS state-changing operations.
 
 Recommended sequence:
 
 ```bash
-git clone --branch Joao --single-branch https://github.com/joao-henrike/NOVA.git
+git clone --branch TESTE1 --single-branch https://github.com/joao-henrike/NOVA.git
 cd NOVA
 make setup
 make doctor
@@ -320,7 +322,7 @@ make up
 make smoke
 ```
 
-After local validation, the AWS deployment flow should be executed explicitly.
+After local validation, follow the [TESTE1 runbook](TESTE1-DEPLOY-TEARDOWN.md) for AWS. `make up`/`make smoke` test local Docker only.
 
 ## 14. Deployment automation boundary
 

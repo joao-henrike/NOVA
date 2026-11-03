@@ -1,14 +1,17 @@
 # CloudStart — Deployment and Operations Guide
 
-> This procedure describes only the deployment paths that the current repository actually supports. The repository now has automated development CD from `Joao` through GitHub Actions. Production deployment remains intentionally manual/gated.
+> **Technical reference, not a separate operational procedure.** The single runbook for this cycle is **[TESTE1 deploy/teardown](TESTE1-DEPLOY-TEARDOWN.md)**. The manual `terraform apply`, image-build and older `Joao` sections below explain implementation/recovery details, **not** a substitute for `make deploy`/`make destroy-all`. GitHub Actions OIDC/CD remains restricted to `Joao`. Production deploy is outside the current automation.
 
 ## 1. Prerequisites
+
+**TESTE1-specific KISS release/teardown procedure:** [TESTE1 deploy and teardown](TESTE1-DEPLOY-TEARDOWN.md). The full teardown creates and verifies manual RDS snapshots before any Terraform destroy; RDS snapshots and S3 state remain preserved. The optional `make destroy-all-with-secrets` schedules recoverable deletion of three exact application secrets. See the runbook before any destructive operation.
+
 
 For local validation and deployment, use:
 
 | Tool | Requirement |
 | --- | --- |
-| Git | Required; deployment is restricted to branch Joao. |
+| Git | Required; the local `make deploy` accepts branches `Joao` and `TESTE1`; GitHub-managed CD still uses `Joao`. |
 | Python | 3.12 or newer. |
 | Terraform | 1.16.4 (repository constraint >=1.16.4 and <1.17.0). |
 | AWS CLI | v2 recommended; authenticated to account 760396521507 for this development configuration. |
@@ -36,7 +39,7 @@ For a fresh development deployment, the preferred command is:
 make deploy
 ```
 
-The local deployment automation verifies branch `Joao` and the expected AWS account, creates the protected remote-state bucket when it is missing, provisions the restricted database secrets and backend authentication secret, initializes the canonical state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, registers new ECS task definitions without switching live frontend/backend services, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, activates the new application task revisions, preserves current running capacity (or uses the configured initial count), restores autoscaling bounds, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests. GitHub CD follows the same application sequence but uses verify-only state-bucket access and cannot create the state bucket. The local Makefile deployment and both GitHub workflows use the same provisioning scripts.
+The local deployment automation verifies branch `Joao` or `TESTE1` and the expected AWS account, creates the protected remote-state bucket when it is missing, provisions the restricted database secrets and backend authentication secret, initializes the canonical state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, registers new ECS task definitions without switching live frontend/backend services, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, activates the new application task revisions, preserves current running capacity (or uses the configured initial count), restores autoscaling bounds, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests. GitHub CD follows the same application sequence but uses verify-only state-bucket access and cannot create the state bucket. The local Makefile deployment and both GitHub workflows use the same provisioning scripts.
 
 The Grafana administrator password is generated locally by `scripts/deploy.sh` on first use and stored under `.deploy/`. This directory is ignored by Git. The database provisioner stores generated runtime/migrator password values only in AWS Secrets Manager; its local `.deploy/db-secret-arns.env` file contains ARNs only. The RDS master password remains managed by RDS and is injected only into the one-off role-bootstrap task.
 
@@ -55,7 +58,6 @@ availability_zone_count   = 2
 vpc_cidr                  = 10.20.0.0/16
 deploy_application        = false
 
-The committed `config/dev.tfvars` keeps this safe Terraform baseline. `make deploy` temporarily overrides it only after ECR repositories exist and the new application images are available.
 frontend_image_tag        = v0.1.1
 backend_image_tag         = v0.1.0
 frontend_desired_count    = 2
@@ -69,6 +71,8 @@ db_instance_class          = db.t4g.micro
 db_backup_retention         = 1 day
 monitoring_db_backup_retention = 1 day
 ```
+
+`make deploy` temporarily overrides the committed `deploy_application=false` baseline after ECR repositories and new images exist.
 
 The effective ECS desired/minimum count follows the configured desired/minimum values while `deploy_application = true`; when it is false, frontend/backend desired and minimum counts are zero. The monitoring service remains at one task.
 
@@ -113,34 +117,19 @@ docker compose down
 
 Persistent local PostgreSQL data is stored in the Compose volume `postgres_data`.
 
-## 4. Local teardown and resource audit
+## 4. Safe teardown and resource inventory
 
-The project now provides a local CLI/Makefile path for teardown; it is not a GitHub Actions workflow.
-
-For a read-only inventory of the current AWS identity, CloudStart development resources, and local Compose stacks:
+**Official procedure:** [TESTE1 runbook](TESTE1-DEPLOY-TEARDOWN.md). Do **not** use standalone `terraform destroy` as an alternative; it bypasses pre-destroy RDS snapshot safeguards.
 
 ```bash
-make inventory-cloud
+make inventory-cloud              # read-only AWS inventory; state bucket must be reachable
+make destroy-all                 # saves and verifies manual RDS snapshots first
+make destroy-all-with-secrets    # optional, recoverable 7-day deletion of 3 named app secrets
 ```
 
-To run the destructive first-pass cleanup:
+The script verifies AWS identity and remote state, requires exact confirmation, inventories resources, creates and waits for manual snapshots of both named development RDS databases **before any Terraform destroy**, starts stopped DBs if needed, and fails closed on snapshot errors. It then destroys current and configured legacy state resources, cleans local Compose resources and inventories unexpected leftovers.
 
-```bash
-make destroy-all
-```
-
-The command checks the AWS account against `config/dev.env`, requires the exact confirmation phrase for the account and region, and then:
-
-- Captures an inventory before cleanup.
-- Runs `terraform destroy` independently for the canonical state and any legacy keys listed in `config/dev.env`, continuing to the next state if one fails.
-- Stops the local application and monitoring Compose stacks, including their local named volumes.
-- Removes local `cloudstart/frontend` and `cloudstart/backend` images created by this project.
-- Captures an independent AWS inventory afterwards and writes per-step results.
-- If (and only if) every step succeeded and the post-scan is clean, hides the current empty state objects with S3 delete markers. Previous S3 object versions remain available for recovery.
-
-Reports are saved under `.deploy/destroy-all-<UTC timestamp>/` and include `inventory-before.txt`, `inventory-after.txt`, `results.tsv`, and the detailed command log. The script exits nonzero if a command failed or the final scan still finds project-scoped resources; do not treat a nonzero exit as a clean teardown.
-
-**Important limitation of this first pass:** resources outside the known Terraform states are reported rather than deleted directly through arbitrary AWS service APIs. If the post-scan lists any resource, the teardown is incomplete and the report contains its identifier. The remote Terraform S3 bucket and bootstrap lock table are preserved so the project can continue to use its deployment backend. The current state-key pointers are only hidden after a confirmed clean inventory; historical versions are not purged.
+**Intentionally preserved:** versioned S3 state backend, manual pre-destroy RDS snapshots and, by default, three application secrets created outside Terraform. The opt-in command schedules deletion only of those three secrets with seven-day recovery. Unknown resources outside known states are reported, not indiscriminately deleted; costs may remain.
 
 ## 5. Terraform formatting and validation
 
@@ -223,7 +212,9 @@ terraform plan
 
 The plan should declare the infrastructure and application control plane, while the ECS services remain configured for zero running tasks because `deploy_application` is false in the committed baseline. The one-command deployment overrides this only after the ECR/image phase.
 
-## 9. Apply the infrastructure baseline
+## 9. Apply the infrastructure baseline — technical reference only
+
+> For TESTE1, this is a stage of the guarded `make deploy` script. Do not run a standalone apply to bypass its protections.
 
 ```bash
 terraform apply
@@ -418,24 +409,9 @@ Run a restore drill
 
 ## 17. Safe destroy considerations
 
-The current defaults set:
+Dev Terraform defaults disable ALB/RDS deletion protection and configure `skip_final_snapshot`. **Use only [the TESTE1 teardown runbook](TESTE1-DEPLOY-TEARDOWN.md)** for infrastructure deletion: `make destroy-all` adds the mandatory manual RDS snapshot step before running Terraform. Standalone `terraform destroy` bypasses that protection.
 
-```text
-ALB deletion protection  = false
-RDS deletion protection  = false
-```
-
-For non-production environments, the RDS resource is configured to skip the final snapshot.
-
-For `prod`, the resource configures a final snapshot identifier.
-
-Before destroying infrastructure, inspect:
-
-```bash
-terraform plan
-```
-
-For production, explicitly review backup and deletion-protection implications before applying destructive changes.
+The script retains the remote S3 backend and manual RDS snapshots even when a teardown otherwise succeeds. Review the post-destroy `.deploy/destroy-all-*/` logs and reports. For production, review backup retention and deletion protection separately.
 
 ## 18. Bootstrap state care
 

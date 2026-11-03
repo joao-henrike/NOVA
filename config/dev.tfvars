@@ -7,6 +7,8 @@ environment             = "dev"
 aws_region              = "us-east-1"
 availability_zone_count = 2
 vpc_cidr                = "10.20.0.0/16"
+enable_nat_gateways     = true
+enable_public_alb       = true
 
 deploy_application         = false
 frontend_image_tag         = "v0.1.1"

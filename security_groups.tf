@@ -53,6 +53,8 @@ resource "aws_security_group" "rds" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "alb_http" {
+  count = var.enable_public_alb ? 1 : 0
+
   security_group_id = aws_security_group.alb.id
   cidr_ipv4         = "0.0.0.0/0"
   from_port         = 80
@@ -62,7 +64,7 @@ resource "aws_vpc_security_group_ingress_rule" "alb_http" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "alb_https" {
-  count = var.acm_certificate_arn == "" ? 0 : 1
+  count = var.enable_public_alb && var.acm_certificate_arn != "" ? 1 : 0
 
   security_group_id = aws_security_group.alb.id
   cidr_ipv4         = "0.0.0.0/0"
@@ -73,6 +75,8 @@ resource "aws_vpc_security_group_ingress_rule" "alb_https" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_to_frontend" {
+  count = var.enable_public_alb ? 1 : 0
+
   security_group_id            = aws_security_group.alb.id
   referenced_security_group_id = aws_security_group.frontend.id
   from_port                    = 80
@@ -82,6 +86,8 @@ resource "aws_vpc_security_group_egress_rule" "alb_to_frontend" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_to_backend" {
+  count = var.enable_public_alb ? 1 : 0
+
   security_group_id            = aws_security_group.alb.id
   referenced_security_group_id = aws_security_group.backend.id
   from_port                    = var.backend_container_port
@@ -91,6 +97,8 @@ resource "aws_vpc_security_group_egress_rule" "alb_to_backend" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_to_grafana" {
+  count = var.enable_public_alb ? 1 : 0
+
   security_group_id            = aws_security_group.alb.id
   referenced_security_group_id = aws_security_group.monitoring.id
   from_port                    = var.grafana_container_port
@@ -100,6 +108,8 @@ resource "aws_vpc_security_group_egress_rule" "alb_to_grafana" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "frontend_from_alb" {
+  count = var.enable_public_alb ? 1 : 0
+
   security_group_id            = aws_security_group.frontend.id
   referenced_security_group_id = aws_security_group.alb.id
   from_port                    = 80
@@ -109,6 +119,8 @@ resource "aws_vpc_security_group_ingress_rule" "frontend_from_alb" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "backend_from_alb" {
+  count = var.enable_public_alb ? 1 : 0
+
   security_group_id            = aws_security_group.backend.id
   referenced_security_group_id = aws_security_group.alb.id
   from_port                    = var.backend_container_port

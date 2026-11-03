@@ -274,10 +274,16 @@ jobs:
         shell: bash
         run: bash scripts/run-gitleaks.sh
 
+      - name: Validate deploy and teardown contracts
+        run: bash scripts/test-deployment-contracts.sh
+
       - name: Validate project cleanup script syntax
         run: bash -n scripts/destroy-all.sh
       - name: ShellCheck
         run: shellcheck --severity=error -x ./*.sh scripts/*.sh
+
+      - name: NOVA Ops mock safety tests
+        run: bash scripts/test-nova-ops.sh
 
   codeql:
     name: CodeQL

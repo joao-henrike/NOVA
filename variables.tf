@@ -684,3 +684,26 @@ variable "backend_auth_secret_arn" {
     error_message = "backend_auth_secret_arn must be empty or a valid Secrets Manager secret ARN."
   }
 }
+
+
+variable "enable_nat_gateways" {
+  description = "Whether per-AZ NAT Gateways and their public IPv4 allocations should exist. Disable only while application services are not being started."
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = var.enable_nat_gateways || !var.start_application_services
+    error_message = "NAT Gateways cannot be disabled while start_application_services is true."
+  }
+}
+
+variable "enable_public_alb" {
+  description = "Whether the public Application Load Balancer, listeners, and target groups should exist. Disable only while application services are not being started."
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = var.enable_public_alb || !var.start_application_services
+    error_message = "The public ALB cannot be disabled while start_application_services is true."
+  }
+}

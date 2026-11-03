@@ -1,6 +1,8 @@
 # CloudStart — Current MVP State Audit
 
 > This document is an implementation inventory. It exists to answer one question precisely: **what is actually present in the repository right now?**
+>
+> **Operational baseline: `TESTE1`.** The [TESTE1 runbook](TESTE1-DEPLOY-TEARDOWN.md) is the single execution procedure. Local deploy/doctor support TESTE1, and the plan guard permits ECS task-definition revisions but not unexpected infrastructure changes. Teardown first creates manual RDS snapshots, preserves S3 state and by-default external secrets, and audits unexpected leftovers. GitHub OIDC/CD remains scoped to `Joao`. **No complete AWS create/shutdown/resume/destroy cycle has been executed as part of these changes.**
 
 ## 1. Source hierarchy
 
@@ -389,7 +391,9 @@ The configuration reference in docs/configuration-reference.md records every roo
 
 ## 11. Latest recorded validation evidence
 
-The latest recorded CI evidence for the audited repository snapshot is dated **30 October 2026**, commit `cdb9a431826bb3440df367381242a9838b4729a5`:
+The script changes on `TESTE1` passed [NOVA CI #41690248888](https://github.com/joao-henrike/NOVA/actions/runs/41690248888) on **3 November 2026**, commit [`4ff8ebf`](https://github.com/joao-henrike/NOVA/commit/4ff8ebf6b144935a6038544483ec21083901e73d), with backend, container smoke, Compose, Terraform validation, security, workflow contracts and CodeQL successful. Subsequent documentation consolidation does not constitute a live AWS integration test.
+
+Older evidence from **30 October 2026**, commit `cdb9a431826bb3440df367381242a9838b4729a5`:
 
 - [NOVA CI](https://github.com/joao-henrike/NOVA/actions/runs/41123601138): successful; all seven jobs passed.
 - [NOVA — Extreme Validation](https://github.com/joao-henrike/NOVA/actions/runs/41123600983): successful job conclusion with **partial coverage**; zero recorded failures and nine AWS checks skipped.
