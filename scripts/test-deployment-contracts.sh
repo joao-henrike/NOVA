@@ -22,4 +22,30 @@ printf '{}' > "$tmp/plan.json"; fail "bad plan JSON"
 bash -n "$ROOT/scripts/deploy.sh" "$ROOT/scripts/doctor.sh" \
   "$ROOT/scripts/destroy-all.sh" "$ROOT/scripts/snapshot-rds-before-destroy.sh" \
   "$ROOT/scripts/delete-project-secrets.sh"
+# Check the fail-closed RDS snapshot helper without AWS credentials.
+mkdir -p "$tmp/mock-bin"
+cat > "$tmp/mock-bin/aws" <<'MOCK'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+case "$*" in
+  *"sts get-caller-identity"*) echo 760396521507 ;;
+  *"rds describe-db-instances"*"cloudstart-dev-monitoring-db"*)
+    echo "DBInstanceNotFound" >&2; exit 254 ;;
+  *"rds describe-db-instances"*"cloudstart-dev-db"*) echo available ;;
+  *"rds create-db-snapshot"*)
+    if [[ "$MOCK_SNAPSHOT_FAILURE" == 1 ]]; then echo "Simulated snapshot failure" >&2; exit 41; fi ;;
+  *"rds wait db-snapshot-available"*) ;;
+  *) echo "Unexpected mock action: $*" >&2; exit 90 ;;
+esac
+MOCK
+chmod +x "$tmp/mock-bin/aws"
+export AWS_REGION=us-east-1 EXPECTED_AWS_ACCOUNT_ID=760396521507
+export MOCK_SNAPSHOT_FAILURE=0
+PATH="$tmp/mock-bin:$PATH" bash "$ROOT/scripts/snapshot-rds-before-destroy.sh" > "$tmp/snapshots.out"
+grep -q '^PRESERVED_SNAPSHOT=cloudstart-dev-db-pre-destroy-' "$tmp/snapshots.out"
+export MOCK_SNAPSHOT_FAILURE=1
+if PATH="$tmp/mock-bin:$PATH" bash "$ROOT/scripts/snapshot-rds-before-destroy.sh" > "$tmp/snapshots.err" 2>&1; then
+  echo "Snapshot failure did not block deletion." >&2; exit 1
+fi
+
 echo "Deploy and teardown contract tests passed."
