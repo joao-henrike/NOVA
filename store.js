@@ -72,7 +72,7 @@ const CLOUDSTART_PRODUCTS = [
   }
 ];
 
-const CS_KEYS = Object.freeze({cart:"cloudstart_cart_v7",theme:"cloudstart_theme_v7",wishlist:"cloudstart_wishlist_v7"});
+const CS_KEYS = Object.freeze({cart:"cloudstart_cart_v7",theme:"cloudstart_theme_v7",wishlist:"cloudstart_wishlist_v7",compare:"cloudstart_compare_v7"});
 
 function csProduct(id){ return CLOUDSTART_PRODUCTS.find(p=>p.id===id); }
 function csBRL(value){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(value); }
@@ -108,3 +108,6 @@ function csEscape(value){ return String(value).replace(/[&<>"']/g,char=>({"&":"&
 function csImage(product){
   return `<img src="${product.image}" alt="${csEscape(product.name)}" loading="lazy" onerror="this.onerror=null;this.src='${product.fallback}'">`;
 }
+
+function csCompare(){const data=csRead(CS_KEYS.compare,[]);return Array.isArray(data)?data:[]}
+function csSetCompare(ids){localStorage.setItem(CS_KEYS.compare,JSON.stringify([...new Set(ids)].filter(id=>csProduct(id)).slice(0,3)));}

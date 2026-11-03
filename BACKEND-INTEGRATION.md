@@ -27,3 +27,12 @@ O botão atual é apenas demonstrativo. Implementar OAuth/OpenID Connect no back
 
 ### Segurança
 Nunca confiar em preço, desconto, estoque ou status de pagamento vindos do navegador.
+
+
+## Comportamentos demonstrativos adicionados no V8
+
+- Busca, filtros, favoritos e comparador usam dados locais do catálogo.
+- O orçamento é preparado no navegador e impresso/salvo em PDF; não é uma proposta comercial assinada.
+- Login, cadastro, Google e checkout não autenticam nem cobram de verdade.
+- Dados do carrinho, tema e favoritos ficam no `localStorage`; não armazenar dados sensíveis ali.
+- Número de cartão e CVV são validados no formulário de demonstração, mas não são gravados no pedido local. Em produção, usar checkout/tokenização de um gateway.

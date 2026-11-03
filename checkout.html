@@ -22,7 +22,7 @@
 <label class="payment-method"><input type="radio" name="payment" value="boleto"><span class="payment-icon">BL</span><span><strong>Boleto bancário</strong><small>Compensação bancária</small></span><em></em></label>
 </div>
 <div id="cardFields" class="card-fields" hidden><div class="form-grid"><label>Número do cartão<input name="cardNumber" autocomplete="cc-number" placeholder="0000 0000 0000 0000"></label><label>Nome no cartão<input name="cardName" autocomplete="cc-name"></label><label>Validade<input name="expiry" placeholder="MM/AA" autocomplete="cc-exp"></label><label>CVV<input name="cvv" type="password" autocomplete="cc-csc"></label><label>Parcelas<select name="installments"><option>1x</option><option>2x</option><option>3x</option><option>6x</option><option>10x</option><option>12x</option></select></label></div><small class="security-note">Demonstração: em produção, o cartão deve ser tokenizado por um gateway. O CloudStart não deve armazenar CVV.</small></div>
-<div id="pixInfo" class="pix-info"><strong>Pix selecionado</strong><span>O backend poderá gerar QR Code e código copia e cola.</span></div>
+<div id="pixInfo" class="pix-info"><strong>Pix selecionado</strong><span>O backend poderá gerar QR Code e código copia e cola.</span></div><div id="boletoInfo" class="pix-info" hidden><strong>Boleto selecionado</strong><span>Na versão real, o boleto será emitido por um provedor de pagamento. Nenhum boleto real é gerado nesta demonstração.</span></div>
 </section>
 <button class="button primary full checkout-submit" type="submit">Finalizar pedido demonstrativo</button><p class="legal">Nenhuma cobrança real é realizada nesta versão.</p>
 </form>
