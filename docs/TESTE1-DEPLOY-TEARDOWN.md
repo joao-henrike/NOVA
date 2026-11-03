@@ -1,8 +1,12 @@
 # NOVA TESTE1 — Deploy, shutdown, resume e teardown (03/11/2026)
 
-**Status:** CI estática e de contêineres aprovada para a alteração de scripts (ver GitHub Actions). **Não houve provisionamento nem destruição ao vivo na AWS nesta revisão.**
+**Runbook operacional único para a `TESTE1`.** A alteração de scripts passou na [NOVA CI #41690248888](https://github.com/joao-henrike/NOVA/actions/runs/41690248888) (8 checks aprovados; commit `4ff8ebf`). **Não houve provisionamento, desligamento, retomada ou destruição reais na AWS nesta revisão.** A CI não comprova disponibilidade de recursos reais.
 
 Este é o procedimento operacional para a branch `TESTE1`. O deploy local agora aceita `Joao` ou `TESTE1`; o orquestrador de desligamento completo continua restrito à `TESTE1`. A automação GitHub Actions com OIDC continua intencionalmente restrita à `Joao`: não confunda `make deploy` local com deploy automático via GitHub.
+
+## 0. Fonte de verdade operacional
+
+Este arquivo é **o único roteiro de execução** da `TESTE1`. O [README principal](../README.md) resume os comandos; [deployment.md](deployment.md), [operations.md](operations.md), [configuration-reference.md](configuration-reference.md) e [local-development.md](local-development.md) são referências técnicas. O [README histórico arquivado](archive/README-JOAO-HISTORICO.md) **não deve ser utilizado** para mudanças AWS. Se houver divergência, prevalece o comportamento real do Makefile/scripts/Terraform, e a documentação deve ser corrigida.
 
 ## 1. Verificações prévias (CloudShell)
 
@@ -13,6 +17,8 @@ git clone --branch TESTE1 https://github.com/joao-henrike/NOVA.git
 cd NOVA
 git status --short --branch
 aws sts get-caller-identity
+docker info
+df -h "$HOME" /tmp
 make setup
 make doctor
 make validate
@@ -82,7 +88,11 @@ Os relatórios ficam em `.deploy/destroy-all-<UTC>/`, incluindo `inventory-befor
 
 **Não execute `terraform destroy` diretamente** como substituto desse fluxo: isso contorna a criação obrigatória de snapshots, e os arquivos de configuração RDS do ambiente `dev` usam `skip_final_snapshot`.
 
-## 5. Cobertura e próximos testes reais
+## 5. Evidências do primeiro ciclo real — pendentes
+
+Registre para cada etapa a data/hora, commit, conta/region (nunca credenciais), comando, resultado PASS/FAIL/SKIPPED e link/caminho do relatório. Etapas a comprovar: pré-requisitos e espaço CloudShell; `doctor`/Terraform; deploy (state, VPC, RDS, NAT, ALB, ECR, ECS); saúde HTTP/API/Grafana/Zabbix; custos e sobras; `shutdown`; `resume`; snapshots RDS; `destroy-all`; novo inventário. Uma verificação não executada continua **SKIPPED**, não PASS.
+
+## 6. Cobertura e próximos testes reais
 
 `scripts/test-deployment-contracts.sh` utiliza fixtures JSON de Terraform e AWS simulada para verificar substituição permitida de task definitions, proibição de mudanças fora da lista e falha segura de snapshot. A CI também verifica sintaxe shell, código backend, contêineres e validade estática do Terraform.
 

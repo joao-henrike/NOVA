@@ -1,6 +1,8 @@
 # NOVA Operational Scripts
 
-> Repository-wide documentation: [NOVA documentation index](../docs/README.md) · [Deployment guide](../docs/deployment.md) · [Local development](../docs/local-development.md) · [Security model](../docs/security.md).
+> **Operational source of truth:** [TESTE1 runbook](../docs/TESTE1-DEPLOY-TEARDOWN.md). This file catalogs helper scripts and their side effects, not an independent deployment/teardown process.
+>
+> References: [Documentation index](../docs/README.md) · [Deployment technical reference](../docs/deployment.md) · [Local bootstrap](../docs/local-development.md) · [Security model](../docs/security.md).
 
 This folder contains local setup, validation, deployment, state-bootstrap, secret-provisioning, and CI helper scripts. Read the side-effect classification before running a script.
 

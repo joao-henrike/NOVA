@@ -2,6 +2,8 @@
 
 This document describes the CI and CD workflows currently committed in `.github/workflows/`.
 
+> **Different trust boundaries:** operators use `TESTE1` for **manual CloudShell** `make deploy`/NOVA Ops in the current cycle, whereas GitHub Actions CD/OIDC for the `development` Environment deliberately remains restricted to **`Joao`**. CI for a TESTE1 pull request is not a live AWS deployment. The canonical TESTE1 procedure is in the [runbook](TESTE1-DEPLOY-TEARDOWN.md).
+
 ## Workflow inventory
 
 ```text

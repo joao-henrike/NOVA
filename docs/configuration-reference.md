@@ -1,6 +1,6 @@
 # NOVA — Configuration reference
 
-This is the operator reference for Terraform inputs, bootstrap inputs, environment metadata, and GitHub Actions configuration. The `Joao` baseline remains the GitHub CD target; local deployment now accepts `TESTE1` too. For its safe teardown behavior, see [TESTE1 deployment and teardown](TESTE1-DEPLOY-TEARDOWN.md). When code changes, update this document in the same change.
+This is the Terraform/input configuration reference for the current `TESTE1` source tree. Local `make deploy` supports `TESTE1` and `Joao`; GitHub CD/OIDC still uses `Joao`. **Do not treat this reference as an alternative to the [single TESTE1 runbook](TESTE1-DEPLOY-TEARDOWN.md).** Update it when configuration contracts change.
 
 > **Security rule:** never put passwords, access keys, OAuth credentials, private keys, or JWT signing material in tracked files or ordinary Terraform variables. Terraform receives secret ARNs where possible. Sensitive Terraform variables can still be stored in Terraform state; do not treat the sensitive flag as a replacement for Secrets Manager.
 
@@ -216,7 +216,11 @@ scripts/ensure-terraform-state.sh validates the expected AWS account, bucket own
 | make setup | Installs the local toolchain and Python environment. | No AWS resources. |
 | make up / make down | Starts/stops the local application Compose stack. | Local Docker only. |
 | make tf-init | Initializes root Terraform against an already-existing bucket. | Reads/locks state; does not create infrastructure. |
-| make deploy | Validates, provisions/reuses secrets and state bucket, plans/applies baseline, builds/pushes images, activates ECS, migrates database, and runs smoke tests. | Creates/changes billable AWS resources. |
+| make deploy | Local deploy in TESTE1/Joao; provisions state/secrets, applies baseline, builds/pushes images, migrates DB, activates ECS and runs smoke tests. | Creates/changes billable AWS resources. |
+| make test-deployment-contracts / make ops-test | Tests plan allowlist, snapshot safeguards and NOVA Ops policy using mock inputs. | No AWS mutation. |
+| make inventory-cloud | Inventories project resources, requiring access to the remote-state bucket. | AWS reads only. |
+| make destroy-all | Interactive teardown of known states, after mandatory manual RDS snapshots; retains S3 state and by default external app secrets. | Destructive; snapshots can incur costs. |
+| make destroy-all-with-secrets | Same teardown plus scheduled seven-day recovery deletion of three exact off-Terraform application secrets. | Destructive; separate explicit confirmation. |
 | make ops ACTION=shutdown | Stops ECS, stops both RDS instances, and uses a guarded Terraform apply to remove NAT Gateways/EIPs and public ALB resources. | State-changing; exact confirmation and TESTE1 branch required. Preserves DB data and remote state. |
 | make ops ACTION=resume | Recreates NAT/ALB, starts and waits for RDS, then starts ECS workloads and autoscaling. | State-changing; exact confirmation and TESTE1 branch required. |
 | deploy-dev.yml | Pushes immutable Git-SHA images and applies an allowlisted development plan after CI. | Changes development AWS resources. |
@@ -242,7 +246,7 @@ The deploy workflow is triggered by application/runtime artifact paths on branch
 
 ## 12. Managed Terraform resource inventory
 
-This inventory is generated from root and bootstrap Terraform resource declarations in the current Joao branch. It documents what the code manages; it is not proof that each AWS resource currently exists.
+This manually maintained resource inventory describes the `TESTE1` Terraform declarations; verify counts against the actual `.tf` files after code changes. It is not proof that resources currently exist or are healthy in AWS.
 
 | Resource type | Declarations | Terraform file / local resource name |
 | --- | ---: | --- |

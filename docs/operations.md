@@ -1,6 +1,6 @@
 # NOVA Cloud Operations Orchestrator
 
-NOVA Ops is the repository-owned command-line control plane for inspecting, scaling, shutting down, and restoring the existing CloudStart development environment in AWS. It uses the AWS identity already configured in the operator's shell. Full infrastructure shutdown/resume is Terraform-managed, plan-reviewed, confirmation-gated, and available only from branch TESTE1.
+NOVA Ops is the repository-owned command-line control plane for inspecting, scaling, shutting down, and restoring the existing CloudStart development environment in AWS. This document is a **command reference**, not a separate operational workflow; for AWS changes follow the **[single TESTE1 runbook](TESTE1-DEPLOY-TEARDOWN.md)**. It uses the AWS identity already configured in the operator's shell. Full infrastructure shutdown/resume is Terraform-managed, plan-reviewed, confirmation-gated, and available only from branch TESTE1.
 
 ## Quick start
 
