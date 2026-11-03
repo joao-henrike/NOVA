@@ -1,6 +1,8 @@
 # CloudStart — Current MVP State Audit
 
 > This document is an implementation inventory. It exists to answer one question precisely: **what is actually present in the repository right now?**
+>
+> **TESTE1 delta (03/11/2026):** the local deploy and doctor support `TESTE1`; the application plan guard permits legitimate ECS task-definition replacements but blocks unexpected infrastructure changes. `destroy-all` takes manual RDS snapshots first and fails closed on snapshot/state-inspection errors; S3 state and snapshots remain, as do three external application secrets unless a recoverable deletion is explicitly selected. The GitHub OIDC/CD workflows remain scoped to `Joao`. See [TESTE1 runbook](TESTE1-DEPLOY-TEARDOWN.md). No live AWS provisioning or teardown was performed in this update.
 
 ## 1. Source hierarchy
 
