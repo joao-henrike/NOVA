@@ -8,7 +8,7 @@ AWS_REGION ?= us-east-1
 
 .DEFAULT_GOAL := start
 
-.PHONY: start setup doctor validate fmt tflint deploy destroy-all inventory-cloud ops ops-help ops-overview ops-services ops-costs ops-inventory ops-logs ops-test ops-shutdown ops-resume up down logs restart test migrate smoke tf-init tf-validate tf-plan
+.PHONY: start setup doctor validate fmt tflint deploy destroy-all destroy-all-with-secrets inventory-cloud ops ops-help ops-overview ops-services ops-costs ops-inventory ops-logs ops-test ops-shutdown ops-resume up down logs restart test migrate smoke tf-init tf-validate tf-plan test-deployment-contracts
 
 # Default entry point after cloning the repository.
 # It prepares the local environment, validates it, and starts the application.
@@ -48,6 +48,13 @@ deploy: setup doctor validate
 # Terraform states, stops local Compose stacks, then reports AWS resources still present.
 destroy-all:
 	bash scripts/destroy-all.sh
+
+# Destructive; exact confirmation and 7-day Secrets Manager recovery window.
+destroy-all-with-secrets:
+	bash scripts/destroy-all.sh --delete-project-secrets
+
+test-deployment-contracts:
+	bash scripts/test-deployment-contracts.sh
 
 # Non-destructive AWS inventory of this project's tagged/named resources.
 inventory-cloud:

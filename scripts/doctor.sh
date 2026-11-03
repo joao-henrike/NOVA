@@ -26,9 +26,13 @@ printf '%s\n' "CloudStart / NOVA environment doctor"
 printf '%s\n' "Repository: $ROOT_DIR"
 printf '%s\n\n' "Branch: $(git -C "$ROOT_DIR" branch --show-current)"
 
-test "$(git -C "$ROOT_DIR" branch --show-current)" = "Joao" \
-  && printf 'OK    %-18s Joao\n' "git-branch" \
-  || { printf 'FAIL  %-18s expected Joao\n' "git-branch"; failures=$((failures + 1)); }
+branch="$(git -C "$ROOT_DIR" branch --show-current)"
+if [[ "$branch" == "Joao" || "$branch" == "TESTE1" ]]; then
+  printf 'OK    %-18s %s\n' "git-branch" "$branch"
+else
+  printf 'FAIL  %-18s expected Joao or TESTE1\n' "git-branch"
+  failures=$((failures + 1))
+fi
 
 check "terraform" terraform version
 check "tflint" tflint --version
