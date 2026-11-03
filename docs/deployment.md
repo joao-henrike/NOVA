@@ -4,11 +4,14 @@
 
 ## 1. Prerequisites
 
+**TESTE1-specific KISS release/teardown procedure:** [TESTE1 deploy and teardown](TESTE1-DEPLOY-TEARDOWN.md). The full teardown creates and verifies manual RDS snapshots before any Terraform destroy; RDS snapshots and S3 state remain preserved. The optional `make destroy-all-with-secrets` schedules recoverable deletion of three exact application secrets. See the runbook before any destructive operation.
+
+
 For local validation and deployment, use:
 
 | Tool | Requirement |
 | --- | --- |
-| Git | Required; deployment is restricted to branch Joao. |
+| Git | Required; the local `make deploy` accepts branches `Joao` and `TESTE1`; GitHub-managed CD still uses `Joao`. |
 | Python | 3.12 or newer. |
 | Terraform | 1.16.4 (repository constraint >=1.16.4 and <1.17.0). |
 | AWS CLI | v2 recommended; authenticated to account 760396521507 for this development configuration. |
@@ -36,7 +39,7 @@ For a fresh development deployment, the preferred command is:
 make deploy
 ```
 
-The local deployment automation verifies branch `Joao` and the expected AWS account, creates the protected remote-state bucket when it is missing, provisions the restricted database secrets and backend authentication secret, initializes the canonical state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, registers new ECS task definitions without switching live frontend/backend services, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, activates the new application task revisions, preserves current running capacity (or uses the configured initial count), restores autoscaling bounds, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests. GitHub CD follows the same application sequence but uses verify-only state-bucket access and cannot create the state bucket. The local Makefile deployment and both GitHub workflows use the same provisioning scripts.
+The local deployment automation verifies branch `Joao` or `TESTE1` and the expected AWS account, creates the protected remote-state bucket when it is missing, provisions the restricted database secrets and backend authentication secret, initializes the canonical state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, registers new ECS task definitions without switching live frontend/backend services, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, activates the new application task revisions, preserves current running capacity (or uses the configured initial count), restores autoscaling bounds, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests. GitHub CD follows the same application sequence but uses verify-only state-bucket access and cannot create the state bucket. The local Makefile deployment and both GitHub workflows use the same provisioning scripts.
 
 The Grafana administrator password is generated locally by `scripts/deploy.sh` on first use and stored under `.deploy/`. This directory is ignored by Git. The database provisioner stores generated runtime/migrator password values only in AWS Secrets Manager; its local `.deploy/db-secret-arns.env` file contains ARNs only. The RDS master password remains managed by RDS and is injected only into the one-off role-bootstrap task.
 
