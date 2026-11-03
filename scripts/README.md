@@ -19,7 +19,11 @@ This folder contains local setup, validation, deployment, state-bootstrap, secre
 | `test-github-oidc-subject.sh` | Verifies the immutable GitHub owner/repository IDs and OIDC subject format against the repository contract. | Read-only checks. |
 | `deploy.sh` | End-to-end development deployment: validates account, prepares state/secrets, plans/applies infrastructure, builds/pushes immutable images, migrates, activates ECS, and smoke-tests. | **State-changing and potentially billable AWS operations.** |
 | `activate-application-services.sh` | Switches frontend/backend ECS services to the registered task revisions after migrations and runtime grants succeed, preserves current running capacity (or uses the configured initial count), restores autoscaling bounds, waits for stability, and verifies the active task-definition ARNs. | **Changes ECS task revisions and capacity.** Requires initialized Terraform state and AWS credentials. |
-| `destroy-all.sh` | Destroys resources tracked in the configured current/legacy states, stops local Compose stacks, then inventories remaining project resources. | **Destructive.** Requires exact account/region confirmation. Does not directly delete arbitrary untracked leftovers. |
+| `destroy-all.sh` | Creates/verifies RDS snapshots, destroys current/legacy states, removes local Compose and reports leftovers. | **Destructive.** Requires exact confirmation; keeps S3 state, snapshots and by default three external app secrets. |
+| `snapshot-rds-before-destroy.sh` | Creates/waits for manual RDS snapshots; starts stopped DBs if necessary. | May incur RDS and snapshot charges. |
+| `delete-project-secrets.sh` | Optionally schedules only three named application secrets for deletion. | 7-day recovery window. |
+| `check-application-plan.sh` | Rejects unexpected Terraform application plan changes; permits task-definition revisions. | Read-only. |
+| `test-deployment-contracts.sh` | Validates allowlist and mocked snapshot failure without AWS. | Local tests only. |
 | `run-gitleaks.sh` | Downloads a pinned Gitleaks binary with checksum verification and scans the Git repository. | Local/CI temporary files; no AWS operations. |
 | `extreme-checks.sh` | Shared GitHub Actions helper for recording independent validation results and skipped checks. | CI evidence files only; it does not provision AWS. |
 | `test-extreme-checks.sh` | Tests that complete, failed, and skipped validation results produce the correct blocking verdict. | Temporary test files only. |
@@ -65,13 +69,13 @@ Confirm the account is `760396521507` and the region is the intended development
 
 ## Destructive teardown
 
-The `destroy-all.sh` script requires the exact phrase:
+The `destroy-all.sh` script requires the exact phrase (append ` DELETE_SECRETS` for `make destroy-all-with-secrets`):
 
 ```text
 DESTROY cloudstart <actual-account-id> <aws-region>
 ```
 
-It inventories before teardown, destroys Terraform-managed resources across configured state keys, stops local Compose stacks, and inventories afterward. It preserves the remote state bucket and its versioned history. Any project resource outside the known Terraform states is reported rather than deleted through an arbitrary AWS API call.
+It inventories before teardown, preserves and verifies manual RDS snapshots, destroys Terraform-managed resources across configured state keys, stops local Compose stacks, and inventories afterward. Snapshot errors stop the destroy before it begins. Snapshots and S3 state are retained; the three external app secrets are retained unless optional recoverable deletion is confirmed. It preserves the remote state bucket and its versioned history. Any project resource outside the known Terraform states is reported rather than deleted through an arbitrary AWS API call.
 
 Do not use `destroy-all.sh` as a routine validation command. Read [Deployment and Operations](../docs/deployment.md) and inspect its implementation before approving a teardown.
 
