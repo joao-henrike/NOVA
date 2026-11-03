@@ -348,13 +348,14 @@ development-only public ALB HTTP ingress
 
 These exceptions are technical debt and must be removed as the corresponding controls are implemented.
 
-## Latest recorded validation evidence
+## Recorded validation evidence (dated snapshots)
 
-The following is a timestamped repository-run observation, not a claim about the current live AWS runtime:
+These are timestamped repository-run observations, not claims about the current live AWS runtime. The newest verified script-change CI evidence for TESTE1 is listed first; the prior OIDC run remains recorded for its partial-coverage diagnosis:
 
 | Workflow | Commit | Result | Interpretation |
 | --- | --- | --- | --- |
-| [NOVA CI](https://github.com/joao-henrike/NOVA/actions/runs/41148307768) | `3c72538750811476a8ddaf7a3880a8cd7a850e2d` | Success | All seven CI jobs completed successfully on the current branch head at the time of this evidence snapshot. |
+| [TESTE1 CI — deploy and teardown changes](https://github.com/joao-henrike/NOVA/actions/runs/41690248888) | `4ff8ebf6b144935a6038544483ec21083901e73d` | Success | Backend, container smoke, Terraform static validation, Compose, security, workflow contracts, and CodeQL passed. **No live AWS apply/destroy was performed.** |
+| [NOVA CI — historical Joao snapshot](https://github.com/joao-henrike/NOVA/actions/runs/41148307768) | `3c72538750811476a8ddaf7a3880a8cd7a850e2d` | Success | All seven CI jobs completed successfully on the current branch head at the time of this evidence snapshot. |
 | [NOVA — Extreme Validation](https://github.com/joao-henrike/NOVA/actions/runs/41148307721) | `3c72538750811476a8ddaf7a3880a8cd7a850e2d` | Failure; local checks passed, AWS coverage partial | Gitleaks, CodeQL, Trivy, and the exhaustive local validation step passed. The live AWS phase was blocked because `AWS_CD_ROLE_ARN` was empty; all nine AWS checks were skipped and the workflow correctly failed closed. |
 
 Run #272 did not verify the AWS identity, existing state-bucket ownership/access, remote Terraform initialization, or a live AWS plan. The bucket name is present in the tracked `config/dev.env`; the missing repository Actions variable was the observed blocker. The run does not establish that the role exists or that the AWS infrastructure is deployable.
