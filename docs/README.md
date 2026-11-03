@@ -1,6 +1,6 @@
 # NOVA documentation index
 
-This folder contains the project-wide operational and implementation documentation for the CloudStart MVP.
+This folder contains the project-wide operational and implementation documentation for the CloudStart MVP. **During the current deployment cycle, `TESTE1` is the operational branch and the [TESTE1 runbook](TESTE1-DEPLOY-TEARDOWN.md) is the sole step-by-step execution procedure.** Older commands in technical references are background context, not an alternative to the runbook.
 
 ## Start here
 
@@ -11,7 +11,6 @@ This folder contains the project-wide operational and implementation documentati
 | Verify what is implemented versus planned | [Current-state inventory](current-state.md) |
 | Prepare a local checkout or CloudShell | [Local development](local-development.md) |
 | Deploy, operate, inspect, or tear down development | [Deployment and operations](deployment.md) |
-| Deploy/destroy the TESTE1 branch safely | [TESTE1 deployment and teardown](TESTE1-DEPLOY-TEARDOWN.md) |
 | Operate live AWS services and inspect costs, inventory, and logs | [Cloud operations orchestrator](operations.md) |
 | Understand CI, CD, OIDC, release guards, and workflow evidence | [CI/CD](ci-cd.md) |
 | Review implemented security controls | [Security model](security.md) |
@@ -42,6 +41,7 @@ The preserved `CloudStart_MVP_Arquitetura_Atual.drawio.png` in the repository ro
 ## Documentation maintenance rules
 
 - Update the relevant folder README and the matching document in this folder whenever implementation behavior changes.
+- Keep one operational runbook for `TESTE1`; historical text is preserved in [archive/README-JOAO-HISTORICO.md](archive/README-JOAO-HISTORICO.md) and must not be used for AWS changes.
 - Keep default values aligned with `variables.tf`, `config/dev.tfvars`, `config/dev.env`, and workflow inputs.
 - Distinguish repository configuration, CI validation, and live AWS runtime observations. A Terraform resource or green local CI run does not prove a live AWS resource is healthy.
 - Label deferred features and accepted security exceptions; do not present roadmap items as implemented.
