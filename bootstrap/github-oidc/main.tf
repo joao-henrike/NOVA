@@ -6,6 +6,10 @@ locals {
   state_bucket_arn      = "arn:aws:s3:::${var.state_bucket_name}"
   state_object_arn      = "${local.state_bucket_arn}/${var.state_key}"
   state_lock_object_arn = "${local.state_bucket_arn}/${var.state_key}.tflock"
+  legacy_state_read_arns = [
+    "${local.state_bucket_arn}/cloudstart/redeploy-2026-10-08/terraform.tfstate",
+    "${local.state_bucket_arn}/cloudstart/terraform.tfstate",
+  ]
   ecr_repository_arns = [
     "arn:aws:ecr:${var.aws_region}:${data.aws_caller_identity.current.account_id}:repository/${local.name}-frontend",
     "arn:aws:ecr:${var.aws_region}:${data.aws_caller_identity.current.account_id}:repository/${local.name}-backend",
@@ -188,6 +192,13 @@ data "aws_iam_policy_document" "github_cd_permissions" {
     effect    = "Allow"
     actions   = ["s3:GetObject", "s3:PutObject"]
     resources = [local.state_object_arn]
+  }
+
+  statement {
+    sid       = "ReadOnlyLegacyStateInventory"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = local.legacy_state_read_arns
   }
 
   statement {
