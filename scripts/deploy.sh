@@ -50,6 +50,28 @@ actual_account="$(aws sts get-caller-identity --query Account --output text)"
 log "AWS account: $actual_account"
 log "AWS region : $AWS_REGION"
 
+IMAGE_TAG="${DEPLOY_TAG:-$(git rev-parse --short=12 HEAD)}"
+[[ "$IMAGE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]] || fatal "Invalid deployment image tag: $IMAGE_TAG."
+
+export TF_VAR_frontend_image_tag="$IMAGE_TAG"
+export TF_VAR_backend_image_tag="$IMAGE_TAG"
+
+log "Ensuring the protected Terraform state bucket exists"
+"$ROOT_DIR/scripts/ensure-terraform-state.sh"
+
+log "Initializing Terraform remote state"
+terraform init \
+  -backend-config="bucket=$TF_STATE_BUCKET" \
+  -backend-config="region=$AWS_REGION" \
+  -backend-config="key=$TF_STATE_KEY" \
+  -reconfigure \
+  -input=false \
+  -no-color
+
+# Read-only ownership audit comes before any secret provisioning or Terraform apply.
+log "Auditing live resources still owned by legacy Terraform states"
+python3 "$ROOT_DIR/scripts/check-cloud-state-ownership.py"
+
 mkdir -p "$SECRET_DIR"
 chmod 700 "$SECRET_DIR"
 
@@ -90,24 +112,6 @@ log "Provisioning backend JWT and optional OAuth configuration"
 source "$SECRET_DIR/backend-auth-secret-arn.env"
 [ -n "${BACKEND_AUTH_SECRET_ARN:-}" ] || fatal "Backend authentication secret ARN is missing."
 export TF_VAR_backend_auth_secret_arn="$BACKEND_AUTH_SECRET_ARN"
-
-IMAGE_TAG="${DEPLOY_TAG:-$(git rev-parse --short=12 HEAD)}"
-[[ "$IMAGE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]] || fatal "Invalid deployment image tag: $IMAGE_TAG."
-
-export TF_VAR_frontend_image_tag="$IMAGE_TAG"
-export TF_VAR_backend_image_tag="$IMAGE_TAG"
-
-log "Ensuring the protected Terraform state bucket exists"
-"$ROOT_DIR/scripts/ensure-terraform-state.sh"
-
-log "Initializing Terraform remote state"
-terraform init \
-  -backend-config="bucket=$TF_STATE_BUCKET" \
-  -backend-config="region=$AWS_REGION" \
-  -backend-config="key=$TF_STATE_KEY" \
-  -reconfigure \
-  -input=false \
-  -no-color
 
 APPLICATION_PLAN="/tmp/nova-application-$IMAGE_TAG.tfplan"
 APPLICATION_JSON="/tmp/nova-application-$IMAGE_TAG.json"

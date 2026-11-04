@@ -277,6 +277,10 @@ jobs:
       - name: Validate deploy and teardown contracts
         run: bash scripts/test-deployment-contracts.sh
 
+      - name: Check Terraform state ownership collision contracts
+        run: python3 scripts/test-cloud-state-ownership.py
+
+
       - name: Validate project cleanup script syntax
         run: bash -n scripts/destroy-all.sh
       - name: ShellCheck
