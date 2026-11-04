@@ -38,6 +38,8 @@ make deploy
 
 O script prepara secrets e state S3; aplica a infraestrutura base; publica imagens frontend/backend no ECR; registra revisões ECS; provisiona os papéis PostgreSQL; roda Alembic e grants; ativa as tarefas e faz smoke checks de ALB/API/Grafana.
 
+**Retomada de deploy parcial:** um State não vazio não prova que VPC, RDS, ECS ou ALB estejam completos. Quando **não existem serviços ECS de aplicação/monitoramento registrados no State**, o deploy sempre planeja uma reconciliação de baseline com refresh real, protegida por `scripts/check-baseline-plan.sh`. O guard permite criar recursos ausentes, atualizar exclusivamente a regra conhecida `alb_http[0]` e retirar somente as regras legadas `frontend_https`, `monitoring_db_all` e `rds_all`; outras modificações, exclusões e substituições abortam. Se já houver serviços ECS registrados, o baseline não será reaplicado automaticamente: alterações não previstas exigem análise. **Não apague nem recrie o State para contornar divergências.**
+
 O segundo plano do Terraform é validado por `scripts/check-application-plan.sh`. Somente mudanças enumeradas são permitidas. Substituições `create,delete` ou `delete,create` são permitidas para **cinco** ECS task definitions; deleções de ECS services, RDS ou recursos fora do escopo são bloqueadas. Planos fora da lista não devem ser contornados com `terraform apply` manual.
 
 Se a implantação falhar no meio, **a AWS pode continuar cobrando por recursos já criados**. Inspecione o state e o inventário antes de repetir o deploy.

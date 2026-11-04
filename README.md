@@ -64,7 +64,7 @@ Esses testes não executam `terraform apply` nem criam infraestrutura. **Se o `d
 make deploy
 ```
 
-O script verifica branch/conta, checkout Git limpo e state, provisiona segredos, aplica a infraestrutura base, publica imagens no ECR, prepara roles e migrações PostgreSQL, ativa ECS e executa verificações de saúde. Pode deixar recursos cobrados se uma etapa posterior falhar; **não há rollback universal automático**.
+O script verifica branch/conta, checkout Git limpo e state, faz reconciliação protegida da infraestrutura base quando o State está vazio ou parcial (sem serviços ECS registrados), provisiona segredos, publica imagens no ECR, prepara roles e migrações PostgreSQL, ativa ECS e executa verificações de saúde. Pode deixar recursos cobrados se uma etapa posterior falhar; **não há rollback universal automático**.
 
 ## 4. Operação, pausa e retomada
 

@@ -19,9 +19,40 @@ make_plan aws_db_instance.this '["update"]'; fail "RDS modification"
 make_plan aws_ecs_task_definition.backend '["delete"]'; fail "task deletion"
 make_plan aws_iam_role.unknown '["create"]'; fail "unexpected IAM"
 printf '{}' > "$tmp/plan.json"; fail "bad plan JSON"
+# Partial-state infrastructure baseline reconciliation: allow needed creates,
+# the one known ingress update and three retired egress rules only.
+baseline_guard="$ROOT/scripts/check-baseline-plan.sh"
+baseline_pass() { bash "$baseline_guard" "$tmp/plan.json" >/dev/null || { echo "Baseline should allow: $1" >&2; exit 1; }; }
+baseline_fail() { if bash "$baseline_guard" "$tmp/plan.json" >/dev/null 2>&1; then echo "Baseline should reject: $1" >&2; exit 1; fi; }
+make_plan aws_db_instance.this '["create"]'; baseline_pass "missing RDS create"
+make_plan aws_ecs_cluster.this '["create"]'; baseline_pass "missing ECS cluster create"
+make_plan aws_iam_role.ecs_execution '["create"]'; baseline_pass "missing IAM role create"
+make_plan 'aws_vpc_security_group_ingress_rule.alb_http[0]' '["update"]'; baseline_pass "legacy ALB ingress description"
+for obsolete in frontend_https monitoring_db_all rds_all; do
+  make_plan "aws_vpc_security_group_egress_rule.$obsolete" '["delete"]'
+  baseline_pass "retire known obsolete security rule $obsolete"
+done
+make_plan aws_db_instance.this '["delete"]'; baseline_fail "RDS deletion"
+make_plan aws_db_instance.this '["delete","create"]'; baseline_fail "RDS replacement"
+make_plan 'aws_lb.this[0]' '["delete"]'; baseline_fail "ALB deletion"
+make_plan aws_vpc.this '["update"]'; baseline_fail "unreviewed VPC update"
+make_plan aws_vpc_security_group_egress_rule.alb_to_frontend '["delete"]'; baseline_fail "unexpected security rule deletion"
+make_plan aws_ecs_service.frontend '["update"]'; baseline_fail "existing application service update"
+printf '{}' > "$tmp/plan.json"; baseline_fail "invalid baseline plan"
+jq -nc '{resource_changes:[
+  {mode:"managed",address:"aws_db_instance.this",change:{actions:["create"]}},
+  {mode:"managed",address:"aws_vpc.this",change:{actions:["delete"]}}
+]}' > "$tmp/plan.json"
+baseline_fail "mixed plan with unsafe deletion"
+
+# Reconciliation must refresh AWS to detect state drift, not trust a nonempty state.
+grep -q -- '-refresh=true' "$ROOT/scripts/deploy.sh"
+grep -q 'reconcile_baseline' "$ROOT/scripts/deploy.sh"
+grep -q "aws_ecs_service" "$ROOT/scripts/deploy.sh"
+
 bash -n "$ROOT/scripts/deploy.sh" "$ROOT/scripts/doctor.sh" \
   "$ROOT/scripts/destroy-all.sh" "$ROOT/scripts/snapshot-rds-before-destroy.sh" \
-  "$ROOT/scripts/delete-project-secrets.sh"
+  "$ROOT/scripts/delete-project-secrets.sh" "$ROOT/scripts/check-baseline-plan.sh"
 # Check the fail-closed RDS snapshot helper without AWS credentials.
 mkdir -p "$tmp/mock-bin"
 cat > "$tmp/mock-bin/aws" <<'MOCK'
