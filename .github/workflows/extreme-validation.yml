@@ -259,7 +259,7 @@ jobs:
       - name: CodeQL init
         id: codeql_init
         continue-on-error: true
-        uses: github/codeql-action/init@439137e1b50c27ba9e2f9befc93e43091b449c34
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           languages: python
 
