@@ -131,41 +131,52 @@ state_file="/tmp/nova-state-$IMAGE_TAG.txt"
 state_error="/tmp/nova-state-$IMAGE_TAG.err"
 rm -f "$state_file" "$state_error"
 
+# A state containing network or ECR resources is not proof that the baseline
+# is complete. Reconcile a partial baseline before building/pushing images.
+# Never use deploy_application=false to reconcile a state with application
+# services: doing so may alter active ECS service settings.
+reconcile_baseline() {
+  local baseline_plan="/tmp/nova-baseline-$IMAGE_TAG.tfplan"
+  local baseline_json="/tmp/nova-baseline-$IMAGE_TAG.json"
+
+  log "Planning safe infrastructure baseline reconciliation (refresh enabled)"
+  terraform plan \
+    -refresh=true \
+    -lock=true \
+    -input=false \
+    -no-color \
+    -var-file="$TFVARS_FILE" \
+    -var='deploy_application=false' \
+    -var="frontend_image_tag=$IMAGE_TAG" \
+    -var="backend_image_tag=$IMAGE_TAG" \
+    -out="$baseline_plan"
+
+  terraform show -json "$baseline_plan" > "$baseline_json"
+  bash "$ROOT_DIR/scripts/check-baseline-plan.sh" "$baseline_json"
+
+  if jq -e '[.resource_changes[]? | select(.mode == "managed")
+    | select(.change.actions != ["no-op"])] | length > 0' "$baseline_json" >/dev/null; then
+    log "Applying guarded infrastructure baseline reconciliation"
+    terraform apply -input=false -auto-approve "$baseline_plan"
+  else
+    log "Infrastructure baseline has no managed-resource changes"
+  fi
+}
+
 if terraform state list >"$state_file" 2>"$state_error"; then
-  if [ -s "$state_file" ]; then
-    log "Existing Terraform state detected; skipping fresh infrastructure baseline"
+  if grep -Eq '^aws_ecs_service\.(frontend|backend|monitoring)$' "$state_file"; then
+    log "State contains application/monitoring ECS services; skipping baseline to protect active workloads"
+    log "The application plan guard will reject infrastructure drift that requires separate reconciliation"
   else
-    fatal "Terraform state command succeeded but returned no resources."
+    log "No ECS services recorded in state; reconciling baseline even if other infrastructure exists"
+    reconcile_baseline
   fi
+elif grep -q "No state file was found" "$state_error"; then
+  log "No Terraform state found; creating guarded infrastructure baseline"
+  reconcile_baseline
 else
-  if grep -q "No state file was found" "$state_error"; then
-    log "No Terraform resources found; creating a fresh infrastructure baseline"
-
-    BASELINE_PLAN="/tmp/nova-baseline-$IMAGE_TAG.tfplan"
-    BASELINE_JSON="/tmp/nova-baseline-$IMAGE_TAG.json"
-
-    terraform plan \
-      -refresh=false \
-      -lock=true \
-      -input=false \
-      -no-color \
-      -var-file="$TFVARS_FILE" \
-      -var='deploy_application=false' \
-      -var="frontend_image_tag=$IMAGE_TAG" \
-      -var="backend_image_tag=$IMAGE_TAG" \
-      -out="$BASELINE_PLAN"
-
-    terraform show -json "$BASELINE_PLAN" > "$BASELINE_JSON"
-
-    BASELINE_DELETES="$(jq '[.resource_changes[]? | select(.mode == "managed") | select(any(.change.actions[]?; . == "delete"))] | length' "$BASELINE_JSON")"
-    [ "$BASELINE_DELETES" -eq 0 ] || fatal "Fresh baseline plan contains deletions."
-
-    log "Applying infrastructure baseline"
-    terraform apply -input=false -auto-approve "$BASELINE_PLAN"
-  else
-    cat "$state_error" >&2
-    fatal "Terraform state inspection failed."
-  fi
+  cat "$state_error" >&2
+  fatal "Terraform state inspection failed."
 fi
 
 frontend_repo="$(terraform output -raw frontend_ecr_repository_url)"
