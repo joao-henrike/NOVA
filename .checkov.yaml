@@ -1,0 +1,36 @@
+framework:
+  - terraform
+compact: true
+quiet: true
+soft-fail-on:
+  - LOW
+  - MEDIUM
+hard-fail-on:
+  - HIGH
+  - CRITICAL
+skip-check:
+  - CKV_AWS_119 # Terraform bootstrap DynamoDB compatibility table; CMK is deferred for MVP
+  - CKV_AWS_136 # ECR customer-managed KMS encryption is deferred for MVP
+  - CKV_AWS_91  # ALB access logging is deferred until centralized log storage is finalized
+  - CKV_AWS_150 # Deletion protection remains configurable and is disabled for development
+  - CKV_AWS_2   # Development ALB is HTTP-only until ACM/HTTPS is introduced
+  - CKV_AWS_353 # RDS Performance Insights deferred for the low-cost MVP profile
+  - CKV_AWS_129 # RDS log exports deferred pending centralized logging design
+  - CKV_AWS_161 # RDS IAM authentication is not required by the current application
+  - CKV_AWS_157 # RDS Multi-AZ is deferred because the current MVP is constrained to the low-cost/free-tier profile
+  - CKV_AWS_293 # RDS deletion protection remains configurable and is disabled for development
+  - CKV_AWS_118 # RDS Enhanced Monitoring deferred for the low-cost MVP profile
+  - CKV_AWS_149 # Secrets Manager customer-managed KMS key deferred for MVP
+  - CKV_AWS_260 # Public ALB HTTP listener is intentional for the current development MVP
+  - CKV_AWS_130 # Public subnets require public IP assignment for the internet-facing ALB/NAT design
+  - CKV2_AWS_62 # Terraform state bucket notifications are not required
+  - CKV2_AWS_30 # PostgreSQL query logging deferred pending centralized logging design
+  - CKV2_AWS_20 # Development ALB does not redirect HTTP until HTTPS/ACM is introduced
+  - CKV2_AWS_11 # VPC Flow Logs deferred pending centralized log destination and cost decision
+  - CKV_AWS_18 # S3 access logging deferred pending centralized logging/storage design
+  - CKV_AWS_378 # Development ALB uses HTTP intentionally until HTTPS/ACM is introduced
+  - CKV_AWS_144 # Cross-region state replication deferred until DR requirements are defined
+  - CKV_AWS_145 # Terraform state bucket CMK encryption deferred for MVP
+  - CKV2_AWS_57 # Secret rotation is deferred until rotation ownership/Lambda design is finalized
+  - CKV_AWS_103 # TLS configuration is deferred with HTTPS/ACM
+  - CKV2_AWS_28 # WAF is deferred until the public edge is hardened with HTTPS and application rules

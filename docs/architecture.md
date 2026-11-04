@@ -2,6 +2,12 @@
 
 > **Source of truth:** the Terraform configuration and application files in this repository snapshot. This document describes what the MVP actually declares. It does not incorporate future proposals.
 
+## Visual reference
+
+![CloudStart MVP architecture diagram](../CloudStart_MVP_Arquitetura_Atual.drawio.png)
+
+> This PNG is retained unchanged from the repository's `main` branch. It is a visual aid, not a substitute for the current Terraform definitions. When the image and code differ, the code and the implementation details below take precedence.
+
 ## 1. Architectural boundary
 
 The current repository implements a small web application platform on AWS:
@@ -104,7 +110,7 @@ ALB
 
 The listener's default action is the frontend target group. The backend path rule has priority 10.
 
-There is no HTTPS listener, ACM certificate, WAF, Route 53 record, or edge distribution in the current Terraform.
+The committed development configuration leaves `acm_certificate_arn` and `alb_domain_name` empty, so its active listener is HTTP on port 80 and it has no TLS termination. Terraform does define conditional HTTPS and HTTP-redirect listeners when an already-issued ACM certificate ARN and matching hostname are supplied. The stack does not issue certificates, validate domains, or create Route 53 records. WAF and an edge distribution are not implemented.
 
 ## 6. Frontend runtime
 
@@ -218,29 +224,30 @@ Current default:
 
 ```text
 PostgreSQL 16
-Multi-AZ: true
+Multi-AZ: false (Single-AZ for current cost profile)
 Publicly accessible: false
-Storage: gp3
+Storage: encrypted gp3
 20 GiB -> autoscaling up to 100 GiB
-Backup retention: 7 days
+Backup retention: 1 day by default
 ```
 
-The RDS security group accepts TCP 5432 from the backend security group.
+The application RDS security group accepts TCP 5432 from the backend HTTP security group and from the dedicated no-ingress database-tasks security group. The separate monitoring RDS accepts TCP 5432 only from the monitoring security group. Both RDS groups have no declared egress rules; security groups are stateful.
 
 ## 11. Security-group model
 
 The network boundary is explicit:
 
 ```text
-Internet -> ALB SG :80
+Internet -> ALB SG :80 (443 only when ACM is configured)
 ALB SG   -> Frontend SG :80
 ALB SG   -> Backend SG :8000
 ALB SG   -> Monitoring SG :3000
-Backend  -> RDS SG :5432
+Backend HTTP SG -> Application RDS SG :5432
+Database-tasks SG -> Application RDS SG :5432
 Monitoring SG -> Monitoring DB SG :5432
 ```
 
-The current resource definitions also permit TCP 443 outbound from the frontend/backend security groups and all outbound traffic from the RDS security group.
+Only the backend, monitoring, and one-off database-task security groups have declared HTTPS egress. The database-task SG has no ingress and only two egress paths: HTTPS and TCP 5432 to application RDS. Frontend and both RDS security groups have no declared egress rules. Return traffic is allowed by stateful security-group behavior.
 
 No component is assigned a public IP at the ECS task level.
 
@@ -248,18 +255,33 @@ No component is assigned a public IP at the ECS task level.
 
 ### ECS execution identities
 
-The application ECS execution role can:
+Each ECS task purpose has its own execution policy:
 
-```text
-Pull application images from the two ECR repositories
-Read the application RDS-managed secret
-```
+| Task | ECR scope | Secret access | CloudWatch Logs |
+|---|---|---|---|
+| Frontend | Frontend repository | None | Frontend log group only |
+| Backend HTTP | Backend repository | Runtime DB + backend auth JSON | Backend log group only |
+| DB bootstrap | Backend repository | RDS master + runtime + migrator secrets | Bootstrap log group only |
+| DB migration | Backend repository | Migrator secret only | Migration log group only |
+| Monitoring | Public monitoring images | Monitoring DB + Grafana admin | Monitoring log group only |
 
-A separate monitoring execution role can read only the monitoring RDS-managed secret and the Grafana administrator secret. This keeps application and monitoring credentials separated.
+Execution roles receive only `logs:CreateLogStream` and `logs:PutLogEvents` for their own log group; containers do not receive CloudWatch Logs read access. Task roles remain separate and empty of application AWS permissions.
 
 ### Task identities
 
-Separate frontend and backend task roles exist with no additional permissions in the current implementation.
+Separate frontend, backend, and monitoring task roles exist with no additional application AWS permissions in the current implementation. The one-off bootstrap and migration task definitions intentionally omit task_role_arn entirely, so their containers receive no ECS task-role credentials. Their separate execution roles handle only image pulls, workload-specific logs, and the exact startup secrets required by each task.
+
+### PostgreSQL identities
+
+Three database identities are used in AWS:
+
+| Identity | Use | Privilege boundary |
+|---|---|---|
+| `cloudstart_runtime` | Normal backend HTTP requests | DML and sequence usage only; cannot create/alter schema or read `alembic_version` |
+| `cloudstart_migrator` | One-off Alembic task | Owns application schema objects and performs schema changes |
+| RDS master (`cloudstart_admin`) | One-off bootstrap task only | Creates/updates the two restricted identities and reapplies runtime grants |
+
+Deployment order is bootstrap → Alembic migration → bootstrap again, so new tables/sequences receive runtime DML grants. The normal backend never receives the RDS master or migration credentials.
 
 ### Database password
 
@@ -297,11 +319,11 @@ lifecycle = keep 10 most recent images
 
 The current ECS task definitions reference the repository URL plus the configured tag.
 
-No ECR publication workflow exists in the current Container CI.
+Development CD publishes immutable SHA-tagged application images to ECR.
 
 ## 14. Monitoring and observability
 
-The current MVP uses a Dockerized Zabbix + Grafana monitoring plane instead of project-managed CloudWatch alarms, dashboard, log groups, and Container Insights.
+The current MVP separates operational telemetry from container logs: Zabbix + Grafana provide availability/monitoring views, while CloudWatch Logs centrally retains stdout/stderr from all ECS containers. Project-managed CloudWatch alarms and dashboards are not provisioned; ECS Container Insights is enabled at cluster level.
 
 ### Monitoring service
 
@@ -322,7 +344,7 @@ Grafana is the only monitoring UI exposed by the public ALB, through `/grafana/*
 
 Zabbix configuration/history is stored in a dedicated private PostgreSQL RDS instance. It is deliberately separate from the application RDS to preserve fault and access boundaries between the monitoring plane and the application data plane.
 
-The monitoring RDS instance is Multi-AZ, encrypted, backed up, and protected by a dedicated security group.
+The monitoring RDS instance is Single-AZ, encrypted, backed up with the current one-day default retention, and protected by a dedicated security group.
 
 ### What Zabbix can observe in the MVP
 
@@ -346,7 +368,7 @@ Grafana is configured to serve from the `/grafana/` subpath so it can sit behind
 
 ### Logging boundary
 
-The former ECS `awslogs` configuration and CloudWatch log groups are removed. Zabbix/Grafana are being used as the monitoring/visualization plane, not as a general-purpose centralized log archive. Application logs remain a separate concern and are not claimed as centrally retained by this MVP.
+All seven ECS containers use the `awslogs` driver and write to five Terraform-managed CloudWatch log groups: frontend, backend, bootstrap, migration, and monitoring. The three monitoring containers share the monitoring group with distinct stream prefixes. Retention is 7 days in development and 30 days in production. CloudWatch Logs uses its AWS-owned encryption key by default; no customer-managed KMS key or long-term S3 archive is configured. Zabbix/Grafana remain a separate metrics/availability plane, not the central log store.
 
 ### Kubernetes boundary
 
@@ -430,43 +452,50 @@ aws_dynamodb_table
 ## 16. Terraform state architecture
 
 ```text
-Bootstrap stack
+Bootstrap stack (local Terraform state)
       |
-      +--> S3 versioned/encrypted state bucket
+      +--> S3 bucket: versioning, SSE-S3, public access block,
+      |    ownership controls, secure transport policy, lifecycle
       |
-      +--> DynamoDB lock table
+      +--> DynamoDB compatibility table
       |
       v
 Root Terraform backend
       |
-      +--> key = cloudstart/terraform.tfstate
-      +--> use_lockfile = true
+      +--> bucket supplied at terraform init
+      +--> key = cloudstart/dev/terraform.tfstate
+      +--> encrypt = true
+      +--> use_lockfile = true (active lock mechanism)
 ```
 
-The bootstrap stack intentionally has no remote backend of its own.
+The bootstrap stack intentionally has no remote backend of its own. The DynamoDB table remains a compatibility resource; the root backend and current workflows do not use DynamoDB locking. The state helper verifies AWS account, bucket owner, and region before reusing an existing bucket or creating missing bootstrap resources.
 
 ## 17. CI architecture
 
 ```text
 Pull Request / main push
            |
-           +--------------------------+
-           |                          |
-           v                          v
- Terraform CI                 Container CI
-           |                          |
-   +-------+-------+           +------+------+
-   |       |       |           |     |      |
- fmt   validate  security    build scan  compose
-   |       |       |           |     |
-   +-------+-------+           +------+------+
+           v
+ Standard CI (tests, Terraform, scanners, Compose, containers)
+           |
+           +--> PR validation (no AWS OIDC)
+
+Push to Joao / manual dispatch
            |
            v
-     optional OIDC
-      Terraform plan
-```
+ Extreme validation (full local system + read-only AWS plan when OIDC is available)
 
-The repository currently has CI, not a complete CD pipeline.
+Push to Joao with runtime-artifact changes
+           |
+           v
+ Guarded Development CD (OIDC, saved-plan allowlist, migrations, 3-service wait, smoke tests)
+
+Manual rebuild (exact REBUILD confirmation)
+           |
+           v
+ Destructive dev teardown + rebuild
+
+The extreme workflow deliberately does not trigger on pull requests because its job needs `id-token: write` for live AWS validation. Standard CI remains the PR gate. There is no production deployment pipeline.
 
 ## 18. Local Compose topology
 
@@ -488,44 +517,40 @@ Compose uses PostgreSQL 17 while the default AWS RDS uses PostgreSQL 16. This mi
 
 ## 19. Availability and failure behavior actually encoded
 
-The current Terraform provides several resilience mechanisms:
+The current Terraform provides these resilience mechanisms:
 
 ```text
-Multiple AZs
+Multiple Availability Zones
    + public/private subnet separation
-   + NAT per AZ
+   + NAT per selected AZ
    + ECS placement spread by AZ
-   + configurable >=2 task deployment
-   + ALB health checks
+   + configurable >=2 frontend/backend tasks when deployment is enabled
+   + ALB target health checks
    + ECS container health checks
    + ECS service deployment circuit breaker
    + rollback on failed ECS deployment
-   + RDS Multi-AZ
-   + automated RDS backups
+   + automated RDS backups (one-day default retention)
 ```
 
-These are infrastructure/runtime controls. The repository does not yet contain tested RTO/RPO procedures, restore drills, chaos testing, or a separate DR environment.
+Both application and monitoring RDS instances are explicitly Single-AZ (multi_az = false) in the current development configuration. The repository does not yet contain tested RTO/RPO procedures, restore drills, chaos testing, or a separate DR environment.
 
 ## 20. What is deliberately not part of the current architecture
 
-The following resources/services do not exist in the current Terraform/application source and therefore are excluded from the current architecture:
+The following services/resources are not managed or implemented by the current Terraform/application source:
 
 ```text
-ACM
+ACM certificate issuance and validation
+Route 53 records / managed DNS
 WAF
-Route 53
 CloudFront
 API Gateway
 Lambda
-EC2/Auto Scaling Groups
-EKS/Kubernetes
-ElastiCache/Redis
-SQS
-SNS
-EventBridge
+EC2 / Auto Scaling Groups
+EKS / Kubernetes
+ElastiCache / Redis
+SQS / SNS / EventBridge
 Step Functions
 OpenSearch
-Secrets beyond the RDS-managed secret
 Customer-managed KMS keys
 VPC endpoints
 Multi-account organization
@@ -533,41 +558,46 @@ Cross-region DR
 On-premises connectivity
 Corporate AD integration
 Mobile application
-Financial core
-Payment provider integration
+Financial core / payment integration
 Audit Fabric
-Cost Intelligence / FinOps engine
+Cost Intelligence / FinOps
 Distributed tracing
 ```
+
+The ALB can use an already-issued ACM certificate if the operator supplies its ARN and the matching hostname. The committed development baseline leaves both values empty; certificate issuance, domain validation, and DNS are outside this stack.
+
+Secrets Manager entries for RDS, runtime/migrator database credentials, backend JWT/OAuth settings, and Grafana are part of the current architecture; the specific names and ownership are listed in docs/configuration-reference.md.
 
 ## 21. Architectural truth table
 
 | Concern | Current implementation |
 | --- | --- |
-| Public entry | ALB HTTP :80 |
+| Public entry | ALB HTTP :80 by default; optional ACM-backed HTTPS |
 | Compute | ECS/Fargate |
 | Application services | Frontend + Backend |
-| App networking | Private subnets |
+| App networking | Private subnets; tasks have no public IP |
 | Public network resources | ALB + NAT |
-| Database | RDS PostgreSQL Multi-AZ |
+| Database | Application and monitoring RDS PostgreSQL Single-AZ |
 | Database network | Private DB subnets |
-| Container registry | ECR |
-| Monitoring | Zabbix + Grafana containers |
-| Container metrics | Zabbix/Grafana monitoring containers |
-| Alarms | Zabbix/Grafana |
-| Secrets | RDS-managed Secrets Manager secret |
-| IAM | ECS execution + two empty task roles |
+| Container registry | ECR with immutable tags and scan-on-push |
+| Monitoring | Zabbix 7.4.15 + Grafana 13.2.3 containers |
+| ECS logs | Five CloudWatch log groups; 7d dev / 30d prod |
+| Container metrics | ECS Container Insights + configured Zabbix/Grafana checks |
+| Alarms | No project-managed CloudWatch alarms or notification routing |
+| Database identities | Runtime DML role + migrator role + RDS master bootstrap |
+| Secrets | RDS master + runtime + migrator + backend auth + Grafana |
+| IAM | Purpose-specific ECS execution roles; app task roles are empty; DB one-off tasks have no task role |
 | IaC | Terraform |
-| Remote state | S3 + S3 lockfile + bootstrap DynamoDB |
+| Remote state | S3 + S3 lockfile; bootstrap also creates compatibility DynamoDB table |
 | CI | GitHub Actions |
-| Automatic image publish | No |
-| Automatic ECS deployment | No |
-| HTTPS | No |
-| Application auth | No |
-| Business database schema | No |
+| Automatic development image publish | Yes, after CI |
+| Automatic development ECS deployment | Yes, guarded development-only CD |
+| Destructive development rebuild | Manual only, exact REBUILD confirmation |
+| Production deployment | Not implemented |
+| HTTPS default | Disabled; optional with external ACM certificate and DNS |
+| Application auth | Google + Apple provider integration |
+| Business database schema | No; technical Item/auth/session tables only |
 | Financial engine | No |
 | Audit Fabric | No |
 | FinOps engine | No |
 | Hybrid/on-prem | No |
-
-> Monitoring image choices were aligned with the current Zabbix 8.0 container documentation and Grafana documentation available at the time of this update.

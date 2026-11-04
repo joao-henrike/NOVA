@@ -5,7 +5,7 @@ output "aws_account_id" {
 
 output "aws_region" {
   description = "AWS region used for the deployment."
-  value       = data.aws_region.current.name
+  value       = data.aws_region.current.region
 }
 
 output "vpc_id" {
@@ -29,8 +29,24 @@ output "private_db_subnet_ids" {
 }
 
 output "alb_dns_name" {
-  description = "Public DNS name of the Application Load Balancer."
-  value       = aws_lb.this.dns_name
+  description = "AWS-generated public DNS name of the Application Load Balancer."
+  value       = var.enable_public_alb ? aws_lb.this[0].dns_name : null
+}
+
+output "alb_application_url" {
+  description = "Application base URL. Uses the configured HTTPS hostname when ACM is enabled, otherwise the development HTTP ALB DNS name."
+  value = (
+    !var.enable_public_alb ? null : (
+      var.acm_certificate_arn == ""
+      ? "http://${aws_lb.this[0].dns_name}/"
+      : "https://${var.alb_domain_name}/"
+    )
+  )
+}
+
+output "alb_domain_name" {
+  description = "Configured public hostname for HTTPS, or an empty string when TLS is not enabled."
+  value       = var.alb_domain_name
 }
 
 output "frontend_ecr_repository_url" {
@@ -58,6 +74,46 @@ output "backend_ecs_service_name" {
   value       = aws_ecs_service.backend.name
 }
 
+output "frontend_desired_task_count" {
+  description = "Configured frontend ECS desired task count used when activating an application release."
+  value       = var.frontend_desired_task_count
+}
+
+output "frontend_min_task_count" {
+  description = "Configured frontend ECS autoscaling minimum."
+  value       = var.frontend_min_task_count
+}
+
+output "frontend_max_task_count" {
+  description = "Configured frontend ECS autoscaling maximum."
+  value       = var.frontend_max_task_count
+}
+
+output "backend_desired_task_count" {
+  description = "Configured backend ECS desired task count used when activating an application release."
+  value       = var.backend_desired_task_count
+}
+
+output "backend_min_task_count" {
+  description = "Configured backend ECS autoscaling minimum."
+  value       = var.backend_min_task_count
+}
+
+output "backend_max_task_count" {
+  description = "Configured backend ECS autoscaling maximum."
+  value       = var.backend_max_task_count
+}
+
+output "backend_security_group_id" {
+  description = "Security group ID used by the backend HTTP ECS service."
+  value       = aws_security_group.backend.id
+}
+
+output "database_tasks_security_group_id" {
+  description = "No-ingress security group ID used by one-off database bootstrap and migration tasks."
+  value       = aws_security_group.database_tasks.id
+}
+
 output "frontend_task_definition_arn" {
   description = "Current frontend ECS task definition ARN."
   value       = aws_ecs_task_definition.frontend.arn
@@ -66,6 +122,16 @@ output "frontend_task_definition_arn" {
 output "backend_task_definition_arn" {
   description = "Current backend ECS task definition ARN."
   value       = aws_ecs_task_definition.backend.arn
+}
+
+output "db_bootstrap_task_definition_arn" {
+  description = "One-off ECS task definition that provisions application database roles using the RDS master secret."
+  value       = aws_ecs_task_definition.db_bootstrap.arn
+}
+
+output "db_migration_task_definition_arn" {
+  description = "One-off ECS task definition that applies Alembic migrations as the non-runtime migration role."
+  value       = aws_ecs_task_definition.db_migration.arn
 }
 
 output "rds_endpoint" {
@@ -92,8 +158,14 @@ output "rds_master_user_secret_arn" {
 
 
 output "grafana_url" {
-  description = "Grafana URL exposed through the current public ALB listener."
-  value       = "http://${aws_lb.this.dns_name}/grafana/"
+  description = "Grafana URL exposed through the configured public ALB listener."
+  value = (
+    !var.enable_public_alb ? null : (
+      var.acm_certificate_arn == ""
+      ? "http://${aws_lb.this[0].dns_name}/grafana/"
+      : "https://${var.alb_domain_name}/grafana/"
+    )
+  )
 }
 
 output "monitoring_ecs_service_name" {
@@ -104,4 +176,15 @@ output "monitoring_ecs_service_name" {
 output "monitoring_rds_endpoint" {
   description = "Private RDS endpoint used by the Zabbix monitoring database."
   value       = aws_db_instance.monitoring.endpoint
+}
+
+
+output "nat_gateways_enabled" {
+  description = "Whether per-AZ NAT Gateways and their public IPv4 allocations are currently declared."
+  value       = var.enable_nat_gateways
+}
+
+output "public_alb_enabled" {
+  description = "Whether the public ALB, listeners, and target groups are currently declared."
+  value       = var.enable_public_alb
 }

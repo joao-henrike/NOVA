@@ -1,21 +1,52 @@
 # CloudStart — Deployment and Operations Guide
 
-> This procedure describes only the deployment paths that the current repository actually supports. There is no automatic ECR publication or ECS deployment workflow in the current implementation.
+> **Technical reference, not a separate operational procedure.** The single runbook for this cycle is **[TESTE1 deploy/teardown](TESTE1-DEPLOY-TEARDOWN.md)**. The manual `terraform apply`, image-build and older `Joao` sections below explain implementation/recovery details, **not** a substitute for `make deploy`/`make destroy-all`. GitHub Actions OIDC/CD remains restricted to `Joao`. Production deploy is outside the current automation.
 
 ## 1. Prerequisites
 
-Required locally:
+**TESTE1-specific KISS release/teardown procedure:** [TESTE1 deploy and teardown](TESTE1-DEPLOY-TEARDOWN.md). The full teardown creates and verifies manual RDS snapshots before any Terraform destroy; RDS snapshots and S3 state remain preserved. The optional `make destroy-all-with-secrets` schedules recoverable deletion of three exact application secrets. See the runbook before any destructive operation.
 
-```text
-Terraform 1.16.4
-AWS CLI
-Docker
-Docker Compose
-```
 
-An AWS identity with permissions to create the Terraform-managed resources is required for local Terraform apply operations.
+For local validation and deployment, use:
+
+| Tool | Requirement |
+| --- | --- |
+| Git | Required; the local `make deploy` accepts branches `main`, `Joao` and `TESTE1`; GitHub-managed CD still uses `Joao`. |
+| Python | 3.12 or newer. |
+| Terraform | 1.16.4 (repository constraint >=1.16.4 and <1.17.0). |
+| AWS CLI | v2 recommended; authenticated to account 760396521507 for this development configuration. |
+| Docker | Working daemon, Buildx, and Compose plugin. |
+| jq | Required by deployment plan guards and scripts. |
+| curl | Required for endpoint smoke tests. |
+| unzip | Required by the local setup bootstrap. |
+
+Run make setup and make doctor to prepare/check the local toolchain. The bootstrap does not install jq, and make doctor checks it explicitly. Checkov and pip-audit are CI-only tools and are not part of the default local setup.
+
+An AWS identity with permissions to inspect the account, manage the remote-state bootstrap, provision the required Secrets Manager entries, and create/update the Terraform-managed development resources is required for local `make deploy`. The GitHub CD workflow uses the dedicated OIDC role described in [CI/CD](ci-cd.md), and that role verifies an already-existing state bucket rather than bootstrapping it. Neither path stores AWS access keys in the repository.
 
 ## 2. Repository defaults
+
+The development environment now has repository-owned non-sensitive configuration:
+
+```text
+config/dev.tfvars
+config/dev.env
+```
+
+For a fresh development deployment, the preferred command is:
+
+```bash
+make deploy
+```
+
+The local deployment automation verifies branch `Joao` or `TESTE1` and the expected AWS account, creates the protected remote-state bucket when it is missing, provisions the restricted database secrets and backend authentication secret, initializes the canonical state key, creates the infrastructure baseline, builds and pushes immutable frontend/backend images, registers new ECS task definitions without switching live frontend/backend services, bootstraps database roles, runs Alembic as the migrator role, reapplies runtime grants, activates the new application task revisions, preserves current running capacity (or uses the configured initial count), restores autoscaling bounds, waits for ECS stability, and performs ALB/API/database/Grafana smoke tests. GitHub CD follows the same application sequence but uses verify-only state-bucket access and cannot create the state bucket. The local Makefile deployment and both GitHub workflows use the same provisioning scripts.
+
+The Grafana administrator password is generated locally by `scripts/deploy.sh` on first use and stored under `.deploy/`. This directory is ignored by Git. The database provisioner stores generated runtime/migrator password values only in AWS Secrets Manager; its local `.deploy/db-secret-arns.env` file contains ARNs only. The RDS master password remains managed by RDS and is injected only into the one-off role-bootstrap task.
+
+The backend authentication secret is created once in AWS Secrets Manager. A strong JWT signing key is generated automatically; existing JWT material is preserved on later deploys. Google and Apple OAuth values are optional and can be supplied through matching environment variables locally or as secrets in the GitHub `development` Environment. Configure every field for a provider or leave that provider unused. The provisioner never prints secret values or writes them to the repository.
+
+The automation does not authenticate GitHub or store GitHub credentials.
+
 
 Unless overridden through Terraform variables or a `.tfvars` file, the current defaults include:
 
@@ -26,7 +57,8 @@ aws_region                = us-east-1
 availability_zone_count   = 2
 vpc_cidr                  = 10.20.0.0/16
 deploy_application        = false
-frontend_image_tag        = v0.1.0
+
+frontend_image_tag        = v0.1.1
 backend_image_tag         = v0.1.0
 frontend_desired_count    = 2
 backend_desired_count     = 2
@@ -36,10 +68,19 @@ frontend_max_count        = 6
 backend_max_count         = 6
 db_engine_version          = 16
 db_instance_class          = db.t4g.micro
-db_backup_retention        = 7 days
+db_backup_retention         = 1 day
+monitoring_db_backup_retention = 1 day
 ```
 
-The effective ECS desired/minimum count is zero while `deploy_application = false`.
+`make deploy` temporarily overrides the committed `deploy_application=false` baseline after ECR repositories and new images exist.
+
+The effective ECS desired/minimum count follows the configured desired/minimum values while `deploy_application = true`; when it is false, frontend/backend desired and minimum counts are zero. The monitoring service remains at one task.
+
+The development release path sets `start_application_services = false` during Terraform apply. That registers new frontend/backend task definitions while leaving existing service revisions untouched; on first deployment, application services remain at zero tasks. After database bootstrap, Alembic migrations, and post-migration runtime grants succeed, `scripts/activate-application-services.sh` switches the two services to the new task revisions and restores configured desired/minimum/maximum capacity.
+
+Terraform intentionally ignores subsequent ECS service `task_definition` and `desired_count` changes because application rollout is coordinated by the deployment helper. Use `make deploy` or the supported GitHub deployment workflow rather than expecting a standalone `terraform apply` to roll out a new application image.
+
+Migrations must remain backward-compatible with the currently running backend during the migration phase (expand/contract: add schema first, switch application code, remove obsolete schema only in a later release). Do not drop or rename a database object still used by the currently active service in the same release that introduces its replacement.
 
 ## 3. Local application validation
 
@@ -76,7 +117,21 @@ docker compose down
 
 Persistent local PostgreSQL data is stored in the Compose volume `postgres_data`.
 
-## 4. Terraform formatting and validation
+## 4. Safe teardown and resource inventory
+
+**Official procedure:** [TESTE1 runbook](TESTE1-DEPLOY-TEARDOWN.md). Do **not** use standalone `terraform destroy` as an alternative; it bypasses pre-destroy RDS snapshot safeguards.
+
+```bash
+make inventory-cloud              # read-only AWS inventory; state bucket must be reachable
+make destroy-all                 # saves and verifies manual RDS snapshots first
+make destroy-all-with-secrets    # optional, recoverable 7-day deletion of 3 named app secrets
+```
+
+The script verifies AWS identity and remote state, requires exact confirmation, inventories resources, creates and waits for manual snapshots of both named development RDS databases **before any Terraform destroy**, starts stopped DBs if needed, and fails closed on snapshot errors. It then destroys current and configured legacy state resources, cleans local Compose resources and inventories unexpected leftovers.
+
+**Intentionally preserved:** versioned S3 state backend, manual pre-destroy RDS snapshots and, by default, three application secrets created outside Terraform. The opt-in command schedules deletion only of those three secrets with seven-day recovery. Unknown resources outside known states are reported, not indiscriminately deleted; costs may remain.
+
+## 5. Terraform formatting and validation
 
 Root stack:
 
@@ -93,22 +148,22 @@ terraform -chdir=bootstrap init -backend=false -input=false
 terraform -chdir=bootstrap validate
 ```
 
-The GitHub Actions workflow performs these validation steps automatically for matching changes.
+The standard CI workflow performs these static validation steps automatically for matching changes. The separate `extreme-validation.yml` workflow performs a broader full-system validation with independent checks and preserved evidence.
 
-## 5. Bootstrap the remote state
+## 6. Bootstrap the remote state
 
-Create a local bootstrap variable file from the example:
+The normal deployment path runs `scripts/ensure-terraform-state.sh` automatically. It verifies the AWS account and bucket owner, reuses an existing bucket in the expected region, and creates the protected bootstrap resources only when the bucket is genuinely missing. It refuses to create resources when bucket ownership or access cannot be verified.
+
+For manual recovery, copy the example variable file:
 
 ```bash
 cp bootstrap/terraform.tfvars.example bootstrap/terraform.tfvars
 ```
 
-Set a globally unique S3 bucket name in `bootstrap/terraform.tfvars`.
-
-Then:
+Set a globally unique bucket name matching `TF_STATE_BUCKET` in `config/dev.env`, then run:
 
 ```bash
-terraform -chdir=bootstrap init
+terraform -chdir=bootstrap init -backend=false
 terraform -chdir=bootstrap validate
 terraform -chdir=bootstrap plan
 terraform -chdir=bootstrap apply
@@ -123,22 +178,21 @@ DynamoDB table for state-lock compatibility
 
 The bootstrap stack uses local state by design.
 
-## 6. Initialize the root backend
+## 7. Initialize the root backend
 
-After the bootstrap succeeds:
+After the bucket exists (the deployment script also performs this initialization automatically):
 
 ```bash
 terraform init \
   -backend-config="bucket=$(terraform -chdir=bootstrap output -raw state_bucket_name)" \
   -backend-config="region=$(terraform -chdir=bootstrap output -raw region)" \
-  -backend-config="dynamodb_table=$(terraform -chdir=bootstrap output -raw lock_table_name)" \
   -reconfigure
 ```
 
-The root backend uses the state key:
+The root backend uses the canonical development state key:
 
 ```text
-cloudstart/terraform.tfstate
+cloudstart/dev/terraform.tfstate
 ```
 
 It enables:
@@ -148,7 +202,7 @@ use_lockfile = true
 encrypt      = true
 ```
 
-## 7. Plan the root infrastructure
+## 8. Plan the root infrastructure
 
 Before application deployment:
 
@@ -156,9 +210,11 @@ Before application deployment:
 terraform plan
 ```
 
-The plan should declare the infrastructure and application control plane, while the ECS services remain configured for zero running tasks because `deploy_application` is false by default.
+The plan should declare the infrastructure and application control plane, while the ECS services remain configured for zero running tasks because `deploy_application` is false in the committed baseline. The one-command deployment overrides this only after the ECR/image phase.
 
-## 8. Apply the infrastructure baseline
+## 9. Apply the infrastructure baseline — technical reference only
+
+> For TESTE1, this is a stage of the guarded `make deploy` script. Do not run a standalone apply to bypass its protections.
 
 ```bash
 terraform apply
@@ -181,25 +237,21 @@ IAM roles/policy
 Zabbix/Grafana monitoring task + monitoring RDS + Grafana ALB route
 ```
 
-## 9. Build the application images
+## 10. Build the application images
 
 Build the same images used by the repository's Container CI:
 
-### Frontend
+Use an immutable tag for a manual recovery build. A full Git commit SHA avoids collisions with immutable ECR tags and follows the same image-identity convention as automated development releases:
 
 ```bash
-docker build -t cloudstart/frontend:v0.1.0 apps/frontend
+IMAGE_TAG="$(git rev-parse HEAD)"
+docker build --pull -t "cloudstart-dev-frontend:$IMAGE_TAG" apps/frontend
+docker build --pull -t "cloudstart-dev-backend:$IMAGE_TAG" apps/backend
 ```
 
-### Backend
+The development CD workflow builds, scans, and publishes application images automatically. The manual commands below remain useful for local/operator recovery.
 
-```bash
-docker build -t cloudstart/backend:v0.1.0 apps/backend
-```
-
-The repository does not contain an image-publication script. Publishing is a manual/operator step in the current MVP.
-
-## 10. Authenticate Docker to ECR
+## 11. Authenticate Docker to ECR
 
 After obtaining the repository URLs from Terraform outputs, authenticate Docker to the target ECR registry using the AWS CLI.
 
@@ -212,25 +264,25 @@ aws ecr get-login-password --region <region> \
 
 This command pattern is an operational procedure; the repository does not hardcode a live AWS account ID.
 
-## 11. Tag and push images
+## 12. Tag and push images
 
-Tag the local images with the immutable ECR repository URLs:
+Tag the local images with the immutable ECR repository URLs. Use the exact tag that was used to build each image:
 
 ```bash
-docker tag cloudstart/frontend:v0.1.0 <frontend_ecr_repository_url>:v0.1.0
-docker tag cloudstart/backend:v0.1.0 <backend_ecr_repository_url>:v0.1.0
+docker tag "cloudstart-dev-frontend:$IMAGE_TAG" "$(terraform output -raw frontend_ecr_repository_url):$IMAGE_TAG"
+docker tag "cloudstart-dev-backend:$IMAGE_TAG" "$(terraform output -raw backend_ecr_repository_url):$IMAGE_TAG"
 ```
 
 Push:
 
 ```bash
-docker push <frontend_ecr_repository_url>:v0.1.0
-docker push <backend_ecr_repository_url>:v0.1.0
+docker push "$(terraform output -raw frontend_ecr_repository_url):$IMAGE_TAG"
+docker push "$(terraform output -raw backend_ecr_repository_url):$IMAGE_TAG"
 ```
 
 The current ECR repositories reject tag mutation because they are configured with immutable tags.
 
-## 12. Enable the ECS application
+## 13. Enable the ECS application
 
 Set:
 
@@ -251,7 +303,7 @@ terraform apply
 
 At this point the ECS desired/minimum counts become the configured non-zero values, defaulting to two tasks for each service.
 
-## 13. Validate the ALB path
+## 14. Validate the ALB path
 
 Get the ALB DNS output:
 
@@ -259,14 +311,34 @@ Get the ALB DNS output:
 terraform output -raw alb_dns_name
 ```
 
-The current public listener is HTTP:
+The committed development baseline uses HTTP. Its base URL is:
 
 ```bash
-ALB_DNS="$(terraform output -raw alb_dns_name)"
-curl -i "http://${ALB_DNS}/"
-curl -i "http://${ALB_DNS}/api/health"
-curl -i "http://${ALB_DNS}/api/health/db"
+terraform output -raw alb_application_url
 ```
+
+For an HTTPS deployment, configure both Terraform variables in a protected environment-specific tfvars file before planning:
+
+```hcl
+acm_certificate_arn = "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
+alb_domain_name     = "app.example.com"
+```
+
+The ACM certificate must already be issued in the same region as the ALB and cover `alb_domain_name`. Configure the DNS provider to point that hostname to the ALB DNS name returned by `terraform output -raw alb_dns_name`; DNS records and certificate issuance are intentionally outside this stack.
+
+With both values configured, port 443 serves the frontend, backend API, and Grafana, while port 80 redirects to HTTPS. With both empty, the HTTP-only development listener is retained and port 443 remains closed. The backend sets `AUTH_COOKIE_SECURE=true` when HTTPS is enabled (and always for `prod`); it uses `false` for the HTTP development listener so browser session cookies work in that non-production environment. Hosted OAuth requires registered callback URLs; Apple web sign-in requires HTTPS.
+
+Validate the configured public path:
+
+```bash
+APP_URL="$(terraform output -raw alb_application_url)"
+curl -i "${APP_URL}"
+curl -i "${APP_URL}api/health"
+curl -i "${APP_URL}api/health/db"
+curl -i "${APP_URL}grafana/"
+```
+
+When TLS is enabled, also confirm the port-80 response is HTTP 301 and that the certificate hostname matches `alb_domain_name`.
 
 Expected routing:
 
@@ -274,11 +346,12 @@ Expected routing:
 /                 -> frontend
 /api/health       -> backend
 /api/health/db    -> backend -> PostgreSQL connectivity check
+/grafana/         -> Grafana
 ```
 
-The current implementation does not expose HTTPS on the ALB.
+This is optional Terraform support only. It does not mean a certificate, DNS record, or HTTPS endpoint has already been provisioned.
 
-## 14. Operational checks
+## 15. Operational checks
 
 ### ECS
 
@@ -298,10 +371,12 @@ Verify:
 
 ```text
 available state
-Multi-AZ configuration
-backup retention
-storage
+dev baseline: Single-AZ (multi_az=false)
+backup retention (1 day by default)
+storage and autoscaling
 ```
+
+Multi-AZ is a production hardening target, not enabled in the current low-cost dev configuration.
 
 ### Zabbix/Grafana
 
@@ -317,14 +392,13 @@ Zabbix server/web health
 monitoring PostgreSQL availability
 ```
 
-## 15. What the current repository does not automate
+## 16. What the current repository does not automate
 
 The following operations are not automatically performed:
 
 ```text
-Build and push application images to ECR
-Update ECS service task definitions from a Git push
-Deploy automatically to ECS
+Production image publication
+Production ECS deployment
 Notify alarm recipients
 Create a WAF configuration
 Create TLS certificates
@@ -333,28 +407,13 @@ Run a full DR test
 Run a restore drill
 ```
 
-## 16. Safe destroy considerations
+## 17. Safe destroy considerations
 
-The current defaults set:
+Dev Terraform defaults disable ALB/RDS deletion protection and configure `skip_final_snapshot`. **Use only [the TESTE1 teardown runbook](TESTE1-DEPLOY-TEARDOWN.md)** for infrastructure deletion: `make destroy-all` adds the mandatory manual RDS snapshot step before running Terraform. Standalone `terraform destroy` bypasses that protection.
 
-```text
-ALB deletion protection  = false
-RDS deletion protection  = false
-```
+The script retains the remote S3 backend and manual RDS snapshots even when a teardown otherwise succeeds. Review the post-destroy `.deploy/destroy-all-*/` logs and reports. For production, review backup retention and deletion protection separately.
 
-For non-production environments, the RDS resource is configured to skip the final snapshot.
-
-For `prod`, the resource configures a final snapshot identifier.
-
-Before destroying infrastructure, inspect:
-
-```bash
-terraform plan
-```
-
-For production, explicitly review backup and deletion-protection implications before applying destructive changes.
-
-## 17. Bootstrap state care
+## 18. Bootstrap state care
 
 The bootstrap stack's local state is security-sensitive because it describes the remote-state infrastructure.
 
@@ -369,26 +428,23 @@ secret material
 
 The repository `.gitignore` is intended to keep Terraform runtime artifacts and local secret/config files out of Git.
 
-## 18. Current deployment model summary
+## 19. Current deployment model summary
 
 ```text
 Developer
    |
    +--> GitHub PR / push
    |       |
-   |       +--> Terraform CI
-   |       +--> Container CI
+   |       +--> NOVA CI
    |
-   +--> Local docker build
-   |
-   +--> Manual ECR push
-   |
-   +--> Set deploy_application=true
-   |
-   +--> terraform plan/apply
-   |
-   v
-ECS services run application tasks
+   +--> Development CD on Joao
+           |
+           +--> Build/scan
+           +--> ECR
+           +--> Terraform application plan/apply
+           +--> ECS
+           +--> migrations
+           +--> smoke tests
 ```
 
 This is the deployment model supported by the current repository. It is intentionally more conservative than a fully automated production CD pipeline.
@@ -412,7 +468,7 @@ After applying Terraform, the `grafana_url` output points to the monitoring UI e
 http://<alb-dns>/grafana/
 ```
 
-The public ALB listener remains HTTP-only in the current MVP. HTTPS/ACM is still outside the current implementation.
+The committed development configuration is HTTP-only because its ACM inputs are empty. Terraform can enable HTTPS and redirect HTTP when an already-issued certificate ARN and matching hostname are supplied; certificate issuance, DNS, and domain validation remain operator-managed.
 
 ### Local Docker monitoring
 
@@ -445,3 +501,99 @@ GET /api/health/db
 ```
 
 This gives end-to-end coverage of the load balancer, frontend, backend and database path without requiring Kubernetes or host-level agent assumptions.
+
+
+## 20. Rebuild development directly from GitHub
+
+For a complete development rebuild, use the dedicated GitHub Actions workflow:
+
+```text
+Actions
+  -> NOVA - Rebuild Development From Scratch
+  -> Run workflow
+  -> confirmation = REBUILD
+```
+
+The workflow runs only through `workflow_dispatch` and is intentionally destructive. A normal push to `Joao` cannot trigger it.
+
+The workflow uses GitHub OIDC for AWS authentication and does not require AWS access keys in the repository.
+
+The rebuild performs:
+
+```text
+Checkout Joao
+     ↓
+Verify AWS account
+     ↓
+Destroy canonical dev state
+     ↓
+Destroy legacy state:
+  cloudstart/redeploy-2026-10-08/terraform.tfstate
+  cloudstart/terraform.tfstate
+     ↓
+Verify old CloudStart named resources are absent
+     ↓
+Initialize clean canonical state
+     ↓
+Terraform create-only plan
+     ↓
+Apply complete infrastructure baseline
+     ↓
+Build + push frontend/backend images
+     ↓
+Activate ECS application
+     ↓
+Wait for ECS stability
+     ↓
+Run Alembic migrations
+     ↓
+ALB/API/DB/Grafana smoke tests
+```
+
+The state bucket itself is intentionally retained because it is the Terraform state infrastructure, not part of the ephemeral CloudStart application environment.
+
+Required GitHub configuration for normal, non-destructive application CD:
+
+```text
+Repository Actions variable: AWS_CD_ROLE_ARN
+GitHub Environment: development (deployment branch restricted to Joao)
+GitHub Environment secret: GRAFANA_ADMIN_PASSWORD
+```
+
+The manual destructive rebuild is deliberately separate:
+
+```text
+Repository Actions variable: AWS_REBUILD_ROLE_ARN
+GitHub Environment: development-rebuild (Joao only; required reviewers recommended)
+Workflow input: confirmation must be exactly REBUILD
+```
+
+Do not reuse the non-destructive CD role for rebuild. The rebuild workflow uses its own trust relationship and IAM policy. Optional OAuth secrets must be placed in the GitHub Environment used by the workflow that needs them: `development` for normal CD or `development-rebuild` for rebuild. `TF_STATE_BUCKET` may be set as a repository variable; otherwise workflows use the committed development bucket name.
+
+The normal CD role can verify the existing state bucket and read/write only the canonical Terraform state object and lock file; it cannot create the bucket or the bootstrap compatibility resource. Create/verify the bucket first with the local state-bootstrap path. The role's trust and permission policy are maintained in `bootstrap/github-oidc/main.tf`, and it can manage only the required project-scoped application resources and three named application secrets.
+
+The rebuild workflow generates a fresh temporary Grafana administrator password and passes it to Terraform as a sensitive variable. The value is explicitly registered for GitHub Actions log masking before it is added to the job environment; Terraform stores the value in AWS Secrets Manager during a successful rebuild.
+
+## 21. Automated development CD
+
+Pushes to the `Joao` branch that change application code trigger `.github/workflows/deploy-dev.yml`.
+
+Before enabling the deployment job, configure `AWS_CD_ROLE_ARN` as a repository Actions variable and `GRAFANA_ADMIN_PASSWORD` as a secret in the `development` GitHub Environment. Restrict that Environment to branch `Joao`. `TF_STATE_BUCKET` is optional because the workflow has a committed development default, but the bucket itself must already exist. Optional Google/Apple OAuth secrets must be stored in the `development` Environment. The CD workflow passes `config/dev.tfvars` and explicit activation overrides to Terraform.
+
+The manual destructive rebuild is independent: it requires `AWS_REBUILD_ROLE_ARN`, the `development-rebuild` Environment, and the exact `REBUILD` confirmation input. Keep that Environment restricted to `Joao` and protected with required reviewers. Neither workflow should reuse the other's AWS role.
+
+AWS authentication uses GitHub OIDC. The CD workflow rejects an AWS account other than `760396521507`.
+
+The extreme validation workflow that performs live AWS checks is not triggered by pull requests; it runs only on the `Joao` branch (push or manual dispatch). This keeps the job-level OIDC permission away from untrusted PR execution contexts. CI remains the mandatory PR validation path.
+
+The workflow applies only a previously generated Terraform plan whose non-no-op resources are within the explicit application delivery allowlist: frontend/backend/monitoring task definitions and services, frontend/backend autoscaling targets, dedicated ECS execution roles and policies, the no-ingress database-task security group and its rules, and the five workload CloudWatch log groups. Any unlisted resource change or destructive action stops the release.
+
+The workflow provisions/reuses the runtime, migrator, and backend JWT/OAuth Secrets Manager values before planning. The AWS CD role therefore needs `secretsmanager:DescribeSecret`, `GetSecretValue`, `CreateSecret`, and `PutSecretValue` scoped to those three development secrets. Existing JWT signing material is preserved; supplied non-empty OAuth fields are merged without deleting saved values.
+
+All ECS task stdout/stderr is sent to CloudWatch Logs through Terraform-managed groups. Retention is 7 days in development and 30 days in production; each ECS execution role can create streams and write events only to its workload's group.
+
+After ECS activation it runs three private Fargate tasks in order: database role bootstrap (master login), Alembic migrations (migrator login), then database role bootstrap again (to grant runtime DML access on all post-migration objects). Those one-off tasks use a dedicated no-ingress security group, have no ECS task role (and therefore receive no task-role AWS credentials), and allow only PostgreSQL and HTTPS egress. Their execution roles are limited to image pulls, their own logs, and the exact startup secrets required by each task. The normal HTTP backend task receives only the runtime login. The CD plan guard allows only the application/database/monitoring task definitions and services, their dedicated execution policies, the database-task network rules, and the CloudWatch log groups; unrelated changes and all deletes still fail the guard.
+
+Development deploy and rebuild workflows share one non-cancelling concurrency group so Terraform destroy/apply and secret provisioning cannot overlap.
+
+No production deployment is implied by this development workflow.

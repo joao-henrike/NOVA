@@ -50,7 +50,9 @@ Current groups:
 cloudstart-<env>-alb-sg
 cloudstart-<env>-frontend-sg
 cloudstart-<env>-backend-sg
+cloudstart-<env>-monitoring-sg
 cloudstart-<env>-rds-sg
+cloudstart-<env>-monitoring-db-sg
 ```
 
 ### Allowed ingress
@@ -59,19 +61,26 @@ cloudstart-<env>-rds-sg
 Internet -> ALB :80
 ALB     -> Frontend :80
 ALB     -> Backend  :8000
+ALB     -> Grafana  :3000
 Backend -> RDS      :5432
+Monitoring -> Monitoring RDS :5432
 ```
 
 ### Current egress
 
 ```text
-Frontend -> Internet :443
-Backend  -> Internet :443
-Backend  -> RDS     :5432
-RDS      -> Internet :all
+ALB             -> Frontend :80
+ALB             -> Backend  :8000
+ALB             -> Grafana  :3000
+Backend         -> Internet :443
+Backend         -> App RDS  :5432
+Database tasks  -> Internet :443
+Database tasks  -> App RDS  :5432
+Monitoring      -> Monitoring RDS :5432
+Monitoring      -> Internet :443
 ```
 
-These egress rules are the actual current configuration; no stronger future restriction should be documented as already implemented.
+The frontend and both RDS security groups have no declared egress rules. Security groups are stateful, so return traffic for allowed inbound/initiated connections is automatically permitted; RDS does not need unrestricted outbound access to reply to PostgreSQL clients. The frontend serves static assets and has no runtime external HTTPS dependency.
 
 ## 4. ECS public exposure
 
@@ -99,7 +108,7 @@ The backend Dockerfile:
 
 ### Frontend
 
-The frontend uses the Alpine-based Nginx image and defines a container health check.
+The frontend uses the Alpine-based Nginx image and defines a container health check. Its HTML loads JavaScript and CSS only from local static files; inline scripts/styles were removed so the browser can enforce a restrictive Content Security Policy. Production and local Nginx both send `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`, `form-action 'self'`, same-origin scripts/styles/connections, `nosniff`, `DENY` framing, `no-referrer`, and a restrictive Permissions Policy. The frontend has no external CDN, analytics, font, image, or script dependency.
 
 The repository does not currently configure advanced container runtime controls such as read-only root filesystems, capability dropping, or image signing in the ECS task definitions.
 
@@ -124,13 +133,13 @@ RDS is configured with:
 
 - private subnets;
 - `publicly_accessible = false`;
-- Multi-AZ;
+- Single-AZ in the current low-cost environment (`multi_az = false`);
 - storage encryption;
 - automated backups;
 - storage autoscaling;
 - automatic minor version upgrades.
 
-The RDS security group accepts PostgreSQL 5432 only from the backend security group.
+The application RDS security group accepts PostgreSQL 5432 from the backend HTTP security group and the dedicated database-task security group. The monitoring RDS accepts 5432 only from the monitoring security group. Both RDS instances are Single-AZ in the current low-cost configuration.
 
 The current code does not define a customer-managed KMS key for RDS.
 
@@ -142,26 +151,28 @@ The RDS resource sets:
 manage_master_user_password = true
 ```
 
-The backend receives the password through ECS secret injection.
+The RDS master password is injected only into the one-off database role-bootstrap task. It is not present in the normal backend HTTP task definition.
 
-No application password is hardcoded in the backend source.
+The normal backend task uses the dedicated `cloudstart_runtime` PostgreSQL login. Its password comes from the external Secrets Manager secret referenced by `db_runtime_secret_arn`. The Alembic task uses `cloudstart_migrator`, with a different secret referenced by `db_migrator_secret_arn`. Terraform stores only these ARNs, never the secret values.
+
+Bootstrap and migration tasks run with a dedicated security group that has no ingress rules. Its egress is restricted to TCP 5432 toward the application RDS security group and HTTPS toward AWS image/secret services through the private-subnet NAT route. It does not reuse the backend HTTP security group and cannot receive ALB traffic.
+
+The bootstrap task has a separate ECS execution role and is the only application task permitted to read the RDS-managed master secret. It revokes database-level `CONNECT` and `TEMPORARY` from `PUBLIC`, clears all direct database ACLs on the runtime and migrator logins, then grants `CONNECT` explicitly to those two logins. Neither application login receives database-level `TEMPORARY`. It creates/updates the restricted PostgreSQL roles, removes inherited role memberships from both application logins, transfers application tables/sequences/views and non-extension routines to the migrator, and reconciles both direct and `PUBLIC` ACLs before granting runtime DML/sequence access. Existing `SECURITY DEFINER` routines are owned by the migrator and do not retain `PUBLIC EXECUTE`. Bootstrap also reconciles global and schema-specific default privileges for tables, sequences and functions, clearing grants to both `PUBLIC` and the runtime login so future Alembic objects cannot inherit stale access. The runtime login cannot create temporary tables, access migration metadata, or inherit unrelated role privileges. The deployment process runs bootstrap, Alembic, then bootstrap again to grant runtime DML privileges on newly-created tables and sequences.
+
+JWT and Google/Apple OAuth settings remain injected from a separate Secrets Manager JSON secret when `backend_auth_secret_arn` is configured. The backend deployment guard requires all three application secret ARNs when `deploy_application = true`.
+
+No application password or OAuth credential is hardcoded in the backend source.
 
 The repository's local Compose file does contain a development-only password literal. It is explicitly labeled as local development and is not wired into the AWS stack.
 
 ## 9. IAM model
 
-The monitoring workload has a separate ECS execution role from the application workloads. The application role can read only the application RDS-managed secret, while the monitoring execution role reads the monitoring database secret and the Grafana administrator secret.
+The frontend ECS execution role is ECR-pull-only. The normal backend execution role reads only its runtime database secret and backend authentication secret. The migration execution role reads only the migrator secret. The one-off database bootstrap execution role reads the RDS master secret plus the runtime/migrator password secrets. The monitoring execution role reads only the monitoring database and Grafana administrator secrets.
 
 
-The ECS execution role has only the permissions needed for the current task startup/runtime integration:
+The frontend and backend HTTP services use separate task roles with no application AWS permissions. The one-off database bootstrap and migration task definitions intentionally omit `task_role_arn` entirely, so their containers receive no ECS task-role credentials. ECR image pulls, CloudWatch log delivery, and startup-time Secrets Manager injection are handled by their narrowly scoped task execution roles; those execution-role credentials are not exposed to the application process.
 
-```text
-ECR image pull
-Zabbix/Grafana log write
-Secrets Manager secret read
-```
-
-Frontend and backend task roles are separate but empty of application permissions.
+All ECS containers use the `awslogs` driver. Frontend, backend, database bootstrap, database migration, and monitoring workloads write to separate Terraform-managed CloudWatch log groups. Each execution role receives only `logs:CreateLogStream` and `logs:PutLogEvents` for its own group; no container receives CloudWatch Logs read permissions. Retention is 7 days in development and 30 days in production. The ECS task execution roles do not need `logs:CreateLogGroup` because the groups are created by Terraform.
 
 This means the current MVP does not grant the application arbitrary AWS APIs.
 
@@ -196,19 +207,22 @@ Gitleaks
 
 The optional Terraform Plan path uses GitHub OIDC instead of long-lived AWS credentials stored in the workflow.
 
-There is no corresponding automated production-deployment OIDC path in the current workflows.
+The extreme full-system validation workflow is deliberately limited to pushes on `Joao` and manual runs on that branch. It does not run on pull requests: its live AWS step requires `id-token: write` to assume the development role, so excluding untrusted PR contexts prevents PR code from inheriting AWS OIDC capability. Ordinary pull requests continue to receive the non-AWS CI validation. The AWS step consumes the real `steps.aws_oidc.outcome` value and stops before any AWS API call if role assumption fails.
+
+The current OIDC deployment path is restricted to the development environment. There is intentionally no automated production-deployment OIDC path.
 
 ## 12. Current public security limitations
 
-Because the current ALB has an HTTP listener on port 80, the current MVP does not provide HTTPS/TLS termination.
+The committed development baseline has both `acm_certificate_arn` and `alb_domain_name` empty, so that baseline is HTTP-only and does not provide TLS termination.
+
+Terraform supports an optional HTTPS mode when an operator supplies an already-issued ACM certificate in the ALB's AWS region and the hostname covered by that certificate. In that mode, the ALB listens on 443 and redirects HTTP 80 to HTTPS. The repository does not issue certificates, complete domain validation, or create DNS records. Until the operator configures and applies those prerequisites, HTTPS must not be described as an active protection.
 
 There is also no current:
 
 ```text
 WAF
-ACM certificate
 CloudFront
-Route 53
+Route 53 resources managed by this stack
 API Gateway
 ```
 
@@ -216,18 +230,35 @@ These must not be described as current protections.
 
 ## 13. Application security limitations
 
-The current backend does not implement:
+The current backend implements:
 
 ```text
-User authentication
-Authorization/RBAC
+PostgreSQL-backed authentication rate limits shared across ECS tasks
+Google authentication
+Apple authentication
+OAuth state validation
+OIDC nonce validation
+Provider subject IDs as canonical account identity
+Verified provider claims as the only email source
+Apple browser profile data accepted for display name only
+CloudStart access tokens bound to refresh-token families
+Refresh-token rotation and reuse detection
+Session-family revocation
+Immediate rejection of access tokens after family revocation
+Bounded pruning of expired refresh-token records while retaining unexpired replay history
+```
+
+Apple's browser-posted `user` object is not a signed identity assertion. The backend reads only its optional display name and never uses its email field; account email is accepted only from the provider's verified ID-token claim. Unverified addresses do not reserve the unique account email. All `/api/*` responses use `Cache-Control: no-store`, `Pragma: no-cache`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`, including user-scoped item data and health responses. This prevents private API responses from being cached by browsers or intermediaries. Cookie-based refresh and logout additionally require an exact same-origin `Origin`/`Host` match (and HTTPS outside local development), preventing a same-site sibling subdomain from rotating or revoking a user's session with a cross-origin request. API clients that provide the refresh token explicitly in the JSON body do not need browser-origin metadata. Refresh-token records are pruned opportunistically in batches of at most 100 rows when a new token is issued or rotated. Revoked tokens remain available for replay detection only until their own expiry; once expired, they cannot authorize a refresh or trigger a delayed family revocation, and their records are removed.
+
+The current backend still does not implement:
+
+```text
+RBAC/role permissions beyond owner-scoped Item access
 MFA
-Session management
-Account security workflows
-Rate limiting
 Payment security controls
 Financial transaction controls
 Business-level audit logging
+Interactive account-linking workflow
 ```
 
 The current endpoints are infrastructure/application health and information endpoints rather than a complete user-facing business API.
@@ -238,7 +269,7 @@ The monitoring plane is now Zabbix + Grafana, both containerized. Grafana is the
 
 The Zabbix database has a dedicated security group and private RDS placement. Application RDS access is not granted to the monitoring task as part of the current MVP; end-to-end database health is observed through the backend `/api/health/db` path.
 
-The former `awslogs`/CloudWatch logging path is removed. Zabbix/Grafana are the monitoring and visualization plane, not a centralized immutable application-log archive. This MVP therefore makes no claim of durable centralized application-log retention.
+Zabbix/Grafana provide monitoring and visualization. ECS container stdout/stderr is separately centralized in five Terraform-managed CloudWatch log groups using the `awslogs` driver. The monitoring task's three containers share one group with distinct stream prefixes. Retention is 7 days in development and 30 days in production; CloudWatch Logs uses its AWS-owned encryption key. This is short-retention operational logging, not a long-term immutable audit archive.
 
 ## 15. Security controls that are intentionally not claimed
 
@@ -274,3 +305,21 @@ What is the rollback path?
 ```
 
 The repository's PR template provides the first level of this review discipline.
+
+
+### Authentication rate limiting
+
+The backend applies fixed-window quotas to authentication endpoints. Counters are stored in PostgreSQL with atomic upserts, so ECS replicas share the same limits rather than maintaining independent in-memory counters.
+
+| Scope | Limit | Window |
+|---|---:|---:|
+| OAuth login start | 10 requests | 5 minutes |
+| OAuth callbacks | 20 requests | 5 minutes |
+| Refresh | 30 requests | 5 minutes |
+| Logout | 60 requests | 5 minutes |
+
+Blocked requests return HTTP 429 with a Retry-After header and a generic response body. Bucket keys are HMACs derived from the application signing secret and the endpoint scope/client address; raw client IP addresses are not stored. Buckets older than one day are pruned during authentication requests.
+
+In non-local environments, client address extraction uses the final address in X-Forwarded-For. The ALB explicitly sets `xff_header_processing_mode = "append"` and `enable_xff_client_port = false`, so it appends the peer address as a plain IP. Backend tasks accept traffic only from the ALB security group. Do not change the ALB to `preserve` or `remove`, expose the backend directly, or trust arbitrary forwarding headers from another ingress path.
+
+These limits are a baseline abuse-control measure, not a substitute for AWS WAF, bot management, account-level risk controls, or alerting. The quotas are fixed defaults in application code and should be tuned using real traffic before a public launch.

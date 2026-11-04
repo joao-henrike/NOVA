@@ -14,6 +14,7 @@ crash.*.log
 *.tfvars.json
 !terraform.tfvars.example
 !bootstrap/terraform.tfvars.example
+!config/dev.tfvars
 
 # Terraform override files
 override.tf
@@ -50,7 +51,20 @@ Thumbs.db
 tfdoc/
 .tmp/
 
+# Local bootstrap environment and downloaded CLI tools
+.deploy/
+.tools/
+.venv/
+.tflint.d/
+
 # Python / Node artifacts if auxiliary tooling is added later
+# Python test coverage reports
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+coverage.txt
+htmlcov/
 __pycache__/
 *.py[cod]
 node_modules/
@@ -61,3 +75,6 @@ node_modules/
 *.p12
 *.pfx
 secrets/
+
+# Audit generated reports
+nova-audit-*/
