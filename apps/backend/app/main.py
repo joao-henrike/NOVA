@@ -1,45 +1,36 @@
-import os
+from fastapi import FastAPI, Request
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
-import psycopg
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from app.api.routes.auth import router as auth_router
+from app.api.routes.health import router as health_router
+from app.api.routes.items import router as items_router
 
-app = FastAPI(title="CloudStart Backend", version="0.1.0")
+app = FastAPI(
+    title="CloudStart Backend",
+    version="0.2.0",
+    description="CloudStart application API.",
+)
 
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.get("/api/health")
-def api_health() -> dict[str, str]:
-    return {"status": "ok", "service": "backend"}
-
-
-@app.get("/api/info")
-def info() -> dict[str, str]:
-    return {
-        "service": "backend",
-        "environment": os.getenv("APP_ENV", "unknown"),
-    }
+app.include_router(auth_router)
+app.include_router(health_router)
+app.include_router(items_router)
 
 
-@app.get("/api/health/db")
-def database_health() -> JSONResponse:
-    required = ["DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"]
-    if any(not os.getenv(key) for key in required):
-        return JSONResponse(status_code=503, content={"status": "degraded"})
+@app.middleware("http")
+async def secure_api_responses(
+    request: Request,
+    call_next: RequestResponseEndpoint,
+) -> Response:
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
-    try:
-        with psycopg.connect(
-            host=os.environ["DB_HOST"],
-            port=int(os.environ["DB_PORT"]),
-            dbname=os.environ["DB_NAME"],
-            user=os.environ["DB_USER"],
-            password=os.environ["DB_PASSWORD"],
-            connect_timeout=3,
-        ):
-            return JSONResponse(content={"status": "ok", "database": "reachable"})
-    except psycopg.Error:
-        return JSONResponse(status_code=503, content={"status": "degraded"})
+
+@app.get("/", tags=["root"])
+def root() -> dict[str, str]:
+    return {"service": "cloudstart-backend", "status": "ok"}

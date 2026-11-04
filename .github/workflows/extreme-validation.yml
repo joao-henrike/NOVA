@@ -1,0 +1,367 @@
+name: NOVA - Extreme Validation
+
+on:
+  push:
+    branches: [Joao]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nova-extreme-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  extreme:
+    name: Extreme Full-System Validation
+    if: github.ref == 'refs/heads/Joao'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cloudstart
+          POSTGRES_USER: cloudstart_admin
+          POSTGRES_PASSWORD: postgres-extreme-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cloudstart_admin -d cloudstart"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      AWS_REGION: us-east-1
+      EXPECTED_AWS_ACCOUNT_ID: "760396521507"
+      AWS_CD_ROLE_ARN: ${{ vars.AWS_CD_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'cloudstart-nova-terraform-state-760396521507' }}
+      DATABASE_URL: postgresql+psycopg://cloudstart_admin:postgres-extreme-ci-only@127.0.0.1:5432/cloudstart
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: cloudstart
+      DB_USER: cloudstart_admin
+      DB_PASSWORD: postgres-extreme-ci-only
+      AUTH_JWT_SECRET_KEY: extreme-ci-only-signing-secret-with-more-than-32-characters
+      AUTH_COOKIE_SECURE: "false"
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: "3.12"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+        with:
+          terraform_version: "1.16.4"
+          terraform_wrapper: false
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a
+        with:
+          tflint_version: "0.64.0"
+          checksums: "cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537"
+          cache: true
+
+      - name: Initialize evidence
+        run: source scripts/extreme-checks.sh; init_checks
+
+      - name: Load deployment metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          source config/dev.env
+          {
+            echo "AWS_REGION=$AWS_REGION"
+            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED_AWS_ACCOUNT_ID"
+            echo "TF_STATE_BUCKET=$TF_STATE_BUCKET"
+          } >> "$GITHUB_ENV"
+          password="validation-$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          {
+            echo "GRAFANA_ADMIN_PASSWORD<<EOF"
+            printf '%s\n' "$password"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+          unset password
+
+      - name: Execute exhaustive local validation
+        continue-on-error: true
+        shell: bash
+        run: |
+          # shellcheck disable=SC2016
+          source scripts/extreme-checks.sh
+
+          echo "### BACKEND"
+          run_check backend_dependency_install python -m pip install --upgrade pip
+          run_check backend_dependencies python -m pip install -r apps/backend/requirements.txt -r apps/backend/requirements-dev.txt
+          run_check backend_install_pip_audit python -m pip install --disable-pip-version-check --no-warn-script-location pip-audit==2.10.1
+          run_check backend_pip_check pip check
+          run_check backend_compile python -m compileall -q apps/backend/app apps/backend/tests
+          run_check backend_ruff ruff check apps/backend/app apps/backend/tests
+          run_check backend_mypy mypy apps/backend/app
+          run_check backend_bandit bandit -r apps/backend/app -lll -iii
+          run_check backend_pip_audit pip-audit --local
+          run_check backend_migration_upgrade bash -c 'cd apps/backend && alembic upgrade head'
+          run_check backend_migration_drift bash -c 'cd apps/backend && alembic check'
+          run_check backend_migration_rollback bash -c 'cd apps/backend && alembic downgrade base && alembic upgrade head'
+          run_check backend_migration_roundtrip bash -c 'cd apps/backend && alembic check'
+          run_check backend_pytest bash -c 'cd apps/backend && pytest -q'
+
+          echo "### FRONTEND"
+          run_check frontend_build docker build --pull -t "nova-extreme-frontend:$GITHUB_SHA" apps/frontend
+          run_check frontend_nginx_config docker run --rm "nova-extreme-frontend:$GITHUB_SHA" nginx -t
+          run_check frontend_runtime bash -c 'cid=$(docker run -d -p 18080:80 "nova-extreme-frontend:$GITHUB_SHA"); trap "docker rm -f $cid >/dev/null 2>&1 || true" EXIT; for _ in $(seq 1 30); do curl --fail --silent http://127.0.0.1:18080/health >/dev/null && curl --fail --silent http://127.0.0.1:18080/ >/dev/null && break; sleep 2; done; curl --fail --silent http://127.0.0.1:18080/styles.css | grep -q "color-scheme" && curl --fail --silent http://127.0.0.1:18080/app.js | grep -q "fetch" && headers=$(curl --fail --silent --dump-header - --output /dev/null http://127.0.0.1:18080/) && printf "%s" "$headers" | grep -qi "^content-security-policy:.*script-src .self." && printf "%s" "$headers" | grep -qi "^x-content-type-options: nosniff"'
+          run_check frontend_html_contract python3 -c 'from pathlib import Path; from html.parser import HTMLParser; t=Path("apps/frontend/public/index.html").read_text(); p=HTMLParser(); p.feed(t); assert "<title>CloudStart</title>" in t; assert "<script src=\"/app.js\" defer></script>" in t; assert "<link rel=\"stylesheet\" href=\"/styles.css\">" in t; assert "<script>" not in t and "<style>" not in t; assert Path("apps/frontend/public/app.js").is_file() and Path("apps/frontend/public/styles.css").is_file()'
+          run_check frontend_nginx_contract bash -c 'for f in apps/frontend/nginx.conf apps/frontend/nginx.local.conf; do grep -q "location = /health" "$f" && grep -q "try_files" "$f" && grep -q "Content-Security-Policy" "$f" && grep -q "X-Content-Type-Options" "$f" && grep -q "Referrer-Policy" "$f" || exit 1; done'
+
+          echo "### COMPOSE"
+          printf '%s\n' 'services:' '  postgres:' '    ports: !reset []' > "$RUNNER_TEMP/compose-ci-override.yml"
+          run_check app_compose_config docker compose -p nova-extreme-app -f docker-compose.yml config --quiet
+          run_check monitoring_compose_config docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml config --quiet
+          run_check app_compose_build docker compose -p nova-extreme-app -f docker-compose.yml build --pull
+          run_check app_compose_up docker compose -p nova-extreme-app -f docker-compose.yml -f "$RUNNER_TEMP/compose-ci-override.yml" up -d
+          run_check app_compose_smoke bash -c 'for _ in $(seq 1 45); do curl --fail --silent http://127.0.0.1:8080/ >/dev/null && curl --fail --silent http://127.0.0.1:8080/api/health >/dev/null && curl --fail --silent http://127.0.0.1:8080/api/health/db >/dev/null && exit 0; sleep 2; done; docker compose -p nova-extreme-app -f docker-compose.yml -f "$RUNNER_TEMP/compose-ci-override.yml" ps; docker compose -p nova-extreme-app -f docker-compose.yml -f "$RUNNER_TEMP/compose-ci-override.yml" logs --no-color; exit 1'
+          run_check app_compose_auth_contract bash -c 'status=$(curl --silent --output /tmp/items.json --write-out "%{http_code}" http://127.0.0.1:8080/api/items); test "$status" = "401"'
+          run_check monitoring_compose_up docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml up -d
+          run_check grafana_smoke bash -c 'for _ in $(seq 1 60); do curl --fail --silent http://127.0.0.1:3000/api/health >/dev/null && exit 0; sleep 3; done; exit 1'
+          run_check zabbix_web_smoke bash -c 'for _ in $(seq 1 60); do curl --fail --silent http://127.0.0.1:8081/ >/dev/null && exit 0; sleep 3; done; exit 1'
+          run_check compose_cleanup bash -c 'docker compose -p nova-extreme-app -f docker-compose.yml -f "$RUNNER_TEMP/compose-ci-override.yml" down -v --remove-orphans; docker compose -p nova-extreme-monitoring -f docker-compose.monitoring.yml down -v --remove-orphans'
+
+          echo "### TERRAFORM"
+          run_check terraform_fmt terraform fmt -check -recursive -diff
+          run_check terraform_root_init terraform init -backend=false -input=false -no-color
+          run_check terraform_root_validate terraform validate -no-color
+          run_check terraform_bootstrap_init terraform -chdir=bootstrap init -backend=false -input=false -no-color
+          run_check terraform_bootstrap_validate terraform -chdir=bootstrap validate -no-color
+          run_check terraform_github_oidc_init terraform -chdir=bootstrap/github-oidc init -backend=false -input=false -no-color
+          run_check terraform_github_oidc_validate terraform -chdir=bootstrap/github-oidc validate -no-color
+          run_check terraform_tflint_init tflint --init --config .tflint.hcl
+          run_check terraform_tflint_root tflint --config .tflint.hcl --format compact
+          run_check terraform_tflint_bootstrap bash -c 'cd bootstrap && tflint --config ../.tflint.hcl --format compact'
+          run_check terraform_tflint_github_oidc bash -c 'cd bootstrap/github-oidc && tflint --config ../../.tflint.hcl --format compact'
+          run_check terraform_graph_setup bash -c 'rm -rf "$RUNNER_TEMP/tf-graph" && mkdir -p "$RUNNER_TEMP/tf-graph" && rsync -a --exclude=.git --exclude=.terraform --exclude=backend.tf ./ "$RUNNER_TEMP/tf-graph/" && terraform -chdir="$RUNNER_TEMP/tf-graph" init -backend=false -input=false -no-color'
+          run_check terraform_graph bash -c 'terraform -chdir="$RUNNER_TEMP/tf-graph" graph'
+          run_check terraform_dev_tfvars test -s config/dev.tfvars
+          run_check terraform_dev_env test -s config/dev.env
+          run_check terraform_plan_contract bash -c 'grep -q "deploy_application" variables.tf && grep -q "frontend_image_tag" variables.tf && grep -q "backend_image_tag" variables.tf'
+
+          echo "### SECURITY"
+          run_check security_checkov bash -c 'python3 -m pip install --disable-pip-version-check --no-warn-script-location checkov==3.3.8 && checkov -d . --config-file .checkov.yaml'
+          run_check security_shellcheck shellcheck --severity=error -x ./*.sh scripts/*.sh
+          run_check security_git_diff git diff --check
+
+          echo "### REPOSITORY CONTRACT"
+          run_check repository_expected_files bash -c 'for f in Makefile README.md docs/README.md docs/configuration-reference.md apps/frontend/README.md apps/backend/README.md bootstrap/README.md scripts/README.md scripts/activate-application-services.sh scripts/bootstrap-github-oidc-role.sh scripts/test-github-oidc-subject.sh scripts/test-extreme-checks.sh scripts/ensure-terraform-state.sh scripts/provision-db-credentials.sh scripts/provision-backend-auth-secret.sh .terraform.lock.hcl .tflint.hcl .checkov.yaml backend.tf providers.tf variables.tf locals.tf main.tf vpc.tf security_groups.tf ecr.tf ecs.tf ecs_services.tf iam.tf rds.tf monitoring.tf outputs.tf config/dev.env config/dev.tfvars terraform.tfvars.example cloudwatch_logs.tf bootstrap/main.tf bootstrap/variables.tf bootstrap/providers.tf bootstrap/outputs.tf bootstrap/github-oidc/main.tf bootstrap/github-oidc/variables.tf bootstrap/github-oidc/providers.tf bootstrap/github-oidc/outputs.tf bootstrap/github-oidc/README.md bootstrap/github-oidc/.terraform.lock.hcl .github/workflows/ci.yml .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml .github/workflows/extreme-validation.yml; do test -f "$f" || { echo "missing: $f"; exit 1; }; done'
+          run_check repository_no_private_keys bash -c '! git grep -nE "BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY|aws_secret_access_key|AWS_SECRET_ACCESS_KEY|ghp_[A-Za-z0-9]{20,}" -- . ":!.github/workflows/extreme-validation.yml"'
+          run_check repository_dev_tfvars_no_secrets bash -c '! grep -nEi "^[[:space:]]*(password|secret|token|private_key|access_key)[[:space:]]*=" config/dev.tfvars'
+          run_check repository_canonical_state bash -c 'grep -q "cloudstart/dev/terraform.tfstate" backend.tf config/dev.env .github/workflows/deploy-dev.yml .github/workflows/rebuild-dev.yml'
+          run_check root_backend_uses_canonical_state_key bash -c 'grep -q "key          = \"cloudstart/dev/terraform.tfstate\"" backend.tf && ! grep -Eq "key[[:space:]]*=[[:space:]]*\"cloudstart/terraform.tfstate\"" backend.tf'
+          run_check repository_tfvars_contract bash -c 'grep -oE "variable[[:space:]]+\"[A-Za-z0-9_]+\"" variables.tf | sed -E "s/.*\"([A-Za-z0-9_]+)\"/\\1/" | sort -u > "$RUNNER_TEMP/declared-vars"; sed -nE "s/^([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=.*/\\1/p" config/dev.tfvars | sort -u > "$RUNNER_TEMP/config-vars"; comm -13 "$RUNNER_TEMP/declared-vars" "$RUNNER_TEMP/config-vars" > "$RUNNER_TEMP/unknown-vars"; test ! -s "$RUNNER_TEMP/unknown-vars"'
+          run_check repository_git_diff git diff --check
+
+          echo "### GITHUB ACTIONS CONTRACT"
+          run_check workflow_yaml_parse ruby -e 'require "yaml"; Dir[".github/workflows/*.yml"].sort.each { |f| YAML.load_file(f); puts "parsed #{f}" }'
+          run_check workflow_actions_pinned bash -c 'bad=0; while IFS= read -r line; do ref=$(printf "%s" "$line" | sed "s/.*@//"); if ! printf "%s" "$ref" | grep -Eq "^[0-9a-f]{40}$"; then echo "Unpinned action: $line"; bad=1; fi; done < <(grep -RhoE "uses:[[:space:]]+[^[:space:]]+@[^[:space:]]+" .github/workflows/*.yml); test "$bad" -eq 0'
+          run_check workflow_rebuild_manual_only bash -c 'grep -q "workflow_dispatch:" .github/workflows/rebuild-dev.yml && ! grep -q "^  push:" .github/workflows/rebuild-dev.yml'
+          run_check workflow_ci_branch_policy bash -c 'grep -q "branches: \\[main, Joao\\]" .github/workflows/ci.yml'
+          run_check workflow_deploy_branch_policy bash -c 'grep -q "branches: \\[Joao\\]" .github/workflows/deploy-dev.yml'
+          run_check workflow_destructive_confirmation bash -c 'grep -q "CONFIRMATION" .github/workflows/rebuild-dev.yml && grep -q "REBUILD" .github/workflows/rebuild-dev.yml'
+          run_check workflow_rebuild_separate_role bash -c 'grep -q "AWS_REBUILD_ROLE_ARN" .github/workflows/rebuild-dev.yml && grep -q "development-rebuild" .github/workflows/rebuild-dev.yml'
+          run_check workflow_cd_role_not_used_for_rebuild bash -c '! grep -q "AWS_CD_ROLE_ARN" .github/workflows/rebuild-dev.yml'
+          run_check workflow_generated_grafana_password_masked bash -c 'grep -qF "::add-mask::" .github/workflows/extreme-validation.yml && grep -qF "::add-mask::" .github/workflows/rebuild-dev.yml'
+          run_check workflow_cd_state_verify_only bash -c 'grep -q "scripts/ensure-terraform-state.sh --verify-only" .github/workflows/deploy-dev.yml'
+          run_check github_oidc_immutable_subject_contract bash scripts/test-github-oidc-subject.sh
+          run_check workflow_permissions_present bash -c 'grep -RIn "permissions:" .github/workflows/*.yml >/dev/null'
+
+          echo "### LOCAL AUTOMATION CONTRACT"
+          run_check deploy_script_syntax bash -n scripts/deploy.sh
+          run_check service_activation_script_syntax bash -n scripts/activate-application-services.sh
+          run_check github_oidc_bootstrap_script_syntax bash -n scripts/bootstrap-github-oidc-role.sh
+          run_check github_oidc_bootstrap_script_shellcheck shellcheck --severity=error -x scripts/bootstrap-github-oidc-role.sh
+          run_check deploy_script_shellcheck shellcheck --severity=error -x scripts/deploy.sh
+          run_check state_bootstrap_syntax bash -n scripts/ensure-terraform-state.sh
+          run_check backend_auth_provisioner_syntax bash -n scripts/provision-backend-auth-secret.sh
+          run_check db_credentials_provisioner_syntax bash -n scripts/provision-db-credentials.sh
+          run_check bootstrap_script_syntax bash -n scripts/bootstrap-local.sh
+          run_check doctor_script_syntax bash -n scripts/doctor.sh
+          run_check terraform_validate_script_syntax bash -n scripts/terraform-validate.sh
+          run_check wait_postgres_script_syntax bash -n scripts/wait-for-postgres.sh
+          run_check extreme_helper_syntax bash -n scripts/extreme-checks.sh
+          run_check extreme_helper_behavior bash scripts/test-extreme-checks.sh
+          run_check make_deploy_dry_run make -n deploy
+
+          finish_checks
+
+      - name: Trivy configuration scan
+        id: trivy_config
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Record Trivy configuration result
+        if: always()
+        env:
+          OUTCOME: ${{ steps.trivy_config.outcome }}
+        run: |
+          source scripts/extreme-checks.sh
+          record_external_result security_trivy_config "$([ "$OUTCOME" = "success" ] && echo 0 || echo 1)"
+
+      - name: Trivy filesystem scan
+        id: trivy_fs
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Record Trivy filesystem result
+        if: always()
+        env:
+          OUTCOME: ${{ steps.trivy_fs.outcome }}
+        run: |
+          source scripts/extreme-checks.sh
+          record_external_result security_trivy_fs "$([ "$OUTCOME" = "success" ] && echo 0 || echo 1)"
+      - name: Run Gitleaks
+        id: gitleaks
+        continue-on-error: true
+        run: bash scripts/run-gitleaks.sh
+
+      - name: Record Gitleaks result
+        if: always()
+        env:
+          GITLEAKS_OUTCOME: ${{ steps.gitleaks.outcome }}
+        run: |
+          source scripts/extreme-checks.sh
+          record_external_result gitleaks "$([ "$GITLEAKS_OUTCOME" = "success" ] && echo 0 || echo 1)"
+      - name: CodeQL init
+        id: codeql_init
+        continue-on-error: true
+        uses: github/codeql-action/init@439137e1b50c27ba9e2f9befc93e43091b449c34
+        with:
+          languages: python
+
+      - name: CodeQL analyze
+        id: codeql_analyze
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/analyze@439137e1b50c27ba9e2f9befc93e43091b449c34
+        with:
+          category: /language:python
+
+      - name: Record CodeQL
+        if: always()
+        env:
+          INIT_OUTCOME: ${{ steps.codeql_init.outcome }}
+          ANALYZE_OUTCOME: ${{ steps.codeql_analyze.outcome }}
+        run: |
+          source scripts/extreme-checks.sh
+          rc=0
+          [ "$INIT_OUTCOME" = "success" ] || rc=1
+          [ "$ANALYZE_OUTCOME" = "success" ] || rc=1
+          record_external_result codeql "$rc"
+
+      - name: Configure AWS OIDC
+        id: aws_oidc
+        if: env.AWS_CD_ROLE_ARN != ''
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_CD_ROLE_ARN }}
+          role-session-name: nova-extreme-validation-${{ github.run_id }}
+          allowed-account-ids: ${{ env.EXPECTED_AWS_ACCOUNT_ID }}
+
+      - name: Run live AWS validation
+        if: always()
+        env:
+          OIDC_OUTCOME: ${{ steps.aws_oidc.outcome }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        shell: bash
+        run: |
+          # shellcheck disable=SC2016
+          source scripts/extreme-checks.sh
+          if [ -z "$AWS_CD_ROLE_ARN" ] || [ -z "$TF_STATE_BUCKET" ]; then
+            echo "Skipping live AWS checks: AWS_CD_ROLE_ARN or TF_STATE_BUCKET is not configured."
+            for check in aws_oidc aws_role_present aws_state_bucket_present aws_expected_account aws_grafana_secret_present aws_identity aws_state_bucket_access aws_terraform_init aws_terraform_plan; do
+              record_skipped_check "$check"
+            done
+            finish_checks
+            exit $?
+          fi
+          if [ "$OIDC_OUTCOME" != "success" ]; then
+            record_external_result aws_oidc 1
+            finish_checks
+            exit $?
+          fi
+          record_external_result aws_oidc 0
+          run_check aws_role_present bash -c 'test -n "$AWS_CD_ROLE_ARN"'
+          run_check aws_state_bucket_present bash -c 'test -n "$TF_STATE_BUCKET"'
+          run_check aws_expected_account bash -c 'test "$(aws sts get-caller-identity --query Account --output text)" = "$EXPECTED_AWS_ACCOUNT_ID"'
+          run_check aws_grafana_secret_present bash -c 'test -n "$TF_VAR_grafana_admin_password"'
+          run_check aws_identity aws sts get-caller-identity
+          run_check aws_state_bucket_access bash -c 'test -n "$TF_STATE_BUCKET" && aws s3api get-bucket-location --bucket "$TF_STATE_BUCKET" --expected-bucket-owner "$EXPECTED_AWS_ACCOUNT_ID" --region "$AWS_REGION" >/dev/null'
+          run_check aws_terraform_init bash -c 'terraform init -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION" -backend-config="key=cloudstart/dev/terraform.tfstate" -reconfigure -input=false -no-color'
+          run_check aws_terraform_plan bash -c 'terraform plan -refresh=true -lock=true -input=false -no-color -var-file=config/dev.tfvars -var=deploy_application=false -detailed-exitcode; rc=$?; test "$rc" -eq 0 -o "$rc" -eq 2'
+          finish_checks
+
+      - name: Final report
+        if: always()
+        shell: bash
+        run: |
+          source scripts/extreme-checks.sh
+          passed_checks="$(awk -F '\\t' '$2 == 0 {count++} END {print count+0}' "$RESULTS_FILE")"
+          failed_checks="$(awk -F '\\t' '$2 != 0 && $2 != "SKIP" {count++} END {print count+0}' "$RESULTS_FILE")"
+          skipped_checks="$(awk -F '\\t' '$2 == "SKIP" {count++} END {print count+0}' "$RESULTS_FILE")"
+          {
+            echo "# NOVA Extreme Validation"
+            echo
+            if [ "$skipped_checks" -gt 0 ]; then
+              echo "**Coverage: PARTIAL** — $skipped_checks checks were skipped and were not validated."
+            else
+              echo "**Coverage: COMPLETE** — all recorded checks were executed."
+            fi
+            echo
+            echo "| Passed | Failed | Skipped |"
+            echo "|---:|---:|---:|"
+            echo "| $passed_checks | $failed_checks | $skipped_checks |"
+            echo
+            echo "| Check | Result |"
+            echo "|---|---|"
+            awk -F '\\t' '{status = ($2 == "SKIP" ? "SKIP" : ($2 == 0 ? "PASS" : "FAIL (" $2 ")")); printf "| %s | %s |\\n", $1, status}' "$RESULTS_FILE"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          finish_checks
+
+      - name: Upload complete validation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: nova-extreme-validation-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/nova-extreme-logs
+            ${{ runner.temp }}/nova-extreme-results.tsv
+          if-no-files-found: warn

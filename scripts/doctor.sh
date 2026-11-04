@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+TOOLS_BIN="$ROOT_DIR/.tools/bin"
+VENV_BIN="$ROOT_DIR/.venv/bin"
+
+export PATH="$TOOLS_BIN:$PATH"
+
+ok=0
+failures=0
+
+check() {
+  local name="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    printf 'OK    %-18s %s\n' "$name" "$("$@" 2>&1 | head -n 1)"
+    ok=$((ok + 1))
+  else
+    printf 'FAIL  %-18s\n' "$name"
+    failures=$((failures + 1))
+  fi
+}
+
+printf '%s\n' "CloudStart / NOVA environment doctor"
+printf '%s\n' "Repository: $ROOT_DIR"
+printf '%s\n\n' "Branch: $(git -C "$ROOT_DIR" branch --show-current)"
+
+branch="$(git -C "$ROOT_DIR" branch --show-current)"
+if [[ "$branch" == "main" || "$branch" == "Joao" || "$branch" == "TESTE1" ]]; then
+  printf 'OK    %-18s %s\n' "git-branch" "$branch"
+else
+  printf 'FAIL  %-18s expected main, Joao or TESTE1\n' "git-branch"
+  failures=$((failures + 1))
+fi
+
+check "terraform" terraform version
+check "tflint" tflint --version
+check "python" "$VENV_BIN/python" --version
+check "pytest" "$VENV_BIN/python" -m pytest --version
+check "ruff" "$VENV_BIN/python" -m ruff --version
+check "mypy" "$VENV_BIN/python" -m mypy --version
+check "bandit" "$VENV_BIN/python" -m bandit --version
+check "docker" docker --version
+check "buildx" docker buildx version
+check "compose" docker compose version
+check "aws" aws --version
+check "curl" curl --version
+check "jq" jq --version
+
+if [ "${CHECK_CI_TOOLS:-0}" = "1" ]; then
+  check "checkov" "$VENV_BIN/checkov" --version
+  check "pip-audit" "$VENV_BIN/pip-audit" --version
+fi
+
+printf '\n'
+if [ "$failures" -eq 0 ]; then
+  printf 'Doctor result: PASS (%s checks)\n' "$ok"
+  exit 0
+fi
+
+printf 'Doctor result: FAIL (%s failures)\n' "$failures" >&2
+exit 1

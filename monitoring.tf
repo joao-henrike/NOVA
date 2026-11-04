@@ -21,6 +21,8 @@ resource "aws_security_group" "monitoring_db" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "monitoring_from_alb" {
+  count = var.enable_public_alb ? 1 : 0
+
   security_group_id            = aws_security_group.monitoring.id
   referenced_security_group_id = aws_security_group.alb.id
   from_port                    = var.grafana_container_port
@@ -38,6 +40,7 @@ resource "aws_vpc_security_group_egress_rule" "monitoring_to_db" {
   description                  = "Zabbix server to monitoring PostgreSQL"
 }
 
+#trivy:ignore:AWS-0104
 resource "aws_vpc_security_group_egress_rule" "monitoring_https" {
   security_group_id = aws_security_group.monitoring.id
   cidr_ipv4         = "0.0.0.0/0"
@@ -56,12 +59,6 @@ resource "aws_vpc_security_group_ingress_rule" "monitoring_db_from_monitoring" {
   description                  = "PostgreSQL access from the monitoring task only"
 }
 
-resource "aws_vpc_security_group_egress_rule" "monitoring_db_all" {
-  security_group_id = aws_security_group.monitoring_db.id
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
-  description       = "Default outbound traffic"
-}
 
 resource "aws_db_subnet_group" "monitoring" {
   name       = "${local.name}-monitoring-db-subnets"
@@ -90,7 +87,7 @@ resource "aws_db_instance" "monitoring" {
   storage_type          = "gp3"
   storage_encrypted     = true
 
-  multi_az               = true
+  multi_az               = false
   publicly_accessible    = false
   db_subnet_group_name   = aws_db_subnet_group.monitoring.name
   vpc_security_group_ids = [aws_security_group.monitoring_db.id]
@@ -113,7 +110,8 @@ resource "aws_db_instance" "monitoring" {
 }
 
 resource "aws_secretsmanager_secret" "grafana_admin" {
-  name = "${local.name}/monitoring/grafana-admin"
+  name                    = "${local.name}/monitoring/grafana-admin"
+  recovery_window_in_days = 0
 
   tags = merge(local.global_tags, {
     Name      = "${local.name}/monitoring/grafana-admin"
@@ -127,6 +125,8 @@ resource "aws_secretsmanager_secret_version" "grafana_admin" {
 }
 
 resource "aws_lb_target_group" "grafana" {
+  count = var.enable_public_alb ? 1 : 0
+
   name        = substr("${local.name}-grafana-tg", 0, 32)
   port        = var.grafana_container_port
   protocol    = "HTTP"
@@ -151,12 +151,18 @@ resource "aws_lb_target_group" "grafana" {
 }
 
 resource "aws_lb_listener_rule" "grafana" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 20
+  count = var.enable_public_alb ? 1 : 0
+
+  listener_arn = (
+    var.acm_certificate_arn == ""
+    ? aws_lb_listener.http[0].arn
+    : aws_lb_listener.https[0].arn
+  )
+  priority = 20
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.grafana.arn
+    target_group_arn = aws_lb_target_group.grafana[0].arn
   }
 
   condition {
@@ -197,6 +203,15 @@ resource "aws_ecs_task_definition" "monitoring" {
       essential = true
       cpu       = 512
       memory    = 1024
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.monitoring.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "zabbix-server"
+        }
+      }
 
       portMappings = [
         {
@@ -243,6 +258,15 @@ resource "aws_ecs_task_definition" "monitoring" {
       essential = true
       cpu       = 256
       memory    = 512
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.monitoring.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "zabbix-web"
+        }
+      }
 
       portMappings = [
         {
@@ -308,6 +332,15 @@ resource "aws_ecs_task_definition" "monitoring" {
       essential = true
       cpu       = 256
       memory    = 512
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.monitoring.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "grafana"
+        }
+      }
 
       portMappings = [
         {
@@ -392,19 +425,23 @@ resource "aws_ecs_service" "monitoring" {
     assign_public_ip = false
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.grafana.arn
-    container_name   = "grafana"
-    container_port   = var.grafana_container_port
+  dynamic "load_balancer" {
+    for_each = var.enable_public_alb ? [1] : []
+
+    content {
+      target_group_arn = aws_lb_target_group.grafana[0].arn
+      container_name   = "grafana"
+      container_port   = var.grafana_container_port
+    }
   }
 
-  ordered_placement_strategy {
-    type  = "spread"
-    field = "attribute:ecs.availability-zone"
+  lifecycle {
+    # Keep operator stop/start state across Terraform plans; service/task definitions remain Terraform-managed.
+    ignore_changes = [desired_count]
   }
+
 
   depends_on = [
-    aws_lb_listener_rule.grafana,
     aws_iam_role_policy.ecs_monitoring_execution,
   ]
 

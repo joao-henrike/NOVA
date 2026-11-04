@@ -1,5 +1,7 @@
 # CloudStart Monitoring — Zabbix + Grafana
 
+> Repository-wide documentation: [NOVA documentation index](../docs/README.md) · [Architecture](../docs/architecture.md) · [Security model](../docs/security.md) · [Deployment](../docs/deployment.md).
+
 The current MVP uses a containerized Zabbix + Grafana monitoring plane.
 
 ## Components
@@ -40,8 +42,25 @@ alexanderzobnin-zabbix-app@6.8.0
 
 The plugin connects Grafana to the Zabbix API. In AWS the Zabbix Web API is internal to the monitoring ECS task.
 
+## CloudWatch container logs
+
+Zabbix/Grafana remain the metrics and availability monitoring plane. ECS stdout/stderr is shipped separately through the `awslogs` driver to Terraform-managed CloudWatch log groups. The monitoring task's Zabbix Server, Zabbix Web, and Grafana containers share the monitoring log group but use distinct stream prefixes.
+
+The other four groups are for frontend, backend, database bootstrap, and database migration tasks. Retention is 7 days in development and 30 days in production. The groups use the AWS-owned CloudWatch Logs encryption key; no customer-managed CMK or long-term S3 archive is configured.
+
 ## Important boundary
 
-Zabbix + Grafana replace the project-managed CloudWatch monitoring resources. They do **not** provide a direct drop-in equivalent for durable centralized application-log storage. The current MVP therefore does not claim a centralized application-log archive.
+CloudWatch Logs provides centralized short-retention container logs, not a long-term audit archive. Zabbix + Grafana provide availability/metrics views and are not a replacement for the log pipeline.
 
-> Monitoring image choices were aligned with the current Zabbix 8.0 container documentation and Grafana documentation available at the time of this update.
+## Pinned container versions
+
+The current Terraform and local Compose defaults use:
+
+| Component | Image/version |
+| --- | --- |
+| Zabbix Server | zabbix/zabbix-server-pgsql:alpine-7.4.15 |
+| Zabbix Web | zabbix/zabbix-web-nginx-pgsql:alpine-7.4.15 |
+| Grafana | grafana/grafana:13.2.3 |
+| Grafana plugin | alexanderzobnin-zabbix-app@6.8.0 |
+
+The Zabbix host/items/triggers and Grafana dashboards are not provisioned automatically in this MVP. Container health and plugin installation do not imply a configured monitoring inventory.

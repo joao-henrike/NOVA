@@ -24,7 +24,7 @@ resource "aws_db_instance" "this" {
   storage_type          = "gp3"
   storage_encrypted     = true
 
-  multi_az               = true
+  multi_az               = false
   publicly_accessible    = false
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [aws_security_group.rds.id]

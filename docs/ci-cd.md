@@ -1,261 +1,363 @@
-# CloudStart — CI/CD Current State
+# CloudStart — CI/CD
 
-> This document describes the workflows that actually exist in `.github/workflows/`. The repository has automated **continuous integration** and an optional credentialed Terraform Plan, but it does not currently implement continuous deployment.
+This document describes the CI and CD workflows currently committed in `.github/workflows/`.
 
-## 1. Workflow inventory
+> **Different trust boundaries:** operators use `TESTE1` for **manual CloudShell** `make deploy`/NOVA Ops in the current cycle, whereas GitHub Actions CD/OIDC for the `development` Environment deliberately remains restricted to **`Joao`**. CI for a TESTE1 pull request is not a live AWS deployment. The canonical TESTE1 procedure is in the [runbook](TESTE1-DEPLOY-TEARDOWN.md).
 
-```text
-.github/workflows/terraform-lint.yml
-.github/workflows/container-ci.yml
-```
-
-## 2. Terraform CI workflow
-
-### Trigger
-
-The workflow runs on:
+## Workflow inventory
 
 ```text
-pull_request
-push to main
+.github/workflows/ci.yml
+.github/workflows/extreme-validation.yml
+.github/workflows/deploy-dev.yml
+.github/workflows/rebuild-dev.yml
 ```
 
-The path filters cover Terraform/configuration, GitHub workflow/configuration, and documentation changes.
+The standard CI is the fast blocking gate. `extreme-validation.yml` is the full-system evidence gate. `deploy-dev.yml` performs non-destructive application delivery, while `rebuild-dev.yml` is an explicitly confirmed destructive infrastructure rebuild.
 
-### Global environment
+Legacy `container-ci.yml` and `terraform-lint.yml` workflows were removed so there is a single standard CI source of truth.
+
+## CI
+
+`ci.yml` runs on pushes to `main` and `Joao`, pull requests targeting either branch, and manual dispatch.
+
+All third-party GitHub Actions used by the pipeline are pinned to full commit SHAs.
+
+### Backend quality gate
+
+The backend job starts PostgreSQL 16 as an isolated GitHub Actions service and executes:
 
 ```text
-Terraform      1.16.4
-TFLint         0.64.0
-terraform-docs 0.24.0
+pip check
+python -m compileall
+Ruff
+Mypy
+Bandit
+pip-audit
+Alembic upgrade head
+alembic check
+Alembic downgrade base/upgrade head
+alembic check
+Pytest
 ```
 
-## 3. Terraform Static Validation job
+The migration gate applies the full chain, checks model/migration drift, rolls the database to `base`, reapplies `head`, and checks drift again.
 
-### Step 1 — Checkout
+### Container gate
 
-The repository is checked out with persisted Git credentials disabled.
+The pipeline builds both application images without publishing them.
 
-### Step 2 — Terraform setup
+It validates:
 
-The workflow installs Terraform 1.16.4.
+```text
+frontend nginx configuration
+backend /health runtime
+Trivy HIGH/CRITICAL image vulnerabilities
+```
 
-### Step 3 — Format check
+### Compose gate
+
+Both Compose files are parsed with Docker Compose.
+
+### Terraform gate
+
+The root and bootstrap stacks are checked with:
+
+```text
+terraform fmt -check
+terraform init -backend=false
+terraform validate
+TFLint
+```
+
+### Security gate
+
+The repository is scanned with:
+
+```text
+Checkov
+Trivy Terraform misconfiguration scan
+Trivy container image scan
+Gitleaks
+ShellCheck
+CodeQL
+```
+
+HIGH/CRITICAL infrastructure and image findings are blocking. The CI Terraform Trivy scan uses a runner-generated trusted configuration and a temporary empty ignore file; repository-level Trivy policy is not trusted by this blocking gate.
+
+## Extreme Validation
+
+`extreme-validation.yml` is intentionally broader than the normal CI. It runs a single resilient validation runner so that an early failure does not suppress later diagnostics.
+
+Each check is executed independently and recorded as:
+
+```text
+CHECK_NAME    EXIT_CODE
+```
+
+The runner continues after failures across these domains:
+
+```text
+Backend quality
+Frontend image/runtime
+Application Compose integration
+Monitoring Compose integration
+Terraform root + bootstrap
+TFLint
+Terraform dependency graph and plan-input contract
+Repository contract
+Secret-pattern checks
+GitHub Actions workflow contracts
+Shell script syntax
+Deployment automation dry-run
+Gitleaks
+CodeQL
+AWS OIDC readiness
+Remote Terraform backend access
+Live AWS Terraform plan
+```
+
+Every check writes its own log under the runner temporary directory. The workflow uploads the collected logs and result table as a GitHub Actions artifact even when the final verdict is failure.
+
+The final verdict is blocking: a single failed check or skipped check makes the extreme validation workflow fail. The workflow still attempts the remaining independent checks and uploads the complete evidence report. A successful job therefore means every recorded check actually executed and passed.
+
+The extreme validation workflow runs on pushes to `Joao` and manual dispatch only; it does not run on pull requests because its job has `id-token: write` for an optional live, read-only AWS plan. Standard CI remains the PR gate. Extreme validation does not destroy or apply AWS infrastructure. Destructive end-to-end reconstruction remains isolated to `rebuild-dev.yml` and requires explicit `REBUILD` confirmation.
+
+## CD — Development
+
+deploy-dev.yml is restricted to branch Joao and the GitHub development Environment. The job is guarded by the presence of the AWS_CD_ROLE_ARN repository variable. TF_STATE_BUCKET is optional because the workflow has a committed development default.
+
+The push trigger is intentionally narrow. It includes application runtime assets, backend source/migrations and Docker build inputs, frontend public assets/Nginx configuration and Docker build inputs, and docker-compose.yml. A change to documentation, Terraform, deployment scripts, or workflow definitions alone does not trigger a push deployment. workflow_dispatch can be used for an explicit manual development deployment.
+
+The sequence is:
+
+```text
+Joao app/runtime-artifact push or manual dispatch
+      |
+      v
+Wait for successful standard CI
+      |
+      v
+GitHub OIDC authentication
+      |
+      v
+Provision/reuse runtime and migrator DB secrets
+      |
+      v
+Provision/reuse backend JWT and optional OAuth secret
+      |
+      v
+Build frontend/backend images
+      |
+      v
+Trivy scan + local container smoke
+      |
+      v
+Push immutable full Git-SHA image tags to ECR
+      |
+      v
+Ensure remote S3 state and terraform init
+      |
+      v
+terraform plan + resource allowlist guard
+      |
+      v
+Apply exact plan (register task revisions; hold app services)
+      |
+      v
+Wait for current/zero-count services
+      |
+      v
+DB bootstrap -> Alembic migration -> runtime grants bootstrap
+      |
+      v
+Activate frontend/backend revisions + restore autoscaling capacity
+      |
+      v
+Wait for application/monitoring ECS stability
+      |
+      v
+ALB / API / DB / Grafana smoke tests
+```
+
+### AWS authentication and GitHub configuration
+
+The workflow uses GitHub OIDC with id-token: write instead of long-lived AWS access keys. It rejects any AWS account other than 760396521507.
+
+Required repository variable:
+
+```text
+AWS_CD_ROLE_ARN
+```
+
+Optional repository variables:
+
+```text
+TF_STATE_BUCKET       (default: cloudstart-nova-terraform-state-760396521507)
+TERRAFORM_AWS_REGION  (default: us-east-1; deploy-dev.yml only)
+```
+
+Required GitHub Environment secret for normal CD:
+
+```text
+GRAFANA_ADMIN_PASSWORD
+```
+
+Optional Google/Apple OAuth secrets are listed in docs/configuration-reference.md. Supply every field for a provider or leave that provider unused. The deployment creates/reuses the backend authentication JSON secret and keeps its JWT signing key stable.
+
+The role is provisioned by the isolated Terraform stack in `bootstrap/github-oidc/`; its trust policy is restricted to the immutable GitHub owner/repository IDs, the `development` Environment, and audience `sts.amazonaws.com`. The expected OIDC subject is:
+
+```text
+repo:joao-henrike@133373332/NOVA@1393500090:environment:development
+```
+
+The repository was created after July 15, 2026, so the trust policy uses GitHub's immutable owner/repository ID subject format. The GitHub `development` Environment must restrict deployments to branch `Joao`. Do not replace this subject with a name-only subject or remove the audience condition.
+
+In GitHub, open **Settings → Environments → development → Deployment branches and tags**, select **Selected branches and tags**, and allow only `Joao`. Keep the `GRAFANA_ADMIN_PASSWORD` secret in this Environment. The OIDC subject authenticates the Environment rather than embedding the branch name, so this branch restriction is part of the trust boundary.
+
+#### One-time role provisioning
+
+Use an AWS CLI identity already authorized to create IAM OIDC providers and roles in account `760396521507`. From the repository root:
 
 ```bash
-terraform fmt -check -recursive -diff
+aws sts get-caller-identity
+bash scripts/bootstrap-github-oidc-role.sh CREATE_GITHUB_OIDC_ROLE
 ```
 
-This does not modify the repository.
+Review the displayed Terraform plan before applying. The stack reuses an existing GitHub OIDC provider read-only (or creates one only when absent) and creates a scoped role named `cloudstart-nova-github-actions-cd`. It never imports or modifies a shared provider. It does not create the application state bucket or modify the NOVA VPC/RDS/ECS stack. Keep `bootstrap/github-oidc/terraform.tfstate` private; it is ignored by Git.
 
-### Step 4 — Root initialization
+The bootstrap script publishes the role ARN as a **repository Actions variable** when `gh` is authenticated and has Variables write permission. It refuses to overwrite a different existing value. If it cannot publish automatically, use:
 
 ```bash
-terraform init -backend=false -input=false -no-color
+gh variable set AWS_CD_ROLE_ARN \\
+  --repo joao-henrike/NOVA \\
+  --body "$(terraform -chdir=bootstrap/github-oidc output -raw github_actions_cd_role_arn)"
 ```
 
-The remote backend is intentionally not contacted for this validation step.
+Verify it with `gh variable get AWS_CD_ROLE_ARN --repo joao-henrike/NOVA`. Never place the ARN in tracked source files.
 
-### Step 5 — Root validation
+The role deliberately does not have permission to create the Terraform state bucket. Prepare/verify the canonical bucket separately before enabling CD. The GitHub workflow calls `scripts/ensure-terraform-state.sh --verify-only`; local `make deploy` retains the separate state-bootstrap capability.
 
-```bash
-terraform validate -no-color
-```
+The role policy scopes state object access to `cloudstart/dev/terraform.tfstate` and its lock file, ECR pushes to the two NOVA development repositories, Secrets Manager access to the three named application secrets, ECS actions to the NOVA cluster/services/task definitions, and PassRole to the named ECS roles for `ecs-tasks.amazonaws.com`. It also limits security-group, application autoscaling, and CloudWatch log mutations to project resources. It intentionally does not grant account-wide administrator access, S3 bucket creation/deletion, VPC/RDS/ALB mutation, IAM user/key administration, or infrastructure destruction.
 
-### Step 6 — Bootstrap initialization
+The `GRAFANA_ADMIN_PASSWORD` GitHub Environment secret must exist in `development`. Once the repository variable and Environment are configured, rerun Extreme Validation and confirm that its nine AWS checks execute rather than show `SKIP`.
 
-The bootstrap stack is initialized independently with its backend disabled.
+#### Destructive rebuild
 
-### Step 7 — Bootstrap validation
+The manual rebuild workflow no longer uses `AWS_CD_ROLE_ARN`. It requires a separate `AWS_REBUILD_ROLE_ARN` repository variable and the `development-rebuild` Environment. Configure that Environment with branch restriction to `Joao` and required reviewers. The OIDC bootstrap stack above does not create this destructive role; keep its permissions separate from the normal CD role.
 
-```bash
-terraform validate -no-color
-```
+## Application deployment safety
 
-### Step 8 — TFLint
+The development CD pipeline does not blindly apply every Terraform difference.
 
-The repository installs a pinned TFLint release and the AWS ruleset, then runs:
+It creates a saved plan and allows only the known application/monitoring task definitions and services, frontend/backend autoscaling targets, purpose-specific ECS execution roles/policies, the dedicated no-ingress database-task security group/rules, and the five CloudWatch log groups. It rejects every unlisted resource change and every delete action. The local deploy script and manual rebuild workflow enforce the same explicit allowlist.
 
-```bash
-tflint --config .tflint.hcl --recursive --format compact
-```
+During an application release, Terraform registers the new frontend/backend task definitions but does not switch the live service revisions. The deployment paths then perform database bootstrap, Alembic migration, and post-migration runtime grants before calling `scripts/activate-application-services.sh`. The helper updates both ECS services, preserves running desired capacity (or uses the configured initial count when a service is at zero), restores autoscaling bounds, waits for all application/monitoring services to stabilize, and verifies that ECS retained the requested task-definition ARNs. During first deployment the frontend/backend services are created at zero tasks and start only after migrations.
 
-### Step 9 — terraform-docs
+Terraform intentionally ignores subsequent ECS service `task_definition` and `desired_count` drift because the release helper is the authority for application activation. Standalone Terraform apply is not the supported method for rolling out new application images.
 
-The workflow generates Terraform input/output documentation into a temporary file and checks that the generated content contains the expected inputs, outputs, and markers.
+Migrations must remain backward-compatible with the currently running version while they execute (expand/contract). Add replacement schema first, switch application code only after migration, and remove obsolete schema in a later release.
 
-It does not replace the committed README as part of the CI run.
+Infrastructure drift or unrelated infrastructure changes must be resolved through the infrastructure workflow rather than hidden inside an application release.
 
-## 4. IaC Security and Policy job
+The root Terraform backend uses S3 state with the S3 lockfile mechanism. The CD workflow therefore does not pass a legacy DynamoDB backend-lock argument.
 
-### Checkov
+## Application image identity
 
-The workflow runs Checkov against the root Terraform code.
-
-Configured behavior:
+Images are tagged with the complete Git commit SHA.
 
 ```text
-HIGH/CRITICAL -> hard fail
-LOW/MEDIUM    -> soft fail
+cloudstart-dev-frontend:<commit-sha>
+cloudstart-dev-backend:<commit-sha>
 ```
 
-### Trivy
+The ECR repositories are configured with immutable tags.
 
-The workflow runs Trivy in configuration/misconfiguration mode using `trivy.yaml`.
+## Database migrations
 
-The configured scan focuses on HIGH and CRITICAL findings and fails on them.
+Migrations run as one-off private Fargate tasks using separate task definitions and identities:
 
-## 5. Secret-scanning job
+1. Database bootstrap: uses the RDS master secret only to create/update `cloudstart_runtime` and `cloudstart_migrator`.
+2. Alembic: uses only the migrator secret and runs `alembic upgrade head`.
+3. Post-migration bootstrap: reapplies DML/sequence grants to new objects.
 
-Gitleaks checks the repository history.
+These tasks use the dedicated `database_tasks` security group, which has no ingress and only HTTPS plus TCP 5432 egress to application RDS. The normal backend task uses only the runtime credential and cannot read `alembic_version` or perform DDL.
 
-This is intended to detect accidentally committed secrets and does not provide application authentication or runtime secret management.
+## Post-deployment acceptance
 
-## 6. Optional Terraform Plan job
-
-A fourth job exists but is conditional.
-
-The job only runs when:
+The development CD pipeline checks:
 
 ```text
-Pull request
-AND not a fork
-AND AWS_TERRAFORM_PLAN_ROLE_ARN is set
-AND TF_STATE_BUCKET is set
-AND TF_STATE_DYNAMODB_TABLE is set
+/
+/api/health
+/api/info
+/api/health/db
+/grafana/api/health
 ```
 
-### AWS authentication
+It also verifies that `GET /api/items` returns `401 Unauthorized`.
 
-It uses GitHub OIDC to assume the configured AWS IAM role.
+## Production
 
-### Terraform initialization
+There is intentionally no automatic production deployment in this implementation.
 
-It configures the remote state using repository variables.
-
-### Plan
-
-```bash
-terraform plan -refresh=true -lock=true -input=false -out=tfplan
-```
-
-### Sanitized PR summary
-
-The workflow does not post raw plan contents to the PR. It computes a summary of changed resource actions.
-
-### Destructive-change guard
-
-Any resource action containing a delete causes the job to fail unless the PR has the label:
+A future production pipeline should add:
 
 ```text
-infra-allow-destroy
+production GitHub Environment
+required reviewers
+separate AWS role
+separate state/account boundary
+approval before apply
+production smoke tests
+rollback procedure
 ```
 
-That label is therefore an explicit human-review gate for destructive changes in this optional path.
+The development pipeline must not be reused as an implicit production authorization mechanism.
 
-## 7. Container CI workflow
+## Dependency maintenance
 
-### Trigger
-
-Runs for changes under:
+Dependabot is configured for:
 
 ```text
-apps/**
-docker-compose.yml
-.github/workflows/container-ci.yml
+GitHub Actions
+Terraform
+bootstrap Terraform
+Python / pip
+Docker (backend)
+Docker (frontend)
 ```
 
-on PRs and pushes to `main`.
+## Security baseline policy
 
-### Frontend build
+Checkov is configured by `.checkov.yaml` with explicit, reviewable exceptions for known MVP constraints. These are not a blanket disablement: any check not listed there remains subject to the configured gate.
 
-The workflow builds the frontend image from:
+The current exceptions cover controls tied to:
 
 ```text
-apps/frontend
+HTTP-only MVP ALB while ACM/HTTPS is pending
+WAF, ALB access logging and deletion protection not yet enabled
+RDS Multi-AZ/IAM auth/performance/enhanced monitoring/deletion protection pending
+RDS/Secrets Manager KMS CMK and secret rotation pending
+S3 logging/replication/KMS/notification controls for the Terraform state MVP
+ECR customer-managed KMS encryption pending
+CloudWatch log groups use AWS-owned encryption and cost-bounded 7-day dev / 30-day prod retention
+VPC Flow Logs pending
+development-only public ALB HTTP ingress
 ```
 
-with a CI tag based on the Git commit SHA.
+These exceptions are technical debt and must be removed as the corresponding controls are implemented.
 
-### Backend build
+## Recorded validation evidence (dated snapshots)
 
-The workflow builds the backend image from:
+These are timestamped repository-run observations, not claims about the current live AWS runtime. The newest verified script-change CI evidence for TESTE1 is listed first; the prior OIDC run remains recorded for its partial-coverage diagnosis:
 
-```text
-apps/backend
-```
+| Workflow | Commit | Result | Interpretation |
+| --- | --- | --- | --- |
+| [TESTE1 CI — deploy and teardown changes](https://github.com/joao-henrike/NOVA/actions/runs/41690248888) | `4ff8ebf6b144935a6038544483ec21083901e73d` | Success | Backend, container smoke, Terraform static validation, Compose, security, workflow contracts, and CodeQL passed. **No live AWS apply/destroy was performed.** |
+| [NOVA CI — historical Joao snapshot](https://github.com/joao-henrike/NOVA/actions/runs/41148307768) | `3c72538750811476a8ddaf7a3880a8cd7a850e2d` | Success | All seven CI jobs completed successfully on the current branch head at the time of this evidence snapshot. |
+| [NOVA — Extreme Validation](https://github.com/joao-henrike/NOVA/actions/runs/41148307721) | `3c72538750811476a8ddaf7a3880a8cd7a850e2d` | Failure; local checks passed, AWS coverage partial | Gitleaks, CodeQL, Trivy, and the exhaustive local validation step passed. The live AWS phase was blocked because `AWS_CD_ROLE_ARN` was empty; all nine AWS checks were skipped and the workflow correctly failed closed. |
 
-with a CI tag based on the Git commit SHA.
+Run #272 did not verify the AWS identity, existing state-bucket ownership/access, remote Terraform initialization, or a live AWS plan. The bucket name is present in the tracked `config/dev.env`; the missing repository Actions variable was the observed blocker. The run does not establish that the role exists or that the AWS infrastructure is deployable.
 
-### Push behavior
-
-The workflow explicitly sets:
-
-```text
-push: false
-```
-
-Therefore CI does not publish these images to ECR.
-
-### Image scans
-
-Each built image is scanned with Trivy for:
-
-```text
-HIGH
-CRITICAL
-```
-
-Unfixed vulnerabilities are ignored by the configured action invocation.
-
-### Compose validation
-
-The workflow runs:
-
-```bash
-docker compose config --quiet
-```
-
-This validates the Compose configuration syntax.
-
-## 8. What the workflows accomplish today
-
-```text
-Source change
-   |
-   +--> IaC syntax/format validation
-   +--> Terraform validation
-   +--> Terraform lint
-   +--> IaC security scans
-   +--> secret scan
-   +--> container build
-   +--> container vulnerability scan
-   +--> Compose validation
-   +--> optional AWS-backed Terraform plan
-```
-
-This provides a strong validation pipeline for the current MVP repository.
-
-## 9. What the workflows do not accomplish today
-
-```text
-ECR push
-ECS deployment
-Production approval gate for deployment
-Automatic rollback driven by deployment pipeline
-Database migration execution
-Post-deployment smoke test
-Automatic alarm notification
-```
-
-ECS itself has deployment circuit-breaker/rollback behavior, but the GitHub workflows do not orchestrate the deployment.
-
-## 10. CI/CD terminology for this repository
-
-The repository should be described as:
-
-> **CI + optional credentialed Terraform Plan**
-
-not as a fully automated CD platform.
-
-The current architecture intentionally separates validation from AWS write operations.
+**Interpretation rule:** a green normal CI result proves only the checks executed by that CI workflow. It is not proof of complete AWS validation. Extreme Validation is considered complete only when the live AWS OIDC, identity, state, init, and plan checks execute and pass; a skipped AWS check is never treated as success.

@@ -1,5 +1,6 @@
 resource "aws_ecr_repository" "frontend" {
   name                 = "${local.name}-frontend"
+  force_delete         = true
   image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
@@ -14,6 +15,7 @@ resource "aws_ecr_repository" "frontend" {
 
 resource "aws_ecr_repository" "backend" {
   name                 = "${local.name}-backend"
+  force_delete         = true
   image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
@@ -34,7 +36,7 @@ resource "aws_ecr_lifecycle_policy" "frontend" {
       {
         rulePriority = 1
         description  = "Keep the 10 most recent images"
-        selection    = {
+        selection = {
           tagStatus   = "any"
           countType   = "imageCountMoreThan"
           countNumber = 10
@@ -55,7 +57,7 @@ resource "aws_ecr_lifecycle_policy" "backend" {
       {
         rulePriority = 1
         description  = "Keep the 10 most recent images"
-        selection    = {
+        selection = {
           tagStatus   = "any"
           countType   = "imageCountMoreThan"
           countNumber = 10

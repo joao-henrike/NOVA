@@ -59,10 +59,16 @@ variable "deploy_application" {
   default     = false
 }
 
+variable "start_application_services" {
+  description = "Whether frontend/backend ECS services should start during Terraform apply. Set false during an application release so migrations finish before new task revisions receive traffic."
+  type        = bool
+  default     = true
+}
+
 variable "frontend_image_tag" {
   description = "Immutable tag of the frontend image in the CloudStart ECR repository."
   type        = string
-  default     = "v0.1.0"
+  default     = "v0.1.1"
 
   validation {
     condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$", var.frontend_image_tag))
@@ -302,13 +308,73 @@ variable "db_name" {
 }
 
 variable "db_username" {
-  description = "RDS master username. The password is managed by RDS/Secrets Manager."
+  description = "RDS master username. Used only by the one-off database role bootstrap task; its password is managed by RDS/Secrets Manager."
   type        = string
   default     = "cloudstart_admin"
 
   validation {
     condition     = can(regex("^[a-zA-Z][a-zA-Z0-9_]{0,15}$", var.db_username))
     error_message = "db_username must be 1-16 characters, start with a letter, and contain only letters, numbers, or underscores."
+  }
+}
+
+variable "db_runtime_username" {
+  description = "PostgreSQL login used by the normal backend service. It receives DML privileges only."
+  type        = string
+  default     = "cloudstart_runtime"
+
+  validation {
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.db_runtime_username))
+    error_message = "db_runtime_username must be a valid PostgreSQL role identifier."
+  }
+}
+
+variable "db_migrator_username" {
+  description = "PostgreSQL login used only by the one-off Alembic migration task."
+  type        = string
+  default     = "cloudstart_migrator"
+
+  validation {
+    condition = (
+      can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.db_migrator_username)) &&
+      var.db_migrator_username != var.db_runtime_username &&
+      var.db_migrator_username != var.db_username
+    )
+    error_message = "db_migrator_username must be a valid PostgreSQL role identifier, distinct from the runtime and RDS master usernames."
+  }
+}
+
+variable "db_runtime_secret_arn" {
+  description = "ARN of an externally provisioned Secrets Manager JSON secret with a password field for db_runtime_username. The password value must never enter Terraform."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.db_runtime_secret_arn == "" ||
+      can(regex(
+        "^arn:[^:]+:secretsmanager:${var.aws_region}:[0-9]{12}:secret:.+$",
+        var.db_runtime_secret_arn,
+      ))
+    )
+    error_message = "db_runtime_secret_arn must be empty or a Secrets Manager secret ARN in aws_region."
+  }
+}
+
+variable "db_migrator_secret_arn" {
+  description = "ARN of an externally provisioned Secrets Manager JSON secret with a password field for db_migrator_username. The password value must never enter Terraform."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.db_migrator_secret_arn == "" ||
+      can(regex(
+        "^arn:[^:]+:secretsmanager:${var.aws_region}:[0-9]{12}:secret:.+$",
+        var.db_migrator_secret_arn,
+      ))
+    )
+    error_message = "db_migrator_secret_arn must be empty or a Secrets Manager secret ARN in aws_region."
   }
 }
 
@@ -359,7 +425,7 @@ variable "db_max_allocated_storage" {
 variable "db_backup_retention_period" {
   description = "Number of days to retain automated RDS backups."
   type        = number
-  default     = 7
+  default     = 1
 
   validation {
     condition     = var.db_backup_retention_period >= 1 && var.db_backup_retention_period <= 35
@@ -413,6 +479,40 @@ variable "rds_deletion_protection" {
   default     = false
 }
 
+variable "acm_certificate_arn" {
+  description = "Optional ARN of an already-issued ACM certificate in aws_region. When set, the ALB enables HTTPS and redirects HTTP to HTTPS."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.acm_certificate_arn == "" ||
+      can(regex(
+        "^arn:[^:]+:acm:${var.aws_region}:[0-9]{12}:certificate/[0-9a-fA-F-]{36}$",
+        var.acm_certificate_arn,
+      ))
+    )
+    error_message = "acm_certificate_arn must be empty or an ACM certificate ARN in aws_region."
+  }
+}
+
+variable "alb_domain_name" {
+  description = "DNS hostname covered by acm_certificate_arn. Required when HTTPS is enabled; DNS must be pointed to the ALB outside this stack."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      (var.acm_certificate_arn == "" && var.alb_domain_name == "") ||
+      (
+        var.acm_certificate_arn != "" &&
+        can(regex("^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$", var.alb_domain_name))
+      )
+    )
+    error_message = "Set both acm_certificate_arn and a valid alb_domain_name to enable HTTPS, or leave both empty."
+  }
+}
+
 
 variable "monitoring_desired_count" {
   description = "Number of ECS monitoring tasks. The stack contains a stateful Zabbix server, so the MVP keeps one task by default."
@@ -450,13 +550,13 @@ variable "monitoring_task_memory" {
 variable "zabbix_server_image" {
   description = "Zabbix server PostgreSQL container image."
   type        = string
-  default     = "zabbix/zabbix-server-pgsql:alpine-8.0-latest"
+  default     = "zabbix/zabbix-server-pgsql:alpine-7.4.15"
 }
 
 variable "zabbix_web_image" {
   description = "Zabbix web interface PostgreSQL/Nginx container image."
   type        = string
-  default     = "zabbix/zabbix-web-nginx-pgsql:alpine-8.0-latest"
+  default     = "zabbix/zabbix-web-nginx-pgsql:alpine-7.4.15"
 }
 
 variable "grafana_image" {
@@ -559,10 +659,51 @@ variable "monitoring_db_max_allocated_storage" {
 variable "monitoring_db_backup_retention_period" {
   description = "Number of days to retain automated backups for the monitoring database."
   type        = number
-  default     = 7
+  default     = 1
 
   validation {
     condition     = var.monitoring_db_backup_retention_period >= 1 && var.monitoring_db_backup_retention_period <= 35
     error_message = "monitoring_db_backup_retention_period must be between 1 and 35 days."
+  }
+}
+
+
+variable "backend_auth_secret_arn" {
+  description = "Optional ARN of a Secrets Manager JSON secret containing backend JWT and OAuth settings. Required when deploy_application is true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.backend_auth_secret_arn == "" ||
+      can(regex(
+        "^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:.+$",
+        var.backend_auth_secret_arn,
+      ))
+    )
+    error_message = "backend_auth_secret_arn must be empty or a valid Secrets Manager secret ARN."
+  }
+}
+
+
+variable "enable_nat_gateways" {
+  description = "Whether per-AZ NAT Gateways and their public IPv4 allocations should exist. Disable only while application services are not being started."
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = var.enable_nat_gateways || !var.start_application_services
+    error_message = "NAT Gateways cannot be disabled while start_application_services is true."
+  }
+}
+
+variable "enable_public_alb" {
+  description = "Whether the public Application Load Balancer, listeners, and target groups should exist. Disable only while application services are not being started."
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = var.enable_public_alb || !var.start_application_services
+    error_message = "The public ALB cannot be disabled while start_application_services is true."
   }
 }

@@ -1,8 +1,9 @@
 locals {
-  frontend_desired_count = var.deploy_application ? var.frontend_desired_task_count : 0
-  frontend_min_count     = var.deploy_application ? var.frontend_min_task_count : 0
-  backend_desired_count  = var.deploy_application ? var.backend_desired_task_count : 0
-  backend_min_count      = var.deploy_application ? var.backend_min_task_count : 0
+  application_services_enabled = var.deploy_application && var.start_application_services
+  frontend_desired_count       = local.application_services_enabled ? var.frontend_desired_task_count : 0
+  frontend_min_count           = local.application_services_enabled ? var.frontend_min_task_count : 0
+  backend_desired_count        = local.application_services_enabled ? var.backend_desired_task_count : 0
+  backend_min_count            = local.application_services_enabled ? var.backend_min_task_count : 0
 }
 
 
@@ -22,6 +23,15 @@ resource "aws_ecs_task_definition" "frontend" {
       essential = true
       cpu       = var.frontend_task_cpu
       memory    = var.frontend_task_memory
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.frontend.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
 
       portMappings = [
         {
@@ -58,8 +68,32 @@ resource "aws_ecs_task_definition" "backend" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.backend_task_cpu
   memory                   = var.backend_task_memory
-  execution_role_arn       = aws_iam_role.ecs_execution.arn
-  task_role_arn            = aws_iam_role.ecs_backend_task.arn
+  execution_role_arn = (
+    var.deploy_application
+    ? aws_iam_role.ecs_backend_execution.arn
+    : aws_iam_role.ecs_execution.arn
+  )
+  task_role_arn = aws_iam_role.ecs_backend_task.arn
+
+  lifecycle {
+    precondition {
+      condition = (
+        !var.deploy_application ||
+        (
+          trimspace(var.backend_auth_secret_arn) != "" &&
+          trimspace(var.db_runtime_secret_arn) != "" &&
+          trimspace(var.db_migrator_secret_arn) != "" &&
+          var.db_runtime_username != var.db_migrator_username &&
+          var.db_runtime_username != var.db_username &&
+          var.db_migrator_username != var.db_username &&
+          var.db_runtime_secret_arn != var.db_migrator_secret_arn &&
+          var.db_runtime_secret_arn != aws_db_instance.this.master_user_secret[0].secret_arn &&
+          var.db_migrator_secret_arn != aws_db_instance.this.master_user_secret[0].secret_arn
+        )
+      )
+      error_message = "Application deployment requires three distinct PostgreSQL usernames, three distinct database password secrets, and backend_auth_secret_arn."
+    }
+  }
 
   container_definitions = jsonencode([
     {
@@ -68,6 +102,15 @@ resource "aws_ecs_task_definition" "backend" {
       essential = true
       cpu       = var.backend_task_cpu
       memory    = var.backend_task_memory
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.backend.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
 
       portMappings = [
         {
@@ -97,16 +140,36 @@ resource "aws_ecs_task_definition" "backend" {
         },
         {
           name  = "DB_USER"
-          value = var.db_username
+          value = var.deploy_application ? var.db_runtime_username : var.db_username
+        },
+        {
+          name  = "AUTH_COOKIE_SECURE"
+          value = tostring(var.environment == "prod" || var.acm_certificate_arn != "")
         }
       ]
 
-      secrets = [
-        {
-          name      = "DB_PASSWORD"
-          valueFrom = "${aws_db_instance.this.master_user_secret[0].secret_arn}:password::"
-        }
-      ]
+      secrets = concat(
+        var.deploy_application ? [
+          {
+            name      = "DB_PASSWORD"
+            valueFrom = "${var.db_runtime_secret_arn}:password::"
+          }
+          ] : [
+          {
+            name      = "DB_PASSWORD"
+            valueFrom = "${aws_db_instance.this.master_user_secret[0].secret_arn}:password::"
+          }
+        ],
+        var.backend_auth_secret_arn == "" ? [] : [
+          for key in local.backend_auth_secret_keys : {
+            name      = key
+            valueFrom = "${var.backend_auth_secret_arn}:${key}::"
+          }
+        ]
+      )
+
+      # Authentication configuration is supplied out-of-band through Secrets Manager.
+      # Do not put OAuth credentials or JWT signing material in Terraform variables.
 
       healthCheck = {
         command = [
@@ -122,9 +185,161 @@ resource "aws_ecs_task_definition" "backend" {
     }
   ])
 
+  depends_on = [
+    aws_iam_role_policy.ecs_backend_execution,
+  ]
+
   tags = merge(local.global_tags, {
     Name      = "${local.name}-backend-task"
     Component = "backend"
+  })
+}
+
+resource "aws_ecs_task_definition" "db_bootstrap" {
+  family                   = "${local.name}-db-bootstrap"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_db_bootstrap_execution.arn
+
+  # Intentionally omit task_role_arn: the process receives no AWS task credentials.
+  # ECR pulls, logs, and startup secret injection are handled by the execution role.
+
+  lifecycle {
+    precondition {
+      condition = (
+        !var.deploy_application ||
+        (
+          trimspace(var.db_runtime_secret_arn) != "" &&
+          trimspace(var.db_migrator_secret_arn) != "" &&
+          var.db_runtime_username != var.db_migrator_username &&
+          var.db_runtime_username != var.db_username &&
+          var.db_migrator_username != var.db_username &&
+          var.db_runtime_secret_arn != var.db_migrator_secret_arn &&
+          var.db_runtime_secret_arn != aws_db_instance.this.master_user_secret[0].secret_arn &&
+          var.db_migrator_secret_arn != aws_db_instance.this.master_user_secret[0].secret_arn
+        )
+      )
+      error_message = "Database bootstrap requires distinct master/runtime/migrator usernames and distinct Secrets Manager password ARNs before application deployment."
+    }
+  }
+
+  container_definitions = jsonencode([
+    {
+      name      = "db-bootstrap"
+      image     = "${aws_ecr_repository.backend.repository_url}:${var.backend_image_tag}"
+      essential = true
+      command   = ["python", "-m", "app.db.bootstrap_roles"]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.db_bootstrap.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+
+      environment = [
+        { name = "DB_HOST", value = aws_db_instance.this.address },
+        { name = "DB_PORT", value = tostring(aws_db_instance.this.port) },
+        { name = "DB_NAME", value = var.db_name },
+        { name = "DB_ADMIN_USER", value = var.db_username },
+        { name = "DB_RUNTIME_USER", value = var.db_runtime_username },
+        { name = "DB_MIGRATOR_USER", value = var.db_migrator_username },
+      ]
+
+      secrets = concat(
+        [
+          {
+            name      = "DB_ADMIN_PASSWORD"
+            valueFrom = "${aws_db_instance.this.master_user_secret[0].secret_arn}:password::"
+          }
+        ],
+        var.db_runtime_secret_arn == "" ? [] : [
+          {
+            name      = "DB_RUNTIME_PASSWORD"
+            valueFrom = "${var.db_runtime_secret_arn}:password::"
+          }
+        ],
+        var.db_migrator_secret_arn == "" ? [] : [
+          {
+            name      = "DB_MIGRATOR_PASSWORD"
+            valueFrom = "${var.db_migrator_secret_arn}:password::"
+          }
+        ]
+      )
+    }
+  ])
+
+  depends_on = [
+    aws_iam_role_policy.ecs_db_bootstrap_execution,
+  ]
+
+  tags = merge(local.global_tags, {
+    Name      = "${local.name}-db-bootstrap-task"
+    Component = "database-bootstrap"
+  })
+}
+
+resource "aws_ecs_task_definition" "db_migration" {
+  family                   = "${local.name}-db-migration"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_migration_execution.arn
+
+  # Intentionally omit task_role_arn: Alembic needs database access, not AWS API credentials.
+
+  lifecycle {
+    precondition {
+      condition     = !var.deploy_application || trimspace(var.db_migrator_secret_arn) != ""
+      error_message = "The database migration task requires db_migrator_secret_arn before application deployment."
+    }
+  }
+
+  container_definitions = jsonencode([
+    {
+      name      = "db-migration"
+      image     = "${aws_ecr_repository.backend.repository_url}:${var.backend_image_tag}"
+      essential = true
+      command   = ["alembic", "upgrade", "head"]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.db_migration.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+
+      environment = [
+        { name = "APP_ENV", value = var.environment },
+        { name = "DB_HOST", value = aws_db_instance.this.address },
+        { name = "DB_PORT", value = tostring(aws_db_instance.this.port) },
+        { name = "DB_NAME", value = var.db_name },
+        { name = "DB_USER", value = var.db_migrator_username },
+      ]
+
+      secrets = var.db_migrator_secret_arn == "" ? [] : [
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = "${var.db_migrator_secret_arn}:password::"
+        }
+      ]
+    }
+  ])
+
+  depends_on = [
+    aws_iam_role_policy.ecs_migration_execution,
+  ]
+
+  tags = merge(local.global_tags, {
+    Name      = "${local.name}-db-migration-task"
+    Component = "database-migration"
   })
 }
 
@@ -150,23 +365,23 @@ resource "aws_ecs_service" "frontend" {
     assign_public_ip = false
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.frontend.arn
-    container_name   = var.frontend_container_name
-    container_port   = 80
+  dynamic "load_balancer" {
+    for_each = var.enable_public_alb ? [1] : []
+
+    content {
+      target_group_arn = aws_lb_target_group.frontend[0].arn
+      container_name   = var.frontend_container_name
+      container_port   = 80
+    }
   }
 
-  ordered_placement_strategy {
-    type  = "spread"
-    field = "attribute:ecs.availability-zone"
-  }
 
   lifecycle {
-    ignore_changes = [desired_count]
+    # CD activates the next task revision only after the database migration succeeds.
+    ignore_changes = [desired_count, task_definition]
   }
 
   depends_on = [
-    aws_lb_listener.http,
     aws_iam_role_policy.ecs_execution,
   ]
 
@@ -198,24 +413,24 @@ resource "aws_ecs_service" "backend" {
     assign_public_ip = false
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.backend.arn
-    container_name   = var.backend_container_name
-    container_port   = var.backend_container_port
+  dynamic "load_balancer" {
+    for_each = var.enable_public_alb ? [1] : []
+
+    content {
+      target_group_arn = aws_lb_target_group.backend[0].arn
+      container_name   = var.backend_container_name
+      container_port   = var.backend_container_port
+    }
   }
 
-  ordered_placement_strategy {
-    type  = "spread"
-    field = "attribute:ecs.availability-zone"
-  }
 
   lifecycle {
-    ignore_changes = [desired_count]
+    # CD activates the next task revision only after the database migration succeeds.
+    ignore_changes = [desired_count, task_definition]
   }
 
   depends_on = [
-    aws_lb_listener_rule.backend,
-    aws_iam_role_policy.ecs_execution,
+    aws_iam_role_policy.ecs_backend_execution,
   ]
 
   tags = merge(local.global_tags, {
@@ -231,6 +446,11 @@ resource "aws_appautoscaling_target" "frontend" {
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 
+  # Preserve existing scaling bounds during migration; new targets start at zero until activation.
+  lifecycle {
+    ignore_changes = [min_capacity, max_capacity]
+  }
+
   depends_on = [aws_ecs_service.frontend]
 }
 
@@ -240,6 +460,11 @@ resource "aws_appautoscaling_target" "backend" {
   resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.backend.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
+
+  # Preserve the existing min during migration; new targets start at zero until activation.
+  lifecycle {
+    ignore_changes = [min_capacity]
+  }
 
   depends_on = [aws_ecs_service.backend]
 }

@@ -8,53 +8,81 @@ data "aws_iam_policy_document" "ecs_task_assume_role" {
 
     principals {
       type        = "Service"
-      identifiers = [
-        "ecs-tasks.amazonaws.com"
-      ]
+      identifiers = ["ecs-tasks.amazonaws.com"]
     }
   }
 }
 
-data "aws_iam_policy_document" "ecs_execution_permissions" {
+data "aws_iam_policy_document" "ecs_execution_base_permissions" {
   statement {
-    sid    = "EcrPull"
-    effect = "Allow"
-
-    actions = [
-      "ecr:GetAuthorizationToken"
-    ]
-
+    sid       = "EcrPull"
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
     resources = ["*"]
   }
+}
+
+# Legacy execution role is used by the frontend at all times and by the backend
+# only while deploy_application=false. Its backend-only access is conditional.
+data "aws_iam_policy_document" "ecs_execution_permissions" {
+  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_base_permissions.json]
 
   statement {
-    sid    = "EcrRepositoryPull"
-    effect = "Allow"
-
-    actions = [
-      "ecr:BatchCheckLayerAvailability",
-      "ecr:BatchGetImage",
-      "ecr:GetDownloadUrlForLayer"
-    ]
-
-    resources = [
-      aws_ecr_repository.frontend.arn,
-      aws_ecr_repository.backend.arn
-    ]
+    sid       = "EcrFrontendRepositoryPull"
+    effect    = "Allow"
+    actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = [aws_ecr_repository.frontend.arn]
   }
 
-
   statement {
-    sid    = "ReadDatabaseSecret"
-    effect = "Allow"
+    sid       = "WriteFrontendLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.frontend.arn}:*"]
+  }
 
-    actions = [
-      "secretsmanager:GetSecretValue"
-    ]
+  dynamic "statement" {
+    for_each = var.deploy_application ? [] : [aws_ecr_repository.backend.arn]
 
-    resources = [
-      aws_db_instance.this.master_user_secret[0].secret_arn
-    ]
+    content {
+      sid       = "LegacyBackendRepositoryPullWhileDisabled"
+      effect    = "Allow"
+      actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+      resources = [statement.value]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_application ? [] : [aws_cloudwatch_log_group.backend.arn]
+
+    content {
+      sid       = "LegacyBackendLogsWhileDisabled"
+      effect    = "Allow"
+      actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+      resources = ["${statement.value}:*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_application ? [] : [aws_db_instance.this.master_user_secret[0].secret_arn]
+
+    content {
+      sid       = "LegacyBackendDatabaseSecretWhileDisabled"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_application || var.backend_auth_secret_arn == "" ? [] : [var.backend_auth_secret_arn]
+
+    content {
+      sid       = "LegacyBackendAuthSecretWhileDisabled"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value]
+    }
   }
 }
 
@@ -73,16 +101,174 @@ resource "aws_iam_role_policy" "ecs_execution" {
   policy = data.aws_iam_policy_document.ecs_execution_permissions.json
 }
 
+data "aws_iam_policy_document" "ecs_backend_execution_permissions" {
+  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_base_permissions.json]
+
+  statement {
+    sid       = "EcrBackendRepositoryPull"
+    effect    = "Allow"
+    actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = [aws_ecr_repository.backend.arn]
+  }
+
+  statement {
+    sid       = "WriteBackendLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.backend.arn}:*"]
+  }
+
+  dynamic "statement" {
+    for_each = var.db_runtime_secret_arn == "" ? [] : [var.db_runtime_secret_arn]
+
+    content {
+      sid       = "ReadRuntimeDatabaseSecret"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.backend_auth_secret_arn == "" ? [] : [var.backend_auth_secret_arn]
+
+    content {
+      sid       = "ReadBackendAuthenticationSecret"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value]
+    }
+  }
+}
+
+resource "aws_iam_role" "ecs_backend_execution" {
+  name               = "${local.name}-ecs-backend-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
+
+  tags = merge(local.global_tags, {
+    Name      = "${local.name}-ecs-backend-execution"
+    Component = "backend"
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_backend_execution" {
+  name   = "${local.name}-ecs-backend-execution"
+  role   = aws_iam_role.ecs_backend_execution.id
+  policy = data.aws_iam_policy_document.ecs_backend_execution_permissions.json
+}
+
+data "aws_iam_policy_document" "ecs_migration_execution_permissions" {
+  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_base_permissions.json]
+
+  statement {
+    sid       = "EcrBackendRepositoryPull"
+    effect    = "Allow"
+    actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = [aws_ecr_repository.backend.arn]
+  }
+
+  statement {
+    sid       = "WriteMigrationLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.db_migration.arn}:*"]
+  }
+
+  dynamic "statement" {
+    for_each = var.db_migrator_secret_arn == "" ? [] : [var.db_migrator_secret_arn]
+
+    content {
+      sid       = "ReadMigrationDatabaseSecret"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value]
+    }
+  }
+}
+
+resource "aws_iam_role" "ecs_migration_execution" {
+  name               = "${local.name}-ecs-migration-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
+
+  tags = merge(local.global_tags, {
+    Name      = "${local.name}-ecs-migration-execution"
+    Component = "database-migration"
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_migration_execution" {
+  name   = "${local.name}-ecs-migration-execution"
+  role   = aws_iam_role.ecs_migration_execution.id
+  policy = data.aws_iam_policy_document.ecs_migration_execution_permissions.json
+}
+
+data "aws_iam_policy_document" "ecs_db_bootstrap_execution_permissions" {
+  source_policy_documents = [data.aws_iam_policy_document.ecs_execution_base_permissions.json]
+
+  statement {
+    sid       = "EcrBackendRepositoryPull"
+    effect    = "Allow"
+    actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = [aws_ecr_repository.backend.arn]
+  }
+
+  statement {
+    sid       = "WriteBootstrapLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.db_bootstrap.arn}:*"]
+  }
+
+  statement {
+    sid       = "ReadRdsMasterSecretForRoleBootstrap"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_db_instance.this.master_user_secret[0].secret_arn]
+  }
+
+  dynamic "statement" {
+    for_each = compact([
+      var.db_runtime_secret_arn,
+      var.db_migrator_secret_arn,
+    ])
+
+    content {
+      sid       = "ReadApplicationDatabaseRoleSecrets"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value]
+    }
+  }
+}
+
+resource "aws_iam_role" "ecs_db_bootstrap_execution" {
+  name               = "${local.name}-ecs-db-bootstrap-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
+
+  tags = merge(local.global_tags, {
+    Name      = "${local.name}-ecs-db-bootstrap-execution"
+    Component = "database-bootstrap"
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_db_bootstrap_execution" {
+  name   = "${local.name}-ecs-db-bootstrap-execution"
+  role   = aws_iam_role.ecs_db_bootstrap_execution.id
+  policy = data.aws_iam_policy_document.ecs_db_bootstrap_execution_permissions.json
+}
 
 data "aws_iam_policy_document" "ecs_monitoring_execution_permissions" {
   statement {
-    sid    = "ReadMonitoringSecrets"
-    effect = "Allow"
+    sid       = "WriteMonitoringLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.monitoring.arn}:*"]
+  }
 
-    actions = [
-      "secretsmanager:GetSecretValue"
-    ]
-
+  statement {
+    sid     = "ReadMonitoringSecrets"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
     resources = [
       aws_db_instance.monitoring.master_user_secret[0].secret_arn,
       aws_secretsmanager_secret.grafana_admin.arn
