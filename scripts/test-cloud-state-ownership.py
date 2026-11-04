@@ -67,6 +67,28 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("STALE_ID", errors[0])
 
+    def test_legacy_database_name_collision_blocks(self):
+        legacy = {"cloudstart/terraform.tfstate": {"resources": [
+            item("aws_db_instance", "this", {"identifier": "cloudstart-dev-db",
+                                              "id": "cloudstart-dev-db"})
+        ]}}
+        errors, _ = analyze(self.canonical, legacy, lambda kind, name: {
+            "id": name, "vpc": "vpc-old",
+        })
+        self.assertEqual(len(errors), 1)
+        self.assertIn("FOREIGN_VPC=vpc-old", errors[0])
+
+    def test_legacy_load_balancer_name_collision_blocks(self):
+        legacy = {"cloudstart/terraform.tfstate": {"resources": [
+            item("aws_lb", "this", {"name": "cloudstart-dev-alb",
+                                    "id": "arn:legacy-alb"})
+        ]}}
+        errors, _ = analyze(self.canonical, legacy, lambda kind, name: {
+            "id": "arn:current-alb", "vpc": "vpc-new",
+        })
+        self.assertEqual(len(errors), 1)
+        self.assertIn("STALE_ID", errors[0])
+
     def test_empty_legacy_passes(self):
         errors, notices = analyze(self.canonical, {}, lambda kind, name: None)
         self.assertEqual(errors, [])

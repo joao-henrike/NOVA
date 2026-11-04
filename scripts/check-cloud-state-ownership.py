@@ -21,6 +21,8 @@ RESOURCE_TYPES = {
     "aws_secretsmanager_secret",
     "aws_ecr_repository",
     "aws_ecs_cluster",
+    "aws_db_instance",
+    "aws_lb",
 }
 
 MISSING_ERRORS = {
@@ -30,6 +32,8 @@ MISSING_ERRORS = {
     "ResourceNotFoundException",
     "RepositoryNotFoundException",
     "ClusterNotFoundException",
+    "DBInstanceNotFound",
+    "LoadBalancerNotFound",
 }
 
 
@@ -64,6 +68,8 @@ def identity(attributes: dict) -> str:
 def display_name(resource_type: str, attributes: dict) -> str:
     if resource_type == "aws_ecs_cluster":
         return str(attributes.get("name") or attributes.get("cluster_name") or "")
+    if resource_type == "aws_db_instance":
+        return str(attributes.get("identifier") or "")
     return str(attributes.get("name") or "")
 
 
@@ -145,6 +151,17 @@ def live_lookup(region: str):
                        *common, allow_missing=True)
             items = data.get("TargetGroups", []) if data else []
             return {"id": items[0]["TargetGroupArn"], "vpc": items[0].get("VpcId")} if items else None
+        if kind == "aws_lb":
+            data = aws("elbv2", "describe-load-balancers", "--names", name,
+                       *common, allow_missing=True)
+            items = data.get("LoadBalancers", []) if data else []
+            return {"id": items[0]["LoadBalancerArn"], "vpc": items[0].get("VpcId")} if items else None
+        if kind == "aws_db_instance":
+            data = aws("rds", "describe-db-instances", "--db-instance-identifier",
+                       name, *common, allow_missing=True)
+            items = data.get("DBInstances", []) if data else []
+            return {"id": items[0]["DBInstanceIdentifier"],
+                    "vpc": (items[0].get("DBSubnetGroup") or {}).get("VpcId")} if items else None
         if kind == "aws_db_subnet_group":
             data = aws("rds", "describe-db-subnet-groups", "--db-subnet-group-name",
                        name, *common, allow_missing=True)
