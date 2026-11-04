@@ -33,6 +33,7 @@ env:
   EXPECTED_AWS_ACCOUNT_ID: "760396521507"
   TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'cloudstart-nova-terraform-state-760396521507' }}
   TF_STATE_KEY: cloudstart/dev/terraform.tfstate
+  LEGACY_TF_STATE_KEYS: cloudstart/redeploy-2026-10-08/terraform.tfstate,cloudstart/terraform.tfstate
 
 jobs:
   deploy:
@@ -89,6 +90,9 @@ jobs:
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
+
+      - name: Read-only legacy Terraform ownership preflight
+        run: python3 scripts/check-cloud-state-ownership.py
 
       - name: Provision restricted database credentials
         shell: bash
@@ -186,8 +190,6 @@ jobs:
       - name: Terraform init
         run: terraform init -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION" -backend-config="key=$TF_STATE_KEY" -reconfigure -input=false -no-color
 
-      - name: Read-only legacy Terraform ownership preflight
-        run: python3 scripts/check-cloud-state-ownership.py
 
       - name: Require Grafana secret
         env:

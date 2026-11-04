@@ -72,6 +72,19 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(notices, [])
 
+    def test_gitops_preflight_is_before_secret_mutations(self):
+        root = Path(__file__).resolve().parent.parent
+        deploy = (root / "scripts" / "deploy.sh").read_text(encoding="utf-8")
+        github = (root / ".github" / "workflows" / "deploy-dev.yml").read_text(encoding="utf-8")
+        iam = (root / "bootstrap" / "github-oidc" / "main.tf").read_text(encoding="utf-8")
+        self.assertLess(deploy.index("check-cloud-state-ownership.py"),
+                        deploy.index('log "Provisioning separate PostgreSQL'))
+        self.assertLess(github.index("Read-only legacy Terraform ownership preflight"),
+                        github.index("Provision restricted database credentials"))
+        self.assertIn("LEGACY_TF_STATE_KEYS:", github)
+        self.assertIn("ReadOnlyLegacyStateInventory", iam)
+        self.assertIn("s3:GetObject", iam)
+
     def test_ignores_data_sources(self):
         legacy = {"legacy": {"resources": [{
             "mode": "data", "type": "aws_iam_role", "name": "role",

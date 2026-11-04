@@ -16,7 +16,7 @@ Escopo: inspeção do repositório \`main\` (Terraform raiz, bootstrap de State,
 
 | Item | Causa raiz | Situação/correção |
 |---|---|---|
-| CR-01: State legado e canônico com nomes sobrepostos | Recursos antigos com mesmo nome e VPCs distintas; o State canônico não possui as associações dos objetos antigos | NOVO: preflight leitura apenas por AWS/State, obrigatório no deploy local e em CD; bloqueia antes do apply |
+| CR-01: State legado e canônico com nomes sobrepostos | Recursos antigos com mesmo nome e VPCs distintas; o State canônico não possui as associações dos objetos antigos | NOVO: preflight leitura apenas por AWS/State, obrigatório no deploy local e em CD, antes de provisionar credenciais; permissões S3 do OIDC ampliadas somente para leitura dos dois States legados; bloqueia antes do apply |
 | CR-02: baseline parcial | O script anterior pulava o baseline ao encontrar qualquer State, ainda que incompleto | Corrigido anteriormente por reconciliação refresh=true e guard fail-closed; a preflight agora antecede o apply |
 | CR-03: migração de propriedade não provisionada | Não há procedimento IaC único e autorizado para remover vínculos legados, migrar IAM/segredos sem dois donos e descartar objetos de outra VPC | PENDENTE: migração única com inventário e autorização; não automatizar exclusão baseada somente em State antigo |
 
@@ -62,3 +62,7 @@ Escopo: inspeção do repositório \`main\` (Terraform raiz, bootstrap de State,
 ## Critério de pronto
 
 \`make deploy\` em ambiente novo deve funcionar sem correções locais. Em ambiente legado, o comando deve primeiro gerar diagnóstico claro sem mutar recursos e oferecer **um procedimento de migração dirigido e reproduzível** com aprovação única, após o qual deploy/redeploy devem ser idempotentes. Testar repetição e destroy seguro em AWS real antes de alegar 100%.
+
+## Inspeção automatizada sem efeitos colaterais
+
+Execute `make audit-cloud` com credenciais AWS autorizadas para ler a conta 760396521507 e os três States. A auditoria aborta se detectar quaisquer recursos vivos com propriedade em States legados. Para GitHub CD, o papel OIDC deve receber `s3:GetObject` **apenas** nos dois objetos legados adicionados em `bootstrap/github-oidc/main.tf`. Atualizar o repositório não atualiza automaticamente uma IAM Role já provisionada; a atualização do bootstrap de identidade deve ser aplicada pelo fluxo autorizado, sem ampliar direitos de escrita nos States legados.

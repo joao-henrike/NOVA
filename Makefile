@@ -8,7 +8,7 @@ AWS_REGION ?= us-east-1
 
 .DEFAULT_GOAL := start
 
-.PHONY: start setup doctor validate fmt tflint deploy destroy-all destroy-all-with-secrets inventory-cloud ops ops-help ops-overview ops-services ops-costs ops-inventory ops-logs ops-test ops-shutdown ops-resume up down logs restart test migrate smoke tf-init tf-validate tf-plan test-deployment-contracts
+.PHONY: start setup doctor validate fmt tflint deploy destroy-all destroy-all-with-secrets inventory-cloud audit-cloud ops ops-help ops-overview ops-services ops-costs ops-inventory ops-logs ops-test ops-shutdown ops-resume up down logs restart test migrate smoke tf-init tf-validate tf-plan test-deployment-contracts
 
 # Default entry point after cloning the repository.
 # It prepares the local environment, validates it, and starts the application.
@@ -59,6 +59,10 @@ test-deployment-contracts:
 # Non-destructive AWS inventory of this project's tagged/named resources.
 inventory-cloud:
 	bash scripts/destroy-all.sh --inventory-only
+
+# Read-only AWS/S3 audit. Detects legacy Terraform ownership before any writes.
+audit-cloud:
+	@set -a; source config/dev.env; set +a; python3 scripts/check-cloud-state-ownership.py
 
 # Live AWS operations: read-only by default; state changes require explicit ACTION values.
 ACTION ?= menu
