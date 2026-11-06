@@ -57,7 +57,7 @@ rds_deletion_protection = false
 
 monitoring_desired_count              = 1
 monitoring_task_cpu                   = 1024
-monitoring_task_memory                = 2048
+monitoring_task_memory                = 3072
 zabbix_server_image                   = "zabbix/zabbix-server-pgsql:alpine-7.4.15"
 zabbix_web_image                      = "zabbix/zabbix-web-nginx-pgsql:alpine-7.4.15"
 grafana_image                         = "grafana/grafana:13.2.3"

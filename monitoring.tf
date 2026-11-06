@@ -187,6 +187,28 @@ resource "aws_iam_role" "ecs_monitoring_task" {
   })
 }
 
+# Read-only metrics via task-role credentials; no long-lived AWS access keys.
+resource "aws_iam_role_policy" "ecs_monitoring_metrics" {
+  name = "${local.name}-ecs-monitoring-metrics"
+  role = aws_iam_role.ecs_monitoring_task.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "ReadCloudWatchMetrics"
+      Effect = "Allow"
+      Action = [
+        "cloudwatch:GetMetricData",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics",
+        "cloudwatch:DescribeAlarms",
+        "logs:DescribeLogGroups",
+        "ec2:DescribeRegions"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
 resource "aws_ecs_task_definition" "monitoring" {
   family                   = "${local.name}-monitoring"
   network_mode             = "awsvpc"
@@ -394,6 +416,61 @@ resource "aws_ecs_task_definition" "monitoring" {
         retries     = 5
         startPeriod = 30
       }
+    },
+    {
+      # One idempotent sidecar handles both Zabbix configuration and Grafana
+      # dashboards. It stays essential and only becomes healthy after setup.
+      # No custom image, extra permanent AWS service, or additional secret.
+      name      = "monitoring-bootstrap"
+      image     = "python:3.12-alpine"
+      essential = true
+      cpu       = 0
+      memory    = 256
+
+      entryPoint = ["/bin/sh", "-ec"]
+      command = [
+        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/nova-bootstrap.py && python /tmp/nova-bootstrap.py && touch /tmp/nova-monitoring-ready && while :; do sleep 300; done"
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.monitoring.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "monitoring-bootstrap"
+        }
+      }
+
+      environment = [
+        { name = "MONITOR_BOOTSTRAP_SCRIPT_B64", value = filebase64("${path.module}/monitoring/bootstrap.py") },
+        { name = "GRAFANA_URL", value = "http://127.0.0.1:${var.grafana_container_port}/grafana" },
+        { name = "ZABBIX_URL", value = "http://127.0.0.1:8080/api_jsonrpc.php" },
+        { name = "ZABBIX_WEB_CHECK_URL", value = "http://127.0.0.1:8080/" },
+        { name = "GRAFANA_HEALTH_CHECK_URL", value = "http://127.0.0.1:${var.grafana_container_port}/grafana/api/health" },
+        { name = "MONITOR_CLOUDWATCH", value = "true" },
+        { name = "AWS_REGION", value = var.aws_region },
+        { name = "NOVA_CLUSTER", value = aws_ecs_cluster.this.name },
+        { name = "NOVA_APPLICATION_DB", value = aws_db_instance.this.identifier },
+        { name = "NOVA_MONITORING_DB", value = aws_db_instance.monitoring.identifier },
+      ]
+
+      secrets = [{
+        name      = "GRAFANA_PASSWORD"
+        valueFrom = "${aws_secretsmanager_secret.grafana_admin.arn}:password::"
+      }]
+
+      dependsOn = [
+        { containerName = "zabbix-web", condition = "HEALTHY" },
+        { containerName = "grafana", condition = "HEALTHY" }
+      ]
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "test -f /tmp/nova-monitoring-ready"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 300
+      }
     }
   ])
 
@@ -412,7 +489,7 @@ resource "aws_ecs_service" "monitoring" {
 
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200
-  health_check_grace_period_seconds  = 90
+  health_check_grace_period_seconds  = 300
 
   deployment_circuit_breaker {
     enable   = true

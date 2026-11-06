@@ -23,7 +23,7 @@ services:
       POSTGRES_PASSWORD: local-zabbix-only
       ZBX_SERVER_NAME: cloudstart-zabbix-local
     ports:
-      - "10051:10051"
+      - "127.0.0.1:10051:10051"
     depends_on:
       zabbix-db:
         condition: service_healthy
@@ -40,7 +40,7 @@ services:
       PHP_TZ: America/Sao_Paulo
       ZBX_SERVER_NAME: cloudstart-zabbix-local
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     depends_on:
       zabbix-server:
         condition: service_started
@@ -53,12 +53,32 @@ services:
       GF_PLUGINS_PREINSTALL: alexanderzobnin-zabbix-app@6.8.0
       GF_SERVER_ROOT_URL: http://localhost:3000/
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       zabbix-web:
         condition: service_started
     volumes:
       - grafana_data:/var/lib/grafana
+
+  monitoring-bootstrap:
+    image: python:3.12-alpine
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_PASSWORD: local-grafana-only-change-me
+      ZABBIX_URL: http://zabbix-web:8080/api_jsonrpc.php
+      ZABBIX_WEB_CHECK_URL: http://zabbix-web:8080/
+      GRAFANA_HEALTH_CHECK_URL: http://grafana:3000/api/health
+      ZABBIX_PASSWORD: local-zabbix-bootstrap-only
+      MONITOR_CLOUDWATCH: "false"
+    command: ["python", "/opt/nova/bootstrap.py"]
+    volumes:
+      - ./monitoring/bootstrap.py:/opt/nova/bootstrap.py:ro
+    depends_on:
+      zabbix-web:
+        condition: service_started
+      grafana:
+        condition: service_started
+    restart: on-failure
 
 volumes:
   zabbix_db_data:

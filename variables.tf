@@ -537,9 +537,9 @@ variable "monitoring_task_cpu" {
 }
 
 variable "monitoring_task_memory" {
-  description = "Fargate memory in MiB for the combined Zabbix/Grafana monitoring task."
+  description = "Fargate memory in MiB for Zabbix, Grafana, and the bootstrap container."
   type        = number
-  default     = 2048
+  default     = 3072
 
   validation {
     condition     = var.monitoring_task_memory >= 1024 && var.monitoring_task_memory <= 8192
