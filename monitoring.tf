@@ -198,12 +198,10 @@ resource "aws_iam_role_policy" "ecs_monitoring_metrics" {
       Sid    = "ReadCloudWatchMetrics"
       Effect = "Allow"
       Action = [
+        # These metric operations do not expose resource-level IAM ARNs.
         "cloudwatch:GetMetricData",
         "cloudwatch:GetMetricStatistics",
-        "cloudwatch:ListMetrics",
-        "cloudwatch:DescribeAlarms",
-        "logs:DescribeLogGroups",
-        "ec2:DescribeRegions"
+        "cloudwatch:ListMetrics"
       ]
       Resource = "*"
     }]
