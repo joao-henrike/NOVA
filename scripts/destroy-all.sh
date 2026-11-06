@@ -19,6 +19,9 @@ export PATH="$ROOT_DIR/.tools/bin:$PATH"
 : "${TF_STATE_KEY:=cloudstart/dev/terraform.tfstate}"
 : "${LEGACY_TF_STATE_KEYS:=}"
 export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" AWS_PAGER=""
+# Values loaded from dev.env must propagate to snapshot/secret child scripts.
+# A sourced shell variable is otherwise unavailable to bash subprocesses.
+export EXPECTED_AWS_ACCOUNT_ID TF_STATE_BUCKET TF_STATE_KEY LEGACY_TF_STATE_KEYS
 
 INVENTORY_ONLY=false
 DELETE_PROJECT_SECRETS=false
