@@ -235,9 +235,9 @@ data "aws_iam_policy_document" "ecs_db_bootstrap_execution_permissions" {
     ])) > 0 ? [1] : []
 
     content {
-      sid       = "ReadApplicationDatabaseRoleSecrets"
-      effect    = "Allow"
-      actions   = ["secretsmanager:GetSecretValue"]
+      sid     = "ReadApplicationDatabaseRoleSecrets"
+      effect  = "Allow"
+      actions = ["secretsmanager:GetSecretValue"]
       resources = compact([
         var.db_runtime_secret_arn,
         var.db_migrator_secret_arn,
