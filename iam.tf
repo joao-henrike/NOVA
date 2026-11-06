@@ -226,17 +226,22 @@ data "aws_iam_policy_document" "ecs_db_bootstrap_execution_permissions" {
     resources = [aws_db_instance.this.master_user_secret[0].secret_arn]
   }
 
+  # Single policy statement for both role secrets. Iterating each ARN here
+  # duplicated the SID when runtime and migrator secrets were configured.
   dynamic "statement" {
-    for_each = compact([
+    for_each = length(compact([
       var.db_runtime_secret_arn,
       var.db_migrator_secret_arn,
-    ])
+    ])) > 0 ? [1] : []
 
     content {
       sid       = "ReadApplicationDatabaseRoleSecrets"
       effect    = "Allow"
       actions   = ["secretsmanager:GetSecretValue"]
-      resources = [statement.value]
+      resources = compact([
+        var.db_runtime_secret_arn,
+        var.db_migrator_secret_arn,
+      ])
     }
   }
 }
