@@ -140,9 +140,9 @@ resource "aws_lb_target_group" "grafana" {
     timeout             = 5
     interval            = 30
     # Grafana is configured with GF_SERVER_SERVE_FROM_SUB_PATH=true.
-    path                = "/grafana/api/health"
-    protocol            = "HTTP"
-    matcher             = "200-299"
+    path     = "/grafana/api/health"
+    protocol = "HTTP"
+    matcher  = "200-299"
   }
 
   tags = merge(local.global_tags, {
