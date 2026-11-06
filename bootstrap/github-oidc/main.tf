@@ -40,6 +40,8 @@ locals {
     "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-migration-execution",
     "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-db-bootstrap-execution",
     "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-monitoring-execution",
+    # Only the monitoring task role gets the narrowly scoped CloudWatch read policy.
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-monitoring-task",
   ]
   ecs_mutable_role_arns = [
     "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ecs-backend-execution",

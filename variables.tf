@@ -531,8 +531,8 @@ variable "monitoring_task_cpu" {
   default     = 1024
 
   validation {
-    condition     = contains([512, 1024, 2048, 4096], var.monitoring_task_cpu)
-    error_message = "monitoring_task_cpu must be one of the supported Fargate values: 512, 1024, 2048, 4096."
+    condition     = var.monitoring_task_cpu == 1024
+    error_message = "Monitoring containers currently require 1024 CPU units (1 vCPU) in the MVP."
   }
 }
 
@@ -542,8 +542,8 @@ variable "monitoring_task_memory" {
   default     = 3072
 
   validation {
-    condition     = var.monitoring_task_memory >= 1024 && var.monitoring_task_memory <= 8192
-    error_message = "monitoring_task_memory must be between 1024 and 8192 MiB."
+    condition     = var.monitoring_task_memory >= 3072 && var.monitoring_task_memory <= 8192 && var.monitoring_task_memory % 1024 == 0
+    error_message = "monitoring_task_memory must be 3072, 4096, 5120, 6144, 7168 or 8192 MiB with the bootstrap sidecar."
   }
 }
 

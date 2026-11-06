@@ -6,7 +6,7 @@ set -Eeuo pipefail
 plan="$1"
 jq -e '.resource_changes | type == "array"' "$plan" >/dev/null ||
   { echo "Invalid Terraform plan JSON." >&2; exit 1; }
-allowed='^aws_(ecs_task_definition\.(frontend|backend|db_bootstrap|db_migration|monitoring)|ecs_service\.(frontend|backend|monitoring)|appautoscaling_target\.(frontend|backend)|iam_role\.(ecs_backend_execution|ecs_migration_execution|ecs_db_bootstrap_execution)|iam_role_policy\.(ecs_execution|ecs_backend_execution|ecs_migration_execution|ecs_db_bootstrap_execution|ecs_monitoring_execution)|security_group\.database_tasks|vpc_security_group_egress_rule\.(database_tasks_https|database_tasks_to_rds)|vpc_security_group_ingress_rule\.rds_from_database_tasks|cloudwatch_log_group\.(frontend|backend|db_bootstrap|db_migration|monitoring))$'
+allowed='^aws_(ecs_task_definition\.(frontend|backend|db_bootstrap|db_migration|monitoring)|ecs_service\.(frontend|backend|monitoring)|appautoscaling_target\.(frontend|backend)|iam_role\.(ecs_backend_execution|ecs_migration_execution|ecs_db_bootstrap_execution)|iam_role_policy\.(ecs_execution|ecs_backend_execution|ecs_migration_execution|ecs_db_bootstrap_execution|ecs_monitoring_execution|ecs_monitoring_metrics)|security_group\.database_tasks|vpc_security_group_egress_rule\.(database_tasks_https|database_tasks_to_rds)|vpc_security_group_ingress_rule\.rds_from_database_tasks|cloudwatch_log_group\.(frontend|backend|db_bootstrap|db_migration|monitoring))$'
 task_def='^aws_ecs_task_definition\.(frontend|backend|db_bootstrap|db_migration|monitoring)$'
 bad=0
 while IFS=$'\t' read -r address actions; do
