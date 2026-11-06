@@ -110,8 +110,9 @@ resource "aws_db_instance" "monitoring" {
 }
 
 resource "aws_secretsmanager_secret" "grafana_admin" {
-  name                    = "${local.name}/monitoring/grafana-admin"
-  recovery_window_in_days = 0
+  name                           = "${local.name}/monitoring/grafana-admin"
+  recovery_window_in_days        = 0
+  force_overwrite_replica_secret = false
 
   tags = merge(local.global_tags, {
     Name      = "${local.name}/monitoring/grafana-admin"
