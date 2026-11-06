@@ -126,6 +126,22 @@ grep -q "aws_ecs_service" "$ROOT/scripts/deploy.sh"
 bash -n "$ROOT/scripts/deploy.sh" "$ROOT/scripts/doctor.sh" \
   "$ROOT/scripts/destroy-all.sh" "$ROOT/scripts/snapshot-rds-before-destroy.sh" \
   "$ROOT/scripts/delete-project-secrets.sh" "$ROOT/scripts/check-baseline-plan.sh"
+# The teardown parent sources dev.env as plain shell variables; fail closed if
+# it forgets to export them to the snapshot and secret-deletion subprocesses.
+python3 - "$ROOT/scripts/destroy-all.sh" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+assert 'source "$CONFIG_ENV"' in source
+export = 'export EXPECTED_AWS_ACCOUNT_ID TF_STATE_BUCKET TF_STATE_KEY LEGACY_TF_STATE_KEYS'
+assert export in source
+assert source.index(export) > source.index('source "$CONFIG_ENV"')
+assert source.index(export) < source.index('bash "$ROOT_DIR/scripts/snapshot-rds-before-destroy.sh"')
+assert source.index(export) < source.index('bash "$ROOT_DIR/scripts/delete-project-secrets.sh"')
+print("Teardown child-process environment contract passed.")
+PY
+
 # Check the fail-closed RDS snapshot helper without AWS credentials.
 mkdir -p "$tmp/mock-bin"
 cat > "$tmp/mock-bin/aws" <<'MOCK'
