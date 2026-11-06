@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import sys
@@ -255,7 +256,12 @@ class Grafana:
 
 def run():
     grafana_password = os.environ["GRAFANA_PASSWORD"]
-    zabbix_password = os.environ["ZABBIX_PASSWORD"]
+    # Distinct password derived from the existing Grafana secret, without
+    # provisioning another Secrets Manager secret. A custom ZABBIX_PASSWORD
+    # can be supplied for local development or an explicit override.
+    zabbix_password = os.getenv("ZABBIX_PASSWORD") or hashlib.sha256(
+        ("NOVA-ZABBIX:" + grafana_password).encode("utf-8")
+    ).hexdigest()
     if len(zabbix_password) < 12:
         raise MonitoringError("ZABBIX_PASSWORD too short")
     grafana_url = os.environ["GRAFANA_URL"].rstrip("/")
