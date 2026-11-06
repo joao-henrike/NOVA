@@ -13,7 +13,7 @@ ROLES = frozenset({
 })
 SECRET = "aws_secretsmanager_secret.grafana_admin"
 ROLE_FIELDS = frozenset({"tags", "tags_all", "assume_role_policy"})
-SECRET_FIELDS = frozenset({"tags", "tags_all", "recovery_window_in_days"})
+SECRET_FIELDS = frozenset({"tags", "tags_all", "recovery_window_in_days", "force_overwrite_replica_secret"})
 
 
 def valid_ecs_trust(value):
@@ -73,6 +73,10 @@ def check(plan, address):
         return False, "invalid ECS trust policy"
     if address == SECRET and "recovery_window_in_days" in modified and after.get("recovery_window_in_days") != 0:
         return False, "unexpected recovery window"
+    # The imported secret must never overwrite an existing replica in another region.
+    # This field affects only replication behavior; do not allow enabling it.
+    if address == SECRET and "force_overwrite_replica_secret" in modified and after.get("force_overwrite_replica_secret") is not False:
+        return False, "replica overwrite must stay disabled"
     return True, ", ".join(sorted(modified))
 
 
