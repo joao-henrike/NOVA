@@ -38,6 +38,43 @@ make_plan 'aws_lb.this[0]' '["delete"]'; baseline_fail "ALB deletion"
 make_plan aws_vpc.this '["update"]'; baseline_fail "unreviewed VPC update"
 make_plan aws_vpc_security_group_egress_rule.alb_to_frontend '["delete"]'; baseline_fail "unexpected security rule deletion"
 make_plan aws_ecs_service.frontend '["update"]'; baseline_fail "existing application service update"
+
+# Imported IAM and Grafana may be normalized, but only exact safe fields.
+make_import_update() {
+  jq -nc --arg addr "$1" --argjson before "$2" --argjson after "$3" \
+    '{resource_changes:[{mode:"managed",address:$addr,change:{actions:["update"],before:$before,after:$after,after_unknown:{}}}]}' \
+    > "$tmp/plan.json"
+}
+for role in ecs_backend_task ecs_execution ecs_frontend_task ecs_monitoring_execution ecs_monitoring_task; do
+  make_import_update "aws_iam_role.$role" \
+    '{"id":"same","name":"unchanged","tags":{}}' \
+    '{"id":"same","name":"unchanged","tags":{"Owner":"cloudstart"}}'
+  baseline_pass "imported IAM tags $role"
+done
+ecs_trust="$(jq -nc '{Version:"2012-10-17",Statement:[{Effect:"Allow",Action:"sts:AssumeRole",Principal:{Service:"ecs-tasks.amazonaws.com"}}]}')"
+jq -nc --arg trust "$ecs_trust" \
+  '{resource_changes:[{mode:"managed",address:"aws_iam_role.ecs_execution",change:{actions:["update"],before:{id:"same",assume_role_policy:"{}"},after:{id:"same",assume_role_policy:$trust}}}]}' > "$tmp/plan.json"
+baseline_pass "imported IAM ECS-only trust"
+make_import_update aws_secretsmanager_secret.grafana_admin \
+  '{"id":"same","name":"unchanged","tags":{},"recovery_window_in_days":7}' \
+  '{"id":"same","name":"unchanged","tags":{"Owner":"cloudstart"},"recovery_window_in_days":0}'
+baseline_pass "imported Grafana secret metadata"
+make_import_update aws_iam_role.ecs_execution \
+  '{"id":"same","name":"unchanged"}' '{"id":"same","name":"renamed"}'
+baseline_fail "IAM role rename"
+make_import_update aws_iam_role.ecs_execution \
+  '{"id":"same","assume_role_policy":"{}"}' \
+  '{"id":"same","assume_role_policy":"{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"AWS\":\"*\"}}]}"}'
+baseline_fail "IAM broad trust"
+make_import_update aws_secretsmanager_secret.grafana_admin \
+  '{"id":"same","kms_key_id":"key-a"}' '{"id":"same","kms_key_id":"key-b"}'
+baseline_fail "Grafana KMS change"
+make_import_update aws_secretsmanager_secret.grafana_admin \
+  '{"id":"same","recovery_window_in_days":7}' '{"id":"same","recovery_window_in_days":30}'
+baseline_fail "Grafana unreviewed recovery window"
+make_plan aws_iam_role.ecs_execution '["delete","create"]'
+baseline_fail "IAM replacement"
+
 printf '{}' > "$tmp/plan.json"; baseline_fail "invalid baseline plan"
 jq -nc '{resource_changes:[
   {mode:"managed",address:"aws_db_instance.this",change:{actions:["create"]}},
