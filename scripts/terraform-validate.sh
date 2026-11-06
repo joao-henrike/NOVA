@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TERRAFORM="$ROOT_DIR/.tools/bin/terraform"
+TERRAFORM="${TERRAFORM:-$ROOT_DIR/.tools/bin/terraform}"
 RUN_ID="nova-tf-validate-$$"
 WORK_ROOT="${TMPDIR:-/tmp}/$RUN_ID"
 PROVIDER_CACHE="$WORK_ROOT/provider-cache"
@@ -26,6 +26,17 @@ copy_tf_files() {
 copy_tf_files "$ROOT_DIR" "$WORK_ROOT/root"
 copy_tf_files "$ROOT_DIR/bootstrap" "$WORK_ROOT/bootstrap"
 copy_tf_files "$ROOT_DIR/bootstrap/github-oidc" "$WORK_ROOT/bootstrap/github-oidc"
+
+# monitoring.tf evaluates filebase64("${path.module}/monitoring/bootstrap.py").
+# Terraform runs from this isolated copy, so include the tracked source asset.
+# Do not copy .deploy/, secrets, provider data, or the entire working tree.
+MONITORING_BOOTSTRAP="$ROOT_DIR/monitoring/bootstrap.py"
+if [ ! -f "$MONITORING_BOOTSTRAP" ]; then
+  echo "Missing monitoring bootstrap source: $MONITORING_BOOTSTRAP" >&2
+  exit 1
+fi
+mkdir -p "$WORK_ROOT/root/monitoring"
+cp -p "$MONITORING_BOOTSTRAP" "$WORK_ROOT/root/monitoring/bootstrap.py"
 
 cat > "$TF_CLI_CONFIG" <<EOF
 plugin_cache_dir = "$PROVIDER_CACHE"

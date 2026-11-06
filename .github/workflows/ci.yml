@@ -215,6 +215,11 @@ jobs:
         working-directory: bootstrap/github-oidc
         run: terraform validate -no-color
 
+      # Exercises the same isolated workspace used by make tf-validate in CloudShell.
+      # Catches missing filebase64() dependencies in the staged Terraform sources.
+      - name: Validate isolated Terraform workspace
+        run: TERRAFORM=terraform bash scripts/terraform-validate.sh
+
       - name: GitHub OIDC immutable subject contract
         run: bash scripts/test-github-oidc-subject.sh
       - name: Setup TFLint

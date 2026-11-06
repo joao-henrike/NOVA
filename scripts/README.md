@@ -11,6 +11,7 @@ This folder contains local setup, validation, deployment, state-bootstrap, secre
 | Script | Purpose | Side effects |
 | --- | --- | --- |
 | `bootstrap-local.sh` | Installs the repository-pinned local toolchain and Python virtual environment. | Local files under `.tools/` and `.venv/`; no AWS resources. |
+| `terraform-validate.sh` | Runs root, bootstrap and GitHub OIDC Terraform validation in temporary isolated workspaces, copying the monitoring bootstrap Python source referenced by `filebase64()`. | Temporary files only; no live AWS provisioning. The same check runs in CI. |
 | `doctor.sh` | Checks local branch/tool availability. | Read-only local checks. |
 | `terraform-validate.sh` | Runs root/bootstrap Terraform validation in an isolated temporary workspace. | Temporary files only; no Terraform apply. |
 | `wait-for-postgres.sh` | Waits for the local Compose PostgreSQL service. | Reads Compose health/logs; does not create AWS resources. |
