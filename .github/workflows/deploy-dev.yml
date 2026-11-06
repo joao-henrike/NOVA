@@ -123,7 +123,7 @@ jobs:
           echo "TF_VAR_backend_auth_secret_arn=$BACKEND_AUTH_SECRET_ARN" >> "$GITHUB_ENV"
 
       - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd
         with:
           mask-password: true
 
