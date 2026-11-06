@@ -139,7 +139,8 @@ resource "aws_lb_target_group" "grafana" {
     unhealthy_threshold = 3
     timeout             = 5
     interval            = 30
-    path                = "/api/health"
+    # Grafana is configured with GF_SERVER_SERVE_FROM_SUB_PATH=true.
+    path                = "/grafana/api/health"
     protocol            = "HTTP"
     matcher             = "200-299"
   }
@@ -409,7 +410,7 @@ resource "aws_ecs_task_definition" "monitoring" {
       healthCheck = {
         command = [
           "CMD-SHELL",
-          "wget -q -O - http://127.0.0.1:${var.grafana_container_port}/api/health >/dev/null || exit 1"
+          "wget -q -O - http://127.0.0.1:${var.grafana_container_port}/grafana/api/health >/dev/null || exit 1"
         ]
         interval    = 30
         timeout     = 5
