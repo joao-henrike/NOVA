@@ -59,6 +59,20 @@ make_import_update aws_secretsmanager_secret.grafana_admin \
   '{"id":"same","name":"unchanged","tags":{},"recovery_window_in_days":7}' \
   '{"id":"same","name":"unchanged","tags":{"Owner":"cloudstart"},"recovery_window_in_days":0}'
 baseline_pass "imported Grafana secret metadata"
+
+make_import_update aws_secretsmanager_secret.grafana_admin \
+  '{"id":"same","name":"unchanged","force_overwrite_replica_secret":null}' \
+  '{"id":"same","name":"unchanged","force_overwrite_replica_secret":false}'
+baseline_pass "Grafana imported secret has replica overwrite disabled"
+make_import_update aws_secretsmanager_secret.grafana_admin \
+  '{"id":"same","name":"unchanged","force_overwrite_replica_secret":false}' \
+  '{"id":"same","name":"unchanged","force_overwrite_replica_secret":true}'
+baseline_fail "Grafana replica overwrite enabled"
+make_import_update aws_secretsmanager_secret.grafana_admin \
+  '{"id":"same","name":"unchanged","force_overwrite_replica_secret":false}' \
+  '{"id":"same","name":"unchanged","force_overwrite_replica_secret":null}'
+baseline_fail "Grafana replica overwrite should not return to undefined"
+
 make_import_update aws_iam_role.ecs_execution \
   '{"id":"same","name":"unchanged"}' '{"id":"same","name":"renamed"}'
 baseline_fail "IAM role rename"
