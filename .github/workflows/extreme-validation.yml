@@ -267,7 +267,7 @@ jobs:
         id: codeql_analyze
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/analyze@439137e1b50c27ba9e2f9befc93e43091b449c34
+        uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26
         with:
           category: /language:python
 
