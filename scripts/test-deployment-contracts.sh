@@ -108,7 +108,7 @@ begin = 'data "aws_iam_policy_document" "ecs_db_bootstrap_execution_permissions"
 end = 'resource "aws_iam_role" "ecs_db_bootstrap_execution" {'
 assert source.count(begin) == 1 and source.count(end) == 1
 block = source.split(begin, 1)[1].split(end, 1)[0]
-assert block.count('sid       = "ReadApplicationDatabaseRoleSecrets"') == 1
+assert len(re.findall(r'\bsid\s*=\s*"ReadApplicationDatabaseRoleSecrets"', block)) == 1
 assert 'for_each = length(compact([' in block
 assert '])) > 0 ? [1] : []' in block
 assert re.search(r'resources\s*=\s*compact\(\[\s*var\.db_runtime_secret_arn,\s*var\.db_migrator_secret_arn,?\s*\]\)', block)
