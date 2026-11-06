@@ -96,6 +96,28 @@ jq -nc '{resource_changes:[
 ]}' > "$tmp/plan.json"
 baseline_fail "mixed plan with unsafe deletion"
 
+# Prevent the bootstrap IAM policy from generating duplicate SIDs when both
+# runtime and migrator secret ARNs are configured. No AWS access is needed.
+python3 - "$ROOT/iam.tf" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+begin = 'data "aws_iam_policy_document" "ecs_db_bootstrap_execution_permissions" {'
+end = 'resource "aws_iam_role" "ecs_db_bootstrap_execution" {'
+assert source.count(begin) == 1 and source.count(end) == 1
+block = source.split(begin, 1)[1].split(end, 1)[0]
+assert block.count('sid       = "ReadApplicationDatabaseRoleSecrets"') == 1
+assert 'for_each = length(compact([' in block
+assert '])) > 0 ? [1] : []' in block
+assert re.search(r'resources\s*=\s*compact\(\[\s*var\.db_runtime_secret_arn,\s*var\.db_migrator_secret_arn,?\s*\]\)', block)
+assert 'resources = [statement.value]' not in block
+sids = re.findall(r'\bsid\s*=\s*"([^"]+)"', block)
+assert len(sids) == len(set(sids)), f"Duplicate bootstrap IAM SIDs: {sids}"
+print("Bootstrap IAM policy SID contract passed.")
+PY
+
 # Reconciliation must refresh AWS to detect state drift, not trust a nonempty state.
 grep -q -- '-refresh=true' "$ROOT/scripts/deploy.sh"
 grep -q 'reconcile_baseline' "$ROOT/scripts/deploy.sh"
