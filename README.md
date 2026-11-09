@@ -64,4 +64,17 @@ Sugestões de endpoints:
 - `POST /api/payments/intents`
 - `POST /api/quotes`
 
+## Catálogo e política de preços
+
+O catálogo utiliza modelos identificáveis de Dell, HPE, Cisco, Fortinet e MikroTik, além de serviços CloudStart e itens Ubiquiti. Os valores são estimativas em reais para demonstração comercial, não cotações nem ofertas vinculantes. Configuração (CPU, RAM, discos, PoE, licenças), garantia, impostos, frete, estoque, câmbio e canal de distribuição podem alterar o preço final. A equipe comercial deve validar disponibilidade e preço antes de qualquer pedido.
+
+Referências públicas consultadas em novembro de 2026:
+
+- Cisco Catalyst 9200: Xtech — https://xtech.com.br/Switch-Cisco-Catalyst-9200-24-Port-Data-Only-C9200-24t-E/p/52915/ e FoxTI — https://www.foxti.com.br/collections/pecas-cisco-catalyst-9200
+- Servidores HPE / Dell: TI24h — https://www.ti24h.com.br/ e InforPró — https://www.inforpro.com.br/produtos/servidores
+- MikroTik CRS326-24G-2S+RM: fabricante — https://mikrotik.com/product/CRS326-24G-2SplusRM (preço sugerido oficial em dólar, convertido apenas como referência)
+- FortiGate 60F: valores estimados para appliance; licenças FortiGuard/FortiCare devem ser cotadas separadamente.
+
+As fotografias são carregadas de endereços públicos de fabricantes/revendedores e exigem conexão com a internet. Se uma imagem externa falhar, o catálogo utiliza o SVG local correspondente.
+
 Preços e pedidos desta versão são demonstrativos. Nenhum pagamento real é processado.

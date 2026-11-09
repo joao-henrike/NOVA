@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   }
 
   function filtered(){
-    let items=CLOUDSTART_PRODUCTS.filter(p=>(state.category==="all"||p.category===state.category)&&`${p.name} ${p.label} ${p.description} ${p.specs.join(" ")}`.toLowerCase().includes(state.search.toLowerCase())&&p.price>=(Number($("#minPrice").value)||0)&&(!$("#maxPrice").value||p.price<=Number($("#maxPrice").value))&&(!$("#favoritesOnly").checked||csWishlist().includes(p.id)));
+    let items=CLOUDSTART_PRODUCTS.filter(p=>(state.category==="all"||p.category===state.category)&&`${p.name} ${p.brand||""} ${p.model||""} ${p.sku||""} ${p.label} ${p.description} ${p.specs.join(" ")}`.toLowerCase().includes(state.search.toLowerCase())&&p.price>=(Number($("#minPrice").value)||0)&&(!$("#maxPrice").value||p.price<=Number($("#maxPrice").value))&&(!$("#favoritesOnly").checked||csWishlist().includes(p.id)));
     if(state.sort==="priceAsc")items.sort((a,b)=>a.price-b.price);
     if(state.sort==="priceDesc")items.sort((a,b)=>b.price-a.price);
     if(state.sort==="name")items.sort((a,b)=>a.name.localeCompare(b.name));
@@ -38,9 +38,9 @@ document.addEventListener("DOMContentLoaded",()=>{
       const wished=csWishlist().includes(p.id);
       return `<article class="product-card">
         <div class="product-media"><button class="wish ${wished?"active":""}" data-wish="${p.id}" aria-label="${wished?"Remover dos favoritos":"Favoritar"} ${csEscape(p.name)}" aria-pressed="${wished}">${wished?"♥":"♡"}</button>${p.badge?`<span class="badge">${p.badge}</span>`:""}${csImage(p)}<button class="quick" data-quick="${p.id}">Ver detalhes</button></div>
-        <label class="compare-check"><input type="checkbox" data-compare="${p.id}" ${state.compare.includes(p.id)?"checked":""}> Comparar</label><div class="product-content"><span class="product-label">${p.label}</span><h3>${p.name}</h3><p>${p.description}</p>
+        <label class="compare-check"><input type="checkbox" data-compare="${p.id}" ${state.compare.includes(p.id)?"checked":""}> Comparar</label><div class="product-content"><span class="product-label">${p.brand||p.label}</span><h3>${p.name}</h3><p>${p.description}</p>
           <div class="specs">${p.specs.slice(0,2).map(s=>`<span>${s}</span>`).join("")}</div>
-          <div class="product-buy"><div><strong>${csBRL(p.price)}</strong><small>${p.recurring?"por mês":"à vista demonstrativo"}</small></div><button class="add" data-add="${p.id}">Adicionar</button></div>
+          <div class="product-buy"><div><strong>${csBRL(p.price)}</strong><small>${p.recurring?"por mês":"preço estimado"}</small><small class="price-hint">${p.model||"Preço sujeito a confirmação"}</small></div><button class="add" data-add="${p.id}">Adicionar</button></div>
         </div>
       </article>`
     }).join(""):'<div class="empty-results"><h3>Nenhum produto encontrado</h3><p>Tente outra busca ou categoria.</p><button class="button secondary" id="clearFilters">Limpar filtros</button></div>';
@@ -63,14 +63,14 @@ document.addEventListener("DOMContentLoaded",()=>{
   }
   function openCompare(){
     const products=state.compare.map(csProduct).filter(Boolean); if(products.length<2){showToast("Selecione pelo menos dois equipamentos para comparar.");return}
-    const rows=[['Preço',p=>csBRL(p.price)+(p.recurring?" / mês":"")],['Categoria',p=>p.label],['Descrição',p=>p.description],['Especificações',p=>p.specs.join(" · ")],['Modelo de cobrança',p=>p.recurring?"Recorrente":"Compra única"]];
+    const rows=[['Preço',p=>csBRL(p.price)+(p.recurring?" / mês":"")],['Fabricante',p=>p.brand||'—'],['Modelo',p=>p.model||'—'],['Categoria',p=>p.label],['Descrição',p=>p.description],['Especificações',p=>p.specs.join(" · ")],['Modelo de cobrança',p=>p.recurring?"Recorrente":"Compra única"]];
     $("#compareContent").innerHTML=`<span class="eyebrow">COMPARADOR</span><h2>Compare os equipamentos</h2><div class="comparison-table"><table><thead><tr><th>Característica</th>${products.map(p=>`<th>${csEscape(p.name)}</th>`).join("")}</tr></thead><tbody>${rows.map(([label,get])=>`<tr><th>${label}</th>${products.map(p=>`<td>${csEscape(get(p))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
     $("#compareModal").hidden=false;
   }
 
   function openQuickview(id){
     const p=csProduct(id); if(!p)return;
-    $("#quickviewContent").innerHTML=`<div class="quick-grid"><div class="quick-image">${csImage(p)}</div><div><span class="product-label">${p.label}</span><h2>${p.name}</h2><p>${p.description}</p><div class="quick-price">${csBRL(p.price)} <small>${p.recurring?"por mês":"valor demonstrativo"}</small></div><ul>${p.specs.map(s=>`<li>${s}</li>`).join("")}</ul><button class="button primary full" id="quickAdd">Adicionar ao carrinho</button></div></div>`;
+    $("#quickviewContent").innerHTML=`<div class="quick-grid"><div class="quick-image">${csImage(p)}</div><div><span class="product-label">${p.brand||p.label}</span><h2>${p.name}</h2><p>${p.description}</p><div class="quick-price">${csBRL(p.price)} <small>${p.recurring?"por mês":"preço estimado"}</small></div><p class="price-basis">${p.priceBasis||"Preço de referência sujeito a confirmação."}</p><ul>${p.specs.map(s=>`<li>${s}</li>`).join("")}</ul><button class="button primary full" id="quickAdd">Adicionar ao carrinho</button></div></div>`;
     $("#quickAdd").onclick=()=>{csAddToCart(id);updateCount();renderCart();$("#quickview").hidden=true;showToast("Produto adicionado ao carrinho.");openCart()};
     $("#quickview").hidden=false;
   }

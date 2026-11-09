@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="styles.css"><script src="store.js" defer></script><script src="app.js" defer></script>
 </head>
 <body>
-<div class="topline"><div class="container topinner"><span>CloudStart Commerce</span><span>Valores demonstrativos para prototipação</span></div></div>
+<div class="topline"><div class="container topinner"><span>CloudStart Commerce <span class="topline-separator">|</span> Tecnologia para operações empresariais</span><span>Catálogo de referência · preços estimados em reais</span></div></div>
 <header class="header">
   <div class="container header-main">
     <a class="brand" href="index.html"><span class="brand-icon">C</span><span>Cloud<span class="accent">Start</span></span></a>
@@ -28,9 +28,9 @@
 <main>
 <section class="hero">
   <div class="container hero-grid">
-    <div class="hero-copy"><span class="eyebrow">INFRAESTRUTURA CORPORATIVA</span>
+    <div class="hero-copy"><span class="eyebrow">TECNOLOGIA PARA EMPRESAS</span>
       <h1>Monte uma infraestrutura pronta para crescer.</h1>
-      <p>Servidores, networking, segurança e soluções em nuvem em uma experiência comercial preparada para empresas de pequeno, médio e grande porte.</p>
+      <p>Equipamentos de rede, segurança e computação de fabricantes reconhecidos, com orientação comercial para ambientes de pequeno, médio e grande porte.</p>
       <div class="hero-actions"><a class="button primary" href="#catalogo">Comprar soluções</a><a class="button secondary" href="#solucoes">Ver recomendações</a></div>
       <div class="hero-benefits"><span>Compra demonstrativa</span><span>Checkout completo</span><span>Frontend API-ready</span></div>
     </div>
@@ -38,7 +38,7 @@
   </div>
 </section>
 
-<section class="trust"><div class="container trust-grid"><div><strong>10+</strong><span>soluções no catálogo</span></div><div><strong>4</strong><span>formas de pagamento</span></div><div><strong>3</strong><span>portes de empresa</span></div><div><strong>100%</strong><span>frontend demonstrativo</span></div></div></section>
+<section class="trust"><div class="container trust-grid"><div><strong>5</strong><span>fabricantes de tecnologia</span></div><div><strong>4</strong><span>formas de pagamento</span></div><div><strong>3</strong><span>portes de empresa</span></div><div><strong>B2B</strong><span>foco em infraestrutura</span></div></div></section>
 
 <section class="container section" id="catalogo">
   <div class="section-title"><div><span class="eyebrow">CATÁLOGO</span><h2>Escolha por categoria</h2><p>Uma vitrine inspirada em padrões de grandes e-commerces: busca rápida, filtros, favoritos, compra direta e resumo do carrinho.</p></div></div>
@@ -48,8 +48,8 @@
     </div>
     <div class="filter-row"><label class="filter-field">Preço mínimo<input id="minPrice" type="number" min="0" placeholder="R$ 0"></label><label class="filter-field">Preço máximo<input id="maxPrice" type="number" min="0" placeholder="Sem limite"></label><label class="filter-check"><input id="favoritesOnly" type="checkbox"> Só favoritos</label><label class="filter-field sort-field">Ordenar por<select id="sort"><option value="relevance">Relevância</option><option value="priceAsc">Menor preço</option><option value="priceDesc">Maior preço</option><option value="name">Nome A–Z</option></select></label><button class="button secondary filter-reset" id="resetFilters" type="button">Limpar filtros</button></div>
   </div>
-  <div class="recommendation"><div><strong id="resultTitle">Soluções em destaque</strong><span id="resultCount">0 produtos</span></div><span>Entrega e valores são demonstrativos</span></div><div class="compare-toolbar"><span id="compareCount">0 equipamentos selecionados</span><button id="compareButton" class="button secondary" type="button" disabled>Comparar selecionados</button></div>
-  <div class="product-grid" id="productGrid"></div>
+  <div class="recommendation"><div><strong id="resultTitle">Soluções em destaque</strong><span id="resultCount">0 produtos</span></div><span>Preços estimados · sujeitos a estoque, configuração, impostos e cotação</span></div><div class="compare-toolbar"><span id="compareCount">0 equipamentos selecionados</span><button id="compareButton" class="button secondary" type="button" disabled>Comparar selecionados</button></div>
+  <div class="price-disclaimer"><strong>Importante:</strong> os valores exibidos são estimativas de referência em reais, não ofertas vinculantes. O preço final depende da configuração, licenciamento, garantia, disponibilidade, impostos, frete e cotação do fornecedor. Consulte a equipe comercial antes da compra.</div><div class="product-grid" id="productGrid"></div>
 </section>
 
 <section class="container section" id="solucoes">

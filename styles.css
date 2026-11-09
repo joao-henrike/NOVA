@@ -178,3 +178,14 @@ button:active, .button:active { transform: translateY(1px) scale(.99); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+
+/* Catálogo B2B — identificação de fabricante e transparência comercial */
+.topline-separator { opacity: .45; padding: 0 7px; }
+.product-content .product-label { display: inline-flex; align-items: center; width: fit-content; color: var(--muted); font-size: 9px; letter-spacing: .11em; }
+.product-content h3 { min-height: 38px; }
+.price-disclaimer { margin: 0 0 20px; padding: 14px 16px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 9px; background: var(--surface); color: var(--muted); font-size: 11px; line-height: 1.65; }
+.price-disclaimer strong { color: var(--text); }
+.price-basis { margin: 12px 0 16px !important; padding: 11px 12px; border-radius: 8px; background: var(--surface2); color: var(--muted); font-size: 10px !important; line-height: 1.55; }
+.product-buy small { letter-spacing: .01em; }
+@media (max-width: 560px) { .price-disclaimer { font-size: 10px; } }
