@@ -129,6 +129,18 @@ resource "aws_vpc_security_group_ingress_rule" "backend_from_alb" {
   description                  = "Backend traffic from ALB only"
 }
 
+# Frontend Fargate tasks run in private subnets and need HTTPS egress via NAT
+# for ECR registry authentication and image pulls. No inbound rule is added.
+#trivy:ignore:AWS-0104
+resource "aws_vpc_security_group_egress_rule" "frontend_ecr_https" {
+  security_group_id = aws_security_group.frontend.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+  description       = "Frontend outbound HTTPS for ECR image pulls"
+}
+
 #trivy:ignore:AWS-0104
 resource "aws_vpc_security_group_egress_rule" "backend_https" {
   security_group_id = aws_security_group.backend.id
