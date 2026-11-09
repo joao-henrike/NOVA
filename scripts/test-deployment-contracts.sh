@@ -12,6 +12,10 @@ make_plan() {
 pass() { bash "$guard" "$tmp/plan.json" >/dev/null || { echo "Should allow: $1"; exit 1; }; }
 fail() { if bash "$guard" "$tmp/plan.json" >/dev/null 2>&1; then echo "Should reject: $1" >&2; exit 1; fi; }
 make_plan aws_ecs_task_definition.backend '["delete","create"]'; pass "backend task revision"
+make_plan aws_vpc_security_group_egress_rule.frontend_ecr_https '["create"]'; pass "frontend ECR HTTPS outbound rule"
+make_plan aws_vpc_security_group_egress_rule.frontend_ecr_https '["delete"]'; fail "frontend ECR HTTPS deletion"
+make_plan aws_vpc_security_group_egress_rule.frontend_unrestricted '["create"]'; fail "unreviewed frontend outbound rule"
+
 make_plan aws_ecs_task_definition.monitoring '["create","delete"]'; pass "monitoring revision"
 make_plan aws_ecs_service.backend '["update"]'; pass "service update"
 make_plan aws_ecs_service.backend '["delete"]'; fail "service deletion"
@@ -116,6 +120,27 @@ assert 'resources = [statement.value]' not in block
 sids = re.findall(r'\bsid\s*=\s*"([^"]+)"', block)
 assert len(sids) == len(set(sids)), f"Duplicate bootstrap IAM SIDs: {sids}"
 print("Bootstrap IAM policy SID contract passed.")
+PY
+
+# Only outbound HTTPS is granted to frontend tasks for private ECR pulls.
+python3 - "$ROOT/security_groups.tf" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = 'resource "aws_vpc_security_group_egress_rule" "frontend_ecr_https" {'
+assert source.count(start) == 1
+rule = source.split(start, 1)[1].split("\n}", 1)[0]
+for field, value in (
+    ("security_group_id", "aws_security_group.frontend.id"),
+    ("cidr_ipv4", '"0.0.0.0/0"'),
+    ("from_port", "443"),
+    ("to_port", "443"),
+    ("ip_protocol", '"tcp"'),
+):
+    assert re.search(rf"^\s*{field}\s*=\s*{re.escape(value)}\s*$", rule, re.MULTILINE), field
+print("Frontend ECR egress contract passed.")
 PY
 
 # Reconciliation must refresh AWS to detect state drift, not trust a nonempty state.
