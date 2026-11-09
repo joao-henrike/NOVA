@@ -1,18 +1,98 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR" data-theme="light">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="referrer" content="no-referrer">
-  <title>CloudStart</title>
-  <link rel="stylesheet" href="/styles.css">
-  <script src="/app.js" defer></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="CloudStart Commerce — infraestrutura, segurança, servidores, networking e soluções em nuvem.">
+<title>CloudStart | Infraestrutura para empresas</title>
+<link rel="stylesheet" href="styles.css"><script src="store.js" defer></script><script src="app.js" defer></script><script src="api-status.js" defer></script>
 </head>
 <body>
-  <main>
-    <h1>CloudStart</h1>
-    <p>Frontend container is running.</p>
-    <p id="backend">Checking backend...</p>
-  </main>
-</body>
-</html>
+<div class="topline"><div class="container topinner"><span>CloudStart Commerce <span class="topline-separator">|</span> Tecnologia para operações empresariais</span><span>Catálogo de referência · preços estimados em reais</span></div></div>
+<header class="header">
+  <div class="container header-main">
+    <a class="brand" href="index.html"><span class="brand-icon">C</span><span>Cloud<span class="accent">Start</span></span></a>
+    <button class="mobile-menu-button" id="mobileMenuButton" aria-expanded="false" aria-controls="categoryBar">Menu</button><div class="search-wrap"><input id="search" type="search" placeholder="Buscar servidor, switch, firewall, cloud..." autocomplete="off" aria-label="Buscar produtos"><button id="searchButton" aria-label="Buscar">Buscar</button></div>
+    <div class="header-actions">
+      <a href="login.html" class="account-link"><span class="action-icon">●</span><span><small>Olá, visitante</small><strong>Entrar / conta</strong></span></a>
+      <button class="icon-button" id="themeButton" title="Alternar tema" aria-label="Alternar tema">◐</button>
+      <button class="cart-trigger" id="cartTrigger"><span>Carrinho</span><b id="cartCount">0</b></button>
+    </div>
+  </div>
+  <div class="category-bar" id="categoryBar"><div class="container category-inner">
+    <a href="#catalogo">Todos</a><a href="#catalogo" data-category="server">Servidores</a><a href="#catalogo" data-category="network">Networking</a><a href="#catalogo" data-category="security">Firewall e segurança</a><a href="#catalogo" data-category="cloud">Soluções em nuvem</a><a href="#catalogo" data-category="suite">Suites</a><a href="#solucoes">Por porte</a><a href="#suporte">Atendimento</a>
+  </div></div>
+</header>
+
+<main>
+<section class="hero">
+  <div class="container hero-grid">
+    <div class="hero-copy"><span class="eyebrow">TECNOLOGIA PARA EMPRESAS</span>
+      <h1>Monte uma infraestrutura pronta para crescer.</h1>
+      <p>Equipamentos de rede, segurança e computação de fabricantes reconhecidos, com orientação comercial para ambientes de pequeno, médio e grande porte.</p>
+      <div class="hero-actions"><a class="button primary" href="#catalogo">Comprar soluções</a><a class="button secondary" href="#solucoes">Ver recomendações</a></div>
+      <div class="hero-benefits"><span>Compra demonstrativa</span><span>Checkout demonstrativo</span><span>API FastAPI integrada</span></div>
+    </div>
+    <div class="hero-visual"><div class="hero-card"><span>ARQUITETURA</span><strong>Local + Cloud</strong><small>Uma jornada para hardware e serviços recorrentes.</small><div class="network-diagram"><i></i><i></i><i></i><em></em></div></div></div>
+  </div>
+</section>
+
+<section class="trust"><div class="container trust-grid"><div><strong>5</strong><span>fabricantes de tecnologia</span></div><div><strong>4</strong><span>formas de pagamento</span></div><div><strong>3</strong><span>portes de empresa</span></div><div><strong>B2B</strong><span>foco em infraestrutura</span></div></div></section>
+
+<section class="container api-status-line" role="status" aria-live="polite"><strong>Conexão com a infraestrutura:</strong> <span id="apiStatus">Verificando API e banco de dados...</span></section>
+<section class="container section" id="catalogo">
+  <div class="section-title"><div><span class="eyebrow">CATÁLOGO</span><h2>Escolha por categoria</h2><p>Uma vitrine inspirada em padrões de grandes e-commerces: busca rápida, filtros, favoritos, compra direta e resumo do carrinho.</p></div></div>
+  <div class="catalog-controls">
+    <div class="chips" id="categoryChips">
+      <button class="chip active" data-category="all">Todos</button><button class="chip" data-category="server">Servidores</button><button class="chip" data-category="network">Networking</button><button class="chip" data-category="security">Firewall</button><button class="chip" data-category="cloud">Nuvem</button><button class="chip" data-category="suite">Suites</button>
+    </div>
+    <div class="filter-row"><label class="filter-field">Preço mínimo<input id="minPrice" type="number" min="0" placeholder="R$ 0"></label><label class="filter-field">Preço máximo<input id="maxPrice" type="number" min="0" placeholder="Sem limite"></label><label class="filter-check"><input id="favoritesOnly" type="checkbox"> Só favoritos</label><label class="filter-field sort-field">Ordenar por<select id="sort"><option value="relevance">Relevância</option><option value="priceAsc">Menor preço</option><option value="priceDesc">Maior preço</option><option value="name">Nome A–Z</option></select></label><button class="button secondary filter-reset" id="resetFilters" type="button">Limpar filtros</button></div>
+  </div>
+  <div class="recommendation"><div><strong id="resultTitle">Soluções em destaque</strong><span id="resultCount">0 produtos</span></div><span>Preços estimados · sujeitos a estoque, configuração, impostos e cotação</span></div><div class="compare-toolbar"><span id="compareCount">0 equipamentos selecionados</span><button id="compareButton" class="button secondary" type="button" disabled>Comparar selecionados</button></div>
+  <div class="price-disclaimer"><strong>Importante:</strong> os valores exibidos são estimativas de referência em reais, não ofertas vinculantes. O preço final depende da configuração, licenciamento, garantia, disponibilidade, impostos, frete e cotação do fornecedor. Consulte a equipe comercial antes da compra.</div><div class="product-grid" id="productGrid"></div>
+</section>
+
+<section class="container section" id="solucoes">
+  <div class="section-title"><div><span class="eyebrow">PORTE DA EMPRESA</span><h2>Comece pelo cenário da sua operação</h2><p>Use recomendações como ponto de partida e ajuste o carrinho conforme sua necessidade.</p></div></div>
+  <div class="size-grid">
+    <button class="size-card" data-size="small"><span>01</span><strong>Pequena</strong><small>Até 50 usuários</small><p>Segurança, conectividade e custo-benefício.</p><b>Ver recomendação</b></button>
+    <button class="size-card active" data-size="medium"><span>02</span><strong>Média</strong><small>51 a 250 usuários</small><p>Redundância, gestão e crescimento planejado.</p><b>Ver recomendação</b></button>
+    <button class="size-card" data-size="large"><span>03</span><strong>Grande</strong><small>251+ usuários</small><p>Alta disponibilidade, escala e governança.</p><b>Ver recomendação</b></button>
+  </div>
+  <div class="solution-panel" id="solutionPanel"></div>
+</section>
+
+<section class="container section calculator-section" id="calculadora">
+  <div class="section-title"><div><span class="eyebrow">CONFIGURADOR</span><h2>Monte um cenário de infraestrutura</h2><p>Estimativa fictícia para demonstrar um fluxo de venda consultiva.</p></div></div>
+  <div class="calculator"><div class="calc-fields">
+    <label>Servidores<input id="calcServers" type="number" min="0" max="20" value="1"></label>
+    <label>Switches<input id="calcSwitches" type="number" min="0" max="20" value="1"></label>
+    <label>Firewalls<input id="calcFirewalls" type="number" min="0" max="20" value="1"></label>
+    <label>Usuários<input id="calcUsers" type="number" min="0" max="5000" value="50"></label>
+    <label class="wide">Plano de nuvem<select id="calcCloud"><option value="0">Sem plano</option><option value="399">Cloud Pro — R$ 399/mês</option><option value="799">Cloud Business — R$ 799/mês</option><option value="1499">Cloud Enterprise — R$ 1.499/mês</option></select></label>
+  </div><aside class="estimate"><span>ESTIMATIVA</span><strong id="estimateTotal">R$ 0,00</strong><div><span>Subtotal</span><b id="estimateSubtotal">R$ 0,00</b></div><div><span>Desconto por porte</span><b id="estimateDiscount">R$ 0,00</b></div><div><span>Plano cloud mensal</span><b id="estimateCloud">R$ 0,00</b></div><button class="button primary full" id="addEstimate">Adicionar cenário ao carrinho</button><a class="button secondary full" href="#suporte">Solicitar orçamento</a></aside></div>
+</section>
+
+<section class="cloud-highlight"><div class="container cloud-grid"><div><span class="eyebrow">CLOUDSTART CLOUD</span><h2>Hardware hoje. Serviços recorrentes amanhã.</h2><p>Combine infraestrutura física, backup, monitoramento e cloud em uma jornada comercial única.</p><a class="button primary" href="#catalogo" data-category="cloud">Explorar cloud</a></div><div class="cloud-stats"><div><strong>Backup</strong><span>continuidade operacional</span></div><div><strong>Monitoramento</strong><span>visibilidade do ambiente</span></div><div><strong>Escala</strong><span>crescimento sob demanda</span></div></div></div></section>
+
+<section class="container section support" id="suporte"><div><span class="eyebrow">ATENDIMENTO</span><h2>Precisa de uma arquitetura sob medida?</h2><p>Envie seus requisitos e o protótipo prepara o pedido para integração futura com um endpoint de orçamento.</p></div><button class="button primary" id="quoteButton">Falar com especialista</button></section>
+</main>
+
+<footer class="footer"><div class="container footer-grid">
+  <div><a class="brand" href="index.html"><span class="brand-icon">C</span><span>Cloud<span class="accent">Start</span></span></a><p>Infraestrutura, hardware, segurança e cloud.</p></div>
+  <div><strong>Comprar</strong><a href="#catalogo">Catálogo</a><a href="#solucoes">Por porte</a><a href="checkout.html">Checkout</a></div>
+  <div><strong>Conta</strong><a href="login.html">Entrar</a><a href="register.html">Criar conta</a><button id="footerCart">Carrinho</button></div>
+  <div><strong>Projeto</strong><span>Protótipo frontend</span><span>Valores demonstrativos</span><span>© 2026 CloudStart</span></div>
+</div></footer>
+
+<aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+  <div class="drawer-head"><div><span class="eyebrow">SEU PEDIDO</span><h2>Carrinho</h2></div><button class="drawer-close" id="cartClose" aria-label="Fechar carrinho">×</button></div>
+  <div class="drawer-body" id="cartItems"></div>
+  <div class="drawer-footer"><div class="drawer-total"><span>Subtotal</span><strong id="cartSubtotal">R$ 0,00</strong></div><small>Frete e impostos são definidos na etapa de checkout.</small><a class="button primary full" id="checkoutLink" href="checkout.html">Simular pedido</a><button class="button ghost full" id="continueShopping">Continuar comprando</button></div>
+</aside>
+<div class="drawer-overlay" id="drawerOverlay" hidden></div>
+
+<div class="quickview" id="compareModal" hidden><div class="quickview-card"><button class="drawer-close" data-close-compare aria-label="Fechar comparação">×</button><div id="compareContent"></div></div></div>
+<div class="quickview" id="quickview" hidden><div class="quickview-card"><button class="drawer-close" data-close-quick>×</button><div id="quickviewContent"></div></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="compare-dock" id="compareDock" hidden><span id="compareDockText">Comparação</span><button class="button primary" id="compareDockButton" type="button">Comparar</button><button class="button ghost" id="clearCompare" type="button">Limpar</button></div>
+</body></html>

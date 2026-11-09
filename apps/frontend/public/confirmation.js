@@ -1,0 +1,1 @@
+document.addEventListener("DOMContentLoaded",()=>{csApplyTheme();const order=JSON.parse(localStorage.getItem("cloudstart_last_order")||"null");document.querySelector("#orderId").textContent=order?.id||"CS-DEMO";document.querySelector("#themeButton").onclick=()=>csToggleTheme();});
