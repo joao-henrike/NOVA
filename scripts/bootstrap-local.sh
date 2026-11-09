@@ -28,6 +28,23 @@ has() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# GitHub release asset endpoints can transiently return HTTP 5xx.
+# Download atomically, retry temporary failures, and never install a partial file.
+download_with_retry() {
+  local url="$1"
+  local destination="$2"
+  local temporary="${destination}.part"
+
+  rm -f -- "$temporary"
+  if ! curl -fL --retry 8 --retry-all-errors --retry-delay 3 \
+      --connect-timeout 20 --max-time 180 \
+      "$url" -o "$temporary"; then
+    rm -f -- "$temporary"
+    fail "Download failed after retries: $url"
+  fi
+  mv -f -- "$temporary" "$destination"
+}
+
 install_terraform() {
   if "$BIN_DIR/terraform" version 2>/dev/null | grep -q "Terraform v$TERRAFORM_VERSION"; then
     return
@@ -52,7 +69,11 @@ install_tflint() {
   local url="https://github.com/terraform-linters/tflint/releases/download/v$TFLINT_VERSION/tflint_linux_amd64.zip"
 
   say "Downloading TFLint $TFLINT_VERSION"
-  curl -fsSL "$url" -o "$archive"
+  download_with_retry "$url" "$archive"
+  # Pinned SHA-256 from the official v0.64.0 GitHub release asset.
+  printf '%s  %s\n' \
+    "cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537" \
+    "$archive" | sha256sum --check --status || fail "TFLint archive checksum mismatch."
   unzip -qo "$archive" -d "$BIN_DIR"
   rm -f "$archive"
   "$BIN_DIR/tflint" --version
@@ -79,7 +100,7 @@ install_buildx() {
   local url="https://github.com/docker/buildx/releases/download/v$BUILDX_VERSION/buildx-v$BUILDX_VERSION.linux-$arch"
 
   say "Downloading Docker Buildx $BUILDX_VERSION"
-  curl -fsSL "$url" -o "$plugin"
+  download_with_retry "$url" "$plugin"
   chmod +x "$plugin"
   docker buildx version
 }
@@ -101,7 +122,7 @@ install_compose() {
   local url="https://github.com/docker/compose/releases/download/v$COMPOSE_VERSION/docker-compose-linux-$arch"
 
   say "Downloading Docker Compose $COMPOSE_VERSION"
-  curl -fsSL "$url" -o "$plugin"
+  download_with_retry "$url" "$plugin"
   chmod +x "$plugin"
   docker compose version
 }
