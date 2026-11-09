@@ -126,6 +126,10 @@ grep -q "aws_ecs_service" "$ROOT/scripts/deploy.sh"
 bash -n "$ROOT/scripts/deploy.sh" "$ROOT/scripts/doctor.sh" \
   "$ROOT/scripts/destroy-all.sh" "$ROOT/scripts/snapshot-rds-before-destroy.sh" \
   "$ROOT/scripts/delete-project-secrets.sh" "$ROOT/scripts/check-baseline-plan.sh"
+bash -n "$ROOT/scripts/bootstrap-local.sh"
+# Bootstrap must retry transient release-download failures and verify the pinned TFLint asset.
+grep -Fq -- '--retry-all-errors' "$ROOT/scripts/bootstrap-local.sh"
+grep -Fq -- 'sha256sum --check --status' "$ROOT/scripts/bootstrap-local.sh"
 # The teardown parent sources dev.env as plain shell variables; fail closed if
 # it forgets to export them to the snapshot and secret-deletion subprocesses.
 python3 - "$ROOT/scripts/destroy-all.sh" <<'PY'
