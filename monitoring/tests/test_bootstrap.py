@@ -99,6 +99,24 @@ class MonitoringTests(unittest.TestCase):
         self.assertEqual([name for name, _ in calls], ["user.get", "user.update"])
         self.assertEqual(z.token, "token")
 
+    def test_zabbix_login_never_reuses_old_authentication_token(self):
+        z = bootstrap.Zabbix("http://zabbix.invalid/api_jsonrpc.php")
+        z.token = "session-token-before-password-rotation"
+        observed = []
+
+        def fake_http_json(url, method="GET", data=None, auth=""):
+            observed.append((url, method, data, auth))
+            return {"jsonrpc": "2.0", "result": "new-session-token", "id": 1}
+
+        with patch.object(bootstrap, "http_json", side_effect=fake_http_json):
+            result = z.login("strong-example-password-not-logged")
+
+        self.assertEqual(result, "new-session-token")
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0][3], "")
+        self.assertEqual(observed[0][2]["method"], "user.login")
+        self.assertEqual(z.token, "session-token-before-password-rotation")
+
     def test_wrong_zabbix_credentials_fail_without_resetting(self):
         z = bootstrap.Zabbix("http://example.invalid/api")
         with patch.object(z, "login", side_effect=bootstrap.MonitoringError("denied")):

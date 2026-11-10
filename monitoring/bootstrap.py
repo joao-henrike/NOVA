@@ -68,7 +68,21 @@ class Zabbix:
         return response["result"]
 
     def login(self, password):
-        return self.call("user.login", {"username": "Admin", "password": password})
+        # Zabbix user.login is an unauthenticated API method. In particular,
+        # a password rotation must not reuse the pre-rotation bearer token.
+        # That token is still in self.token until authenticate() assigns the
+        # freshly issued session, so bypass self.call() for this one method.
+        response = http_json(
+            self.url, "POST",
+            {"jsonrpc": "2.0", "method": "user.login",
+             "params": {"username": "Admin", "password": password}, "id": 1},
+        )
+        if not response or "error" in response or not isinstance(response.get("result"), str):
+            error = (response or {}).get("error", {})
+            raise MonitoringError(
+                f"Zabbix API user.login returned an error ({error.get('code', 'unknown')})"
+            )
+        return response["result"]
 
     def authenticate(self, password):
         if not password or len(password) < 12:
