@@ -55,6 +55,35 @@ echo "Building and pushing frontend image $REPO:$TAG"
 aws ecr get-login-password --region "$AWS_REGION" | \
   docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com" >/dev/null
 docker build --pull -t "$REPO:$TAG" apps/frontend
+
+# Test the exact image before publishing: a 403 from Nginx must block rollout.
+echo "Checking Nginx static HTML inside the new frontend image"
+TEST_CONTAINER="$(docker run --detach --rm "$REPO:$TAG")"
+[[ -n "$TEST_CONTAINER" ]] || die "Failed to start the frontend smoke-test container"
+smoke_cleanup() {
+  docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1 || true
+}
+trap 'smoke_cleanup; rm -rf "$WORK"' EXIT
+
+SMOKE_HTML=""
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  if SMOKE_HTML="$(docker exec "$TEST_CONTAINER" wget -q -O - http://127.0.0.1/ 2>/dev/null)" \
+    && grep -Fq 'id="apiStatus"' <<< "$SMOKE_HTML"; then
+    break
+  fi
+  sleep 1
+done
+
+grep -Fq 'id="apiStatus"' <<< "$SMOKE_HTML" || {
+  docker logs "$TEST_CONTAINER" >&2 || true
+  die "Frontend Nginx did not serve the new HTML at /"
+}
+
+docker exec "$TEST_CONTAINER" wget -q -O /dev/null http://127.0.0.1/styles.css \
+  || die "Frontend Nginx failed to serve styles.css"
+smoke_cleanup
+trap 'rm -rf "$WORK"' EXIT
+echo "Frontend image smoke test passed"
 docker push "$REPO:$TAG"
 
 echo "Planning targeted frontend task-definition update"
