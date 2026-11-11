@@ -127,18 +127,55 @@ class Zabbix:
 
         scenario = "NOVA internal health"
         existing = self.call("httptest.get", {
-            "hostids": [host_id], "filter": {"name": [scenario]}, "output": ["httptestid"]
+            "hostids": [host_id], "filter": {"name": [scenario]},
+            "output": ["httptestid", "delay", "retries"],
+            "selectSteps": ["httpstepid", "name", "no", "url", "status_codes"],
         })
         steps = [
             {"name": "Zabbix Web", "no": 1, "url": web_url, "status_codes": "200-399"},
             {"name": "Grafana API", "no": 2, "url": grafana_health_url, "status_codes": "200"},
         ]
-        payload = {"name": scenario, "hostid": host_id, "delay": "1m", "retries": 2, "steps": steps}
         if existing:
-            payload["httptestid"] = existing[0]["httptestid"]
-            self.call("httptest.update", payload)
+            if len(existing) != 1:
+                raise MonitoringError("Cannot uniquely identify NOVA Zabbix web scenario")
+            current = existing[0]
+            current_steps = current.get("steps")
+            if not isinstance(current_steps, list) or len(current_steps) != len(steps):
+                raise MonitoringError("Existing NOVA web scenario steps require manual review")
+            by_name = {s.get("name"): s for s in current_steps}
+            if len(by_name) != len(steps) or set(by_name) != {s["name"] for s in steps}:
+                raise MonitoringError("Existing NOVA web scenario step names require manual review")
+            if any(not by_name[s["name"]].get("httpstepid") for s in steps):
+                raise MonitoringError("Existing NOVA web scenario has missing step IDs")
+
+            changed_steps = any(
+                any(str(by_name[s["name"]].get(k)) != str(s[k])
+                    for k in ("no", "url", "status_codes"))
+                for s in steps
+            )
+            changed_options = (
+                str(current.get("delay")) != "1m"
+                or str(current.get("retries")) != "2"
+            )
+            if changed_steps or changed_options:
+                # httptest.update does NOT accept hostid. Replacing steps without
+                # their httpstepid can destroy/recreate Zabbix step metrics.
+                update = {"httptestid": current["httptestid"]}
+                if changed_options:
+                    update.update({"delay": "1m", "retries": 2})
+                if changed_steps:
+                    update["steps"] = [
+                        {**s, "httpstepid": by_name[s["name"]]["httpstepid"]}
+                        for s in steps
+                    ]
+                self.call("httptest.update", update)
+            else:
+                print("Zabbix: existing HTTP scenario already configured")
         else:
-            self.call("httptest.create", payload)
+            self.call("httptest.create", {
+                "name": scenario, "hostid": host_id, "delay": "1m",
+                "retries": 2, "steps": steps,
+            })
 
         description = "NOVA internal HTTP monitoring failed"
         triggers = self.call("trigger.get", {

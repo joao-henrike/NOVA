@@ -51,7 +51,13 @@ class MonitoringTests(unittest.TestCase):
                 state["host"] = True
                 return {"hostids": ["9"]}
             if method == "httptest.get":
-                return [{"httptestid": "2"}] if state["test"] else []
+                return ([{"httptestid": "2", "delay": "1m", "retries": "2",
+                          "steps": [
+                              {"httpstepid": "11", "name": "Zabbix Web", "no": "1",
+                               "url": "http://internal-web/", "status_codes": "200-399"},
+                              {"httpstepid": "12", "name": "Grafana API", "no": "2",
+                               "url": "http://grafana/api/health", "status_codes": "200"},
+                          ]}] if state["test"] else [])
             if method == "httptest.create":
                 state["test"] = True
                 return {"httptestids": ["2"]}
@@ -70,8 +76,62 @@ class MonitoringTests(unittest.TestCase):
         methods = [call[0] for call in calls]
         for action in ("hostgroup.create", "host.create", "httptest.create", "trigger.create"):
             self.assertEqual(methods.count(action), 1, action)
-        self.assertEqual(methods.count("httptest.update"), 1)
+        self.assertEqual(methods.count("httptest.update"), 0)
         self.assertEqual(state, {"group": True, "host": True, "test": True, "trigger": True})
+
+    def test_existing_zabbix_web_scenario_updates_without_hostid_and_preserves_step_ids(self):
+        z = bootstrap.Zabbix("http://example.invalid/api")
+        calls = []
+
+        def fake_call(method, params=None):
+            calls.append((method, params))
+            if method == "hostgroup.get":
+                return [{"groupid": "5"}]
+            if method == "host.get":
+                return [{"hostid": "9"}]
+            if method == "httptest.get":
+                return [{"httptestid": "2", "delay": "1m", "retries": "2", "steps": [
+                    {"httpstepid": "11", "name": "Zabbix Web", "no": "1",
+                     "url": "http://old-internal-web/", "status_codes": "200-399"},
+                    {"httpstepid": "12", "name": "Grafana API", "no": "2",
+                     "url": "http://grafana/api/health", "status_codes": "200"},
+                ]}]
+            if method == "httptest.update":
+                return {"httptestids": ["2"]}
+            if method == "trigger.get":
+                return [{"triggerid": "3"}]
+            raise AssertionError(method)
+
+        z.call = fake_call
+        z.ensure_health_checks("http://internal-web/", "http://grafana/api/health")
+        updates = [args for method, args in calls if method == "httptest.update"]
+        self.assertEqual(len(updates), 1)
+        self.assertNotIn("hostid", updates[0])
+        self.assertEqual(updates[0]["httptestid"], "2")
+        self.assertEqual([s["httpstepid"] for s in updates[0]["steps"]], ["11", "12"])
+        self.assertEqual(updates[0]["steps"][0]["url"], "http://internal-web/")
+
+    def test_existing_zabbix_web_scenario_does_not_replace_unknown_steps(self):
+        z = bootstrap.Zabbix("http://example.invalid/api")
+        calls = []
+
+        def fake_call(method, params=None):
+            calls.append(method)
+            if method == "hostgroup.get":
+                return [{"groupid": "5"}]
+            if method == "host.get":
+                return [{"hostid": "9"}]
+            if method == "httptest.get":
+                return [{"httptestid": "2", "delay": "1m", "retries": "2", "steps": [
+                    {"httpstepid": "11", "name": "Unexpected custom step", "no": "1",
+                     "url": "http://custom/", "status_codes": "200"}
+                ]}]
+            raise AssertionError(method)
+
+        z.call = fake_call
+        with self.assertRaisesRegex(bootstrap.MonitoringError, "manual review"):
+            z.ensure_health_checks("http://internal-web/", "http://grafana/api/health")
+        self.assertNotIn("httptest.update", calls)
 
     def test_zabbix_password_first_boot_is_rotated_once(self):
         z = bootstrap.Zabbix("http://example.invalid/api")
