@@ -161,8 +161,12 @@ deploy() {
     -backend-config="region=$REGION"
   [[ "$(terraform output -raw aws_account_id)" == "$ACCOUNT" ]] || fail 'Terraform state account mismatch'
 
-  local work; work="$(mktemp -d /tmp/nova-mon-only.XXXXXXXX)"
-  trap 'rm -rf "$work"' EXIT
+  local work cleanup_cmd
+  work="$(mktemp -d /tmp/nova-mon-only.XXXXXXXX)"
+  # EXIT runs after deploy() returns, when its local variables are out of scope.
+  # Capture the safely shell-quoted path NOW rather than expanding $work later.
+  printf -v cleanup_cmd 'rm -rf -- %q' "$work"
+  trap "$cleanup_cmd" EXIT
   info 'Planning ONE change: monitoring task-definition revision'
   terraform plan -refresh=true -lock=true -input=false -no-color \
     -var-file=config/dev.tfvars \
@@ -246,8 +250,11 @@ CHECK_SECRET_PY
   [[ "$actual_hash" == "$expected_hash" ]] || fail 'Live ECS task does not embed the fixed bootstrap; run deploy first'
   exec_role="$(aws ecs describe-task-definition --task-definition "$current_def" --region "$REGION" --query 'taskDefinition.executionRoleArn' --output text)"
   [[ "$exec_role" == arn:aws:iam::"$ACCOUNT":role/* ]] || fail 'Unexpected execution role ARN'
-  local work; work="$(mktemp -d /tmp/nova-zabbix-reset.XXXXXXXX)"
-  trap 'rm -rf "$work"' EXIT
+  local work cleanup_cmd
+  work="$(mktemp -d /tmp/nova-zabbix-reset.XXXXXXXX)"
+  # Capture the path now; EXIT executes after reset_admin() has returned.
+  printf -v cleanup_cmd 'rm -rf -- %q' "$work"
+  trap "$cleanup_cmd" EXIT
   aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --region "$REGION" \
     --query 'services[0].networkConfiguration' --output json > "$work/network.json"
   jq -e '.awsvpcConfiguration.subnets|length>0' "$work/network.json" >/dev/null || fail 'Missing private ECS networking settings'
