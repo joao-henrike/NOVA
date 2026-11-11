@@ -20,6 +20,17 @@ class MonitoringTests(unittest.TestCase):
         sources = [p["datasource"]["uid"] for p in dashboard["panels"]]
         self.assertEqual(sources[:2], ["nova-zabbix", "nova-zabbix"])
         self.assertEqual(sources[2:], ["nova-cloudwatch"] * 6)
+        for panel in result[0]["panels"][2:]:
+            target = panel["targets"][0]
+            self.assertEqual(target["metricQueryType"], 0)
+            self.assertEqual(target["metricEditorMode"], 0)
+            self.assertRegex(target["id"], r"^m[3-8]$")
+            self.assertEqual(target["queryMode"], "Metrics")
+        first, second = result[0]["panels"][:2]
+        self.assertIn("Failed step of scenario", first["targets"][0]["item"]["filter"])
+        self.assertIn("Response time for step", second["targets"][0]["item"]["filter"])
+        self.assertNotIn("application", first["targets"][0])
+        self.assertNotIn("application", second["targets"][0])
         rds = dashboard["panels"][-1]["targets"][0]
         self.assertEqual(rds["dimensions"]["DBInstanceIdentifier"], "cloudstart-dev-monitoring-db")
         self.assertEqual(rds["namespace"], "AWS/RDS")
