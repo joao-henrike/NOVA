@@ -221,9 +221,11 @@ def dashboards(cluster, app_db, monitoring_db, region, cloudwatch):
                  "refId": "A", "mode": 0,
                  "group": {"filter": "NOVA Monitoring"},
                  "host": {"filter": "NOVA-Monitoring"},
-                 # Grafana Zabbix's item filter matches DISPLAY NAMES, not key_.
+                 # Match Zabbix 7.4 auto-generated DISPLAY NAMES exactly.
+                 # Avoid regex filters: recent Grafana Zabbix plugin item-picker
+                 # versions can fail to resolve regex-backed item selections.
                  # Zabbix 7.4 no longer exposes legacy "applications".
-                 "item": {"filter": "/^Failed step of scenario.*NOVA internal health/"},
+                 "item": {"filter": "Failed step of scenario NOVA internal health"},
                  "functions": [], "options": {"showDisabledItems": False},
              }]},
             {"id": 2, "title": "Zabbix HTTP response time", "type": "timeseries",
@@ -234,7 +236,7 @@ def dashboards(cluster, app_db, monitoring_db, region, cloudwatch):
                  "refId": "A", "mode": 0,
                  "group": {"filter": "NOVA Monitoring"},
                  "host": {"filter": "NOVA-Monitoring"},
-                 "item": {"filter": "/^Response time for step.*Grafana API.*NOVA internal health/"},
+                 "item": {"filter": "Response time for step Grafana API of scenario NOVA internal health"},
                  "functions": [], "options": {"showDisabledItems": False},
              }]},
         ],

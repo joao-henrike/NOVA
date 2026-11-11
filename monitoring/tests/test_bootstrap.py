@@ -27,8 +27,18 @@ class MonitoringTests(unittest.TestCase):
             self.assertRegex(target["id"], r"^m[3-8]$")
             self.assertEqual(target["queryMode"], "Metrics")
         first, second = result[0]["panels"][:2]
-        self.assertIn("Failed step of scenario", first["targets"][0]["item"]["filter"])
-        self.assertIn("Response time for step", second["targets"][0]["item"]["filter"])
+        self.assertEqual(
+            first["targets"][0]["item"]["filter"],
+            "Failed step of scenario NOVA internal health",
+        )
+        self.assertEqual(
+            second["targets"][0]["item"]["filter"],
+            "Response time for step Grafana API of scenario NOVA internal health",
+        )
+        # Regex item filters have regressed in recent Grafana Zabbix plugin
+        # versions. These names are created automatically by the web scenario.
+        self.assertFalse(first["targets"][0]["item"]["filter"].startswith("/"))
+        self.assertFalse(second["targets"][0]["item"]["filter"].startswith("/"))
         self.assertNotIn("application", first["targets"][0])
         self.assertNotIn("application", second["targets"][0])
         rds = dashboard["panels"][-1]["targets"][0]
