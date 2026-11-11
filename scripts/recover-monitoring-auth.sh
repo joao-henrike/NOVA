@@ -47,29 +47,102 @@ status() {
 sync_secret() {
   mkdir -p "$ROOT/.deploy/monitoring-recovery"
   chmod 700 "$ROOT/.deploy" "$ROOT/.deploy/monitoring-recovery"
-  # Download the existing AWS secret privately; preserve any divergent local value.
+  # Never echo password values or pass them as CLI arguments.
+  # AWSCURRENT is authoritative when valid. If corrupted, restore from the
+  # existing valid local password, or AWSPREVIOUS if the local value is unusable.
   python3 - "$LOCAL_SECRET" "$ROOT/.deploy/monitoring-recovery" "$SECRET" "$REGION" <<'PY'
-import json, os, pathlib, shutil, subprocess, sys, time
-path = pathlib.Path(sys.argv[1]); backup = pathlib.Path(sys.argv[2]); secret_id = sys.argv[3]; region = sys.argv[4]
-value = subprocess.check_output(['aws','secretsmanager','get-secret-value','--secret-id',secret_id,
-                                 '--region',region,'--query','SecretString','--output','text'], text=True)
-password = json.loads(value).get('password')
-if not isinstance(password,str) or len(password)<12:
-    raise SystemExit('AWS Grafana secret is not a valid 12+ character password')
-if path.exists():
-    old = path.read_text()
-    if old != password:
-        target=backup / ('grafana-admin-password.old-local.' + time.strftime('%Y%m%dT%H%M%SZ',time.gmtime()))
-        shutil.copyfile(path,target)
-        target.chmod(0o600)
-        print('Local differing secret backed up privately in .deploy/monitoring-recovery/')
-if not path.exists() or path.read_text()!=password:
+import json
+import os
+import pathlib
+import secrets
+import shutil
+import subprocess
+import sys
+from datetime import datetime, timezone
+
+path, backup = map(pathlib.Path, sys.argv[1:3])
+secret_id, region = sys.argv[3:5]
+
+def get_version(stage, required=False):
+    proc = subprocess.run(
+        ['aws','secretsmanager','get-secret-value',
+         '--secret-id',secret_id,'--version-stage',stage,
+         '--region',region,'--query','SecretString','--output','text'],
+        check=False, capture_output=True, text=True
+    )
+    if proc.returncode:
+        if required:
+            raise SystemExit('Unable to read Secrets Manager AWSCURRENT; no changes made')
+        return None
+    return proc.stdout.strip()
+
+def password_from(raw):
+    try:
+        value = json.loads(raw) if raw else None
+    except (ValueError, TypeError):
+        return None
+    pwd = value.get('password') if isinstance(value, dict) else None
+    return pwd if isinstance(pwd, str) and len(pwd) >= 12 else None
+
+def secure_write(dest, content):
+    dest.write_text(content)
+    dest.chmod(0o600)
+
+def backup_local_if_different(chosen, stamp):
+    if path.is_file() and path.read_text() != chosen:
+        dest = backup / ('grafana-admin-password.old-local.' + stamp)
+        shutil.copyfile(path, dest)
+        dest.chmod(0o600)
+        print('Saved the different local password privately in .deploy/monitoring-recovery/')
+
+stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+current_raw = get_version('AWSCURRENT', required=True)
+selected = password_from(current_raw)
+if selected is None:
+    local_value = path.read_text() if path.is_file() else ''
+    previous_value = password_from(get_version('AWSPREVIOUS'))
+    if len(local_value) >= 12:
+        selected, source = local_value, 'existing local password'
+    elif previous_value:
+        selected, source = previous_value, 'Secrets Manager AWSPREVIOUS'
+    else:
+        raise SystemExit(
+            'AWSCURRENT is invalid and neither the local file nor AWSPREVIOUS '
+            'has a valid 12+ character password. No changes made.'
+        )
+
+    # Preserve the current secret before any change. The backup is private,
+    # and AWS also keeps the previous version through AWSPREVIOUS.
+    current_backup = backup / ('grafana-admin.aws-current-before-repair.' + stamp + '.json')
+    secure_write(current_backup, current_raw + '\n')
+    print('Saved the invalid AWSCURRENT payload privately in .deploy/monitoring-recovery/')
+
+    # Avoid passing the secret value in the command line or logging it.
+    payload_file = backup / ('grafana-admin.pending-upload.' + stamp + '.json')
+    secure_write(payload_file, json.dumps({'password':selected}))
+    try:
+        subprocess.run(
+            ['aws','secretsmanager','put-secret-value',
+             '--secret-id',secret_id,'--secret-string','file://'+str(payload_file),
+             '--region',region,'--query','VersionId','--output','text'],
+            check=True, stdout=subprocess.DEVNULL
+        )
+    finally:
+        payload_file.unlink(missing_ok=True)
+    reread = password_from(get_version('AWSCURRENT', required=True))
+    if not reread or not secrets.compare_digest(reread, selected):
+        raise SystemExit('AWSCURRENT verification failed after repair; no ECS deploy attempted')
+    print('Repaired AWSCURRENT using '+source+' (value not displayed).')
+else:
+    print('AWS AWSCURRENT already has a valid password (value not displayed).')
+
+backup_local_if_different(selected, stamp)
+if not path.is_file() or path.read_text() != selected:
     tmp = path.with_name(path.name+'.tmp-recovery')
-    tmp.write_text(password)
-    tmp.chmod(0o600)
-    os.replace(tmp,path)
+    secure_write(tmp, selected)
+    os.replace(tmp, path)
 path.chmod(0o600)
-print('Local secret now matches AWS AWSCURRENT (password not displayed).')
+print('Local password and AWSCURRENT are now consistent (values not displayed).')
 PY
 }
 
