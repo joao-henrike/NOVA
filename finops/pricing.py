@@ -87,9 +87,15 @@ def get_rates(call, inventory):
             rates["ecs."+name]={"status":"unavailable","reason":"CPU architecture not captured"}
             continue
         label="ARM" if arch=="ARM64" else "x86"
+        # Restrict the search to known us-east-1 Fargate usage types.
+        # Never substitute prices from another architecture or usage dimension.
         base={"location":LOCATION,"operatingSystem":"Linux"}
-        vcpu=unique_rate(call,"AmazonECS",base,r"Fargate.*vCPU.*(Hours|Hrs)",r"^(Hrs|Hours|Hour)$")
-        memory=unique_rate(call,"AmazonECS",base,r"Fargate.*(GB|Memory).*(Hours|Hrs)",r"^(Hrs|Hours|Hour)$")
+        vcpu=unique_rate(call,"AmazonECS",
+                         dict(base,usagetype="USE1-Fargate-vCPU-Hours:perCPU"),
+                         r"^USE1-Fargate-vCPU-Hours:perCPU$",r"^(Hrs|Hours|Hour)$")
+        memory=unique_rate(call,"AmazonECS",
+                           dict(base,usagetype="USE1-Fargate-GB-Hours"),
+                           r"^USE1-Fargate-GB-Hours$",r"^(Hrs|Hours|Hour)$")
         # Architectural variants must be distinguished by attributes/SKU, not assumed.
         if arch!="X86_64":
             rates["ecs."+name]={"status":"unavailable","reason":"ARM64 needs architecture-specific SKU match"}
