@@ -57,6 +57,16 @@ class FinopsTests(unittest.TestCase):
                 self.assertEqual(f.refresh_billing(db,30),"cached")
                 query.assert_not_called()
 
+    def test_official_pricing_visible_in_summary(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db=f.storage(Path(temp)/"history.sqlite3")
+            data={"source":"AWS Price List Query API","scenarios":{"current":{"is_complete":False}}}
+            with db:
+                db.execute("INSERT INTO pricing_snapshots(at,payload) VALUES(?,?)",
+                           (f.iso(f.now()), f.json.dumps(data)))
+            self.assertEqual(f.report(db)["official_pricing"]["source"],data["source"])
+            db.close()
+
     def test_no_metric_points_not_zero(self):
         with patch.object(f,"aws",return_value={"Datapoints":[]}):
             self.assertIsNone(f.metric("AWS/ECS","CPUUtilization",{}))
