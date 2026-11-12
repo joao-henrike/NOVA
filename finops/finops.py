@@ -133,12 +133,29 @@ def observed():
                  task_definition=item["taskDefinition"])["taskDefinition"]
         running=int(item.get("runningCount",0))
         cpu=int(task.get("cpu",0)); memory=int(task.get("memory",0))
+        # Runtime hours are observed for CURRENT tasks only, not historic billable hours.
+        task_arns=aws("ecs","list-tasks",cluster=CLUSTER,
+                      service_name=item["serviceName"],desired_status="RUNNING").get("taskArns",[])
+        active_tasks=[]
+        for index in range(0,len(task_arns),10):
+            response=aws("ecs","describe-tasks",cluster=CLUSTER,tasks=task_arns[index:index+10])
+            active_tasks.extend(response.get("tasks",[]))
+        durations=[]
+        for instance in active_tasks:
+            started=instance.get("startedAt")
+            if started and instance.get("lastStatus")=="RUNNING":
+                start_time=dt.datetime.fromisoformat(started.replace("Z","+00:00"))
+                durations.append(max(0,(now()-start_time).total_seconds()/3600))
+        task_hours=round(sum(durations),3)
         dim={"ClusterName":CLUSTER,"ServiceName":item["serviceName"]}
         out["services"][name]={
           "running":running,"desired":item.get("desiredCount",0),
           "cpu_units_per_task":cpu,"memory_mb_per_task":memory,
           "provisioned_vcpu":round(running*cpu/1024,3),
           "provisioned_gib":round(running*memory/1024,3),
+          "current_task_runtime_hours":task_hours,
+          "current_task_vcpu_hours":round(task_hours*cpu/1024,3),
+          "current_task_gib_hours":round(task_hours*memory/1024,3),
           "cpu_avg_1h_percent":metric("AWS/ECS","CPUUtilization",dim),
           "memory_avg_1h_percent":metric("AWS/ECS","MemoryUtilization",dim)}
     for suffix in ("-db","-monitoring-db"):
