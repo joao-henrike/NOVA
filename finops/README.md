@@ -69,3 +69,29 @@ bash -n finops/run.sh
 ```
 
 Orçamento opcional: `export NOVA_FINOPS_MONTHLY_BUDGET_USD=100` (alerta apenas na API, nenhum AWS Budget é criado).
+
+
+## Preços oficiais e AWS Pricing Calculator API
+
+O comando abaixo consulta **AWS Price List Query API** em `us-east-1` e procura SKUs públicos On-Demand compatíveis com o inventário atual; registra somente correspondências não ambíguas.
+
+```bash
+bash finops/run.sh pricing
+bash finops/run.sh report
+```
+
+Para consultar uma **estimativa de workload já existente** na AWS Pricing Calculator (somente leitura):
+
+```bash
+bash finops/run.sh pricing --calculator-id SEU_ID_EXISTENTE --force
+```
+
+Ou: `export NOVA_FINOPS_CALCULATOR_ID=SEU_ID_EXISTENTE` e execute `pricing --force`.
+
+- IAM adicional: `pricing:GetProducts` e opcionalmente `bcm-pricing-calculator:GetWorkloadEstimate`.
+- A região da consulta de preços é `us-east-1`, com localização do produto `US East (N. Virginia)`.
+- São usados preços públicos sob demanda (quando um SKU exato e unidade são confirmados); valores sem correspondência são **indisponíveis**, nunca inventados. Os exemplos com 4 e 6 tarefas são **cenários parciais** de 730 horas por mês, não garantias de cobrança.
+- A Pricing Calculator API é um serviço distinto da Price List API. A integração consulta estimativas **já criadas**; **não cria** workloads automaticamente, evitando operações de escrita ou cobrança inesperada por estimativa.
+- Há custos **não cobertos**, entre eles NAT, ALB/LCU, RDS storage/IOPS, transferência de dados, logs, IPv4, ECR e outros. Portanto, nenhum subtotal desta ferramenta deve ser apresentado como custo total da aplicação.
+- A comparação com Cost Explorer só faz sentido para períodos e escopos equivalentes. Uma projeção de 730 horas não equivale a uma fatura acumulada de 30 dias.
+- `pricing` usa cache no SQLite por 24 horas. `pricing --force` força atualização e pode gerar novas consultas às APIs; `collect` e `watch` continuam independentes.
