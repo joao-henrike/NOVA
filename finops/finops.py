@@ -12,6 +12,8 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
+# Also support importlib-based unit tests launched from the repository root.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pricing
 
 REGION = "us-east-1"
@@ -226,8 +228,11 @@ def price_update(db, calculator_id=None, force=False):
     last=db.execute("SELECT at,payload FROM pricing_snapshots ORDER BY at DESC LIMIT 1").fetchone()
     if last and not force:
         when=dt.datetime.fromisoformat(last[0].replace("Z","+00:00"))
-        if (now()-when).total_seconds()<86400:
-            return json.loads(last[1])
+        cached=json.loads(last[1])
+        existing=(cached.get("calculator") or {}).get("id")
+        if (now()-when).total_seconds()<86400 and (
+                not calculator_id or existing==calculator_id):
+            return cached
     inventory=observed()
     result=pricing.assemble(aws,inventory,calculator_id)
     stamp=iso(now())
