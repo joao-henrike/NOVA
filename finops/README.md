@@ -9,7 +9,7 @@ Sistema independente, em Python/Bash, com Cost Explorer, CloudWatch, ECS, RDS, N
 - **Faturamento:** AWS Cost Explorer / `UnblendedCost` diário por serviço, consultando conta inteira e filtrando por `Project=cloudstart` + `Environment=dev`. Valores podem ter atraso, serem estimados ou sofrer revisões. **Não são custos em tempo real.**
 - **Operação quase em tempo real:** ECS running/desired, vCPU/GiB alocados, médias CPU/memória CloudWatch, classes RDS, conexões, NAT, ALB e grupos CloudWatch Logs.
 - **Logs opcionais:** com `--logs`, conta até 100 eventos com texto `ERROR` por grupo em 15 minutos. **Não grava conteúdo dos eventos**, apenas contagens e avisos de truncamento.
-- **Correlação:** snapshots com timestamp guardados em SQLite e custos diários para cruzamento por data. *Não* inventa custo monetário por container: para valores exatos por recurso, configure CUR 2.0/Data Exports, IDs e cost allocation tags.
+- **Correlação:** snapshots com timestamp guardados em SQLite, duração das tarefas ECS atuais, vCPU-h e GiB-h provisionados, e custos diários para cruzamento por data. As horas da coorte atual não equivalem a histórico completo de execução. *Não* inventa custo monetário por container: para valores exatos por recurso, configure CUR 2.0/Data Exports, IDs e cost allocation tags.
 - **Previsão:** gasto marcado do mês + média dos dias completos × dias restantes. É uma projeção simples, não um orçamento AWS nem previsão garantida.
 
 ## Execução (CloudShell)
