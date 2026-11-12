@@ -1,0 +1,30 @@
+name: NOVA Resilience Unit Tests
+
+on:
+  push:
+    branches: [main, Joao]
+    paths:
+      - "resilience/**"
+      - ".github/workflows/resilience-unit-tests.yml"
+  pull_request:
+    paths:
+      - "resilience/**"
+      - ".github/workflows/resilience-unit-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resilience-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile resilience suite
+        run: python -m compileall -q resilience
+      - name: Run offline safeguards
+        run: python -m unittest discover -s resilience/tests -v
