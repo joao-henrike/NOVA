@@ -27,6 +27,12 @@ svg{width:100%;height:250px}.cols{display:grid;grid-template-columns:2fr 1fr;gap
 <section class="panel"><h2>Capacidade ECS e consumo observado</h2>
 <table><thead><tr><th>Serviço</th><th>Tarefas</th><th>vCPU alocada</th><th>GiB alocados</th><th>Horas de tarefa (coorte atual)</th><th>vCPU-h (coorte)</th><th>CPU média/1h</th><th>Memória média/1h</th></tr></thead><tbody id="ecs"></tbody></table>
 </section>
+<section class="panel"><h2>Preços oficiais AWS × simulação da infraestrutura</h2>
+<p class="muted">Consulta AWS Price List (On-Demand), independente do Cost Explorer. Subtotais parciais <strong>não equivalem ao custo completo da aplicação</strong>. A Pricing Calculator API é consultada somente quando um ID de estimativa existente é informado.</p>
+<div class="grid" id="pricing-cards"></div>
+<table><thead><tr><th>Componente precificado</th><th>Quantidade</th><th>USD/mês (730h, parcial)</th></tr></thead><tbody id="pricing-items"></tbody></table>
+<div id="pricing-coverage" class="warning"></div>
+</section>
 <section class="panel"><h2>Inventário / telemetria / logs</h2><div id="infra"></div></section>
 <section class="panel"><h2>Limitações e precisão dos números</h2><ul id="notes"></ul></section>
 <footer class="muted">API local: <code>/api/summary</code>, <code>/api/history</code> • Atualiza a tela a cada 60s; coleta AWS é um processo separado. Não exponha este painel publicamente.</footer>
@@ -71,6 +77,23 @@ async function load(){
  '<p><b>Última coleta:</b> '+escapeHtml(o.timestamp_utc)+" • <b>Cost Explorer:</b> "+escapeHtml(s.billing_refreshed_at)+"</p>"+
  (o.errors?.length?'<p class="warning">'+escapeHtml(o.errors.join("; "))+"</p>":"");
  el("notes").innerHTML=(s.disclaimer||[]).map(x=>"<li>"+escapeHtml(x)+"</li>").join("");
+ const pricing=s.official_pricing, current=pricing?.scenarios?.current;
+ if(pricing){
+   const scen=pricing.scenarios||{}, calc=pricing.calculator;
+   const info=[
+     ["Subtotal parcial mensal",usd(current?.estimated_partial_monthly_usd)],
+     ["Frontend 4 + Backend 4",usd(scen.frontend_4_backend_4?.estimated_partial_monthly_usd)],
+     ["Frontend 6 + Backend 6",usd(scen.frontend_6_backend_6?.estimated_partial_monthly_usd)],
+     ["Pricing Calculator (estimativa existente)",calc?.total_cost_usd==null?"Não configurada":usd(calc.total_cost_usd)]
+   ];
+   el("pricing-cards").innerHTML=info.map(p=>'<div class="card"><small>'+escapeHtml(p[0])+'</small><div class="metric">'+escapeHtml(p[1])+'</div></div>').join("");
+   el("pricing-items").innerHTML=(current?.items||[]).map(x=>"<tr>"+cell(x.name)+cell(x.count)+cell(usd(x.monthly_usd))+"</tr>").join("")||"<tr><td colspan=3>Sem SKU único confirmado. Consulte resultados da coleta.</td></tr>";
+   el("pricing-coverage").textContent="Cobertura incompleta: "+(current?.unpriced_components||[]).join(", ")+(pricing.calculator_error?" | Calculator: "+pricing.calculator_error:"");
+ } else {
+   el("pricing-cards").textContent="Nenhuma consulta de preços oficial registrada. Execute: bash finops/run.sh pricing";
+   el("pricing-items").innerHTML="";
+   el("pricing-coverage").textContent="";
+ }
  plot(h.daily_costs||[]);el("stamp").textContent="Tela: "+new Date().toLocaleTimeString("pt-BR");
  }catch(error){el("stamp").textContent="Falha: "+error.message}
 }
