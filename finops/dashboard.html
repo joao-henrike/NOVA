@@ -25,7 +25,7 @@ svg{width:100%;height:250px}.cols{display:grid;grid-template-columns:2fr 1fr;gap
 <section class="panel"><h2>Custos atribuídos por serviço</h2><table><thead><tr><th>Serviço</th><th>USD</th></tr></thead><tbody id="services"></tbody></table></section>
 </div>
 <section class="panel"><h2>Capacidade ECS e consumo observado</h2>
-<table><thead><tr><th>Serviço</th><th>Tarefas</th><th>vCPU alocada</th><th>GiB alocados</th><th>CPU média/1h</th><th>Memória média/1h</th></tr></thead><tbody id="ecs"></tbody></table>
+<table><thead><tr><th>Serviço</th><th>Tarefas</th><th>vCPU alocada</th><th>GiB alocados</th><th>Horas de tarefa (coorte atual)</th><th>vCPU-h (coorte)</th><th>CPU média/1h</th><th>Memória média/1h</th></tr></thead><tbody id="ecs"></tbody></table>
 </section>
 <section class="panel"><h2>Inventário / telemetria / logs</h2><div id="infra"></div></section>
 <section class="panel"><h2>Limitações e precisão dos números</h2><ul id="notes"></ul></section>
@@ -63,7 +63,7 @@ async function load(){
  ].map(p=>'<div class="card"><small>'+escapeHtml(p[0])+'</small><div class="metric">'+escapeHtml(p[1])+'</div></div>').join("");
  el("services").innerHTML=Object.entries(s.by_service_usd||{}).slice(0,18).map(([k,v])=>"<tr>"+cell(k)+cell(usd(v))+"</tr>").join("")||"<tr><td colspan=2>Sem custos atribuídos por tags; verifique ativação no Billing.</td></tr>";
  el("ecs").innerHTML=Object.entries(r.services||{}).map(([k,v])=>"<tr>"+
- [k,v.running+"/"+v.desired,v.provisioned_vcpu,v.provisioned_gib,v.cpu_avg_1h_percent==null?"Sem dados":v.cpu_avg_1h_percent+"%",v.memory_avg_1h_percent==null?"Sem dados":v.memory_avg_1h_percent+"%"].map(cell).join("")+"</tr>").join("")||"<tr><td colspan=6>Sem snapshot operacional</td></tr>";
+ [k,v.running+"/"+v.desired,v.provisioned_vcpu,v.provisioned_gib,v.current_task_runtime_hours,v.current_task_vcpu_hours,v.cpu_avg_1h_percent==null?"Sem dados":v.cpu_avg_1h_percent+"%",v.memory_avg_1h_percent==null?"Sem dados":v.memory_avg_1h_percent+"%"].map(cell).join("")+"</tr>").join("")||"<tr><td colspan=8>Sem snapshot operacional</td></tr>";
  el("infra").innerHTML='<p><b>RDS:</b> '+escapeHtml((r.rds||[]).map(x=>x.name+" / "+x.state+" / "+x.class+" / "+x.storage_gib+"GiB").join("; ")||"indisponível")+"</p>"+
  '<p><b>NAT Gateways:</b> '+escapeHtml((r.nat||[]).filter(x=>x.state==="available").length)+"/"+escapeHtml((r.nat||[]).length)+" disponíveis</p>"+
  '<p><b>ALB:</b> '+escapeHtml(r.alb?.state)+"</p>"+
