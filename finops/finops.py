@@ -156,6 +156,8 @@ def observed():
         out["services"][name]={
           "running":running,"desired":item.get("desiredCount",0),
           "cpu_units_per_task":cpu,"memory_mb_per_task":memory,
+          "cpu_architecture":task.get("runtimePlatform",{}).get("cpuArchitecture","X86_64"),
+          "operating_system":task.get("runtimePlatform",{}).get("operatingSystemFamily","LINUX"),
           "provisioned_vcpu":round(running*cpu/1024,3),
           "provisioned_gib":round(running*memory/1024,3),
           "current_task_runtime_hours":task_hours,
