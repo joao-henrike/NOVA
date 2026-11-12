@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOVA FinOps</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0b1220;color:#e8eef8}
+*{box-sizing:border-box}body{max-width:1400px;margin:auto;padding:24px}
+header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+h1{font-size:32px;margin:8px 0}h2{font-size:17px;margin-top:4px}
+p,li{line-height:1.55}.muted,small{color:#a7b5ca}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:20px}
+.card,.panel{border:1px solid #31415c;background:#13213a;border-radius:14px;padding:18px;min-width:0}
+.metric{font-weight:700;font-size:26px;color:#a7f3d0;margin-top:10px}
+section{margin:18px 0}button{padding:9px 15px;color:#fff;background:#244769;border:1px solid #42688c;border-radius:8px;cursor:pointer}
+table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #30435e;text-align:left}td:last-child{text-align:right}
+svg{width:100%;height:250px}.cols{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+.warning{color:#fed7aa}.pill{color:#7dd3fc} @media(max-width:900px){.cols{grid-template-columns:1fr}}
+</style></head><body>
+<header><div><small>AWS • CLOUDSTART/DEV • US-EAST-1</small><h1>NOVA / FinOps</h1><p class="muted">Custos AWS faturados, capacidade atual e histórico operacional</p></div>
+<div><button onclick="load()">Atualizar</button> <span id="stamp">Carregando…</span></div></header>
+<div class="grid" id="cards"></div>
+<div class="cols">
+<section class="panel"><h2>Custos diários (USD) — 30 dias</h2>
+<svg id="chart" viewBox="0 0 900 250" aria-label="Custos diários por serviço"></svg>
+<small style="color:#7dd3fc">■ Conta AWS total</small> · <small style="color:#6ee7b7">■ Custos atribuídos por tag NOVA</small>
+</section>
+<section class="panel"><h2>Custos atribuídos por serviço</h2><table><thead><tr><th>Serviço</th><th>USD</th></tr></thead><tbody id="services"></tbody></table></section>
+</div>
+<section class="panel"><h2>Capacidade ECS e consumo observado</h2>
+<table><thead><tr><th>Serviço</th><th>Tarefas</th><th>vCPU alocada</th><th>GiB alocados</th><th>CPU média/1h</th><th>Memória média/1h</th></tr></thead><tbody id="ecs"></tbody></table>
+</section>
+<section class="panel"><h2>Inventário / telemetria / logs</h2><div id="infra"></div></section>
+<section class="panel"><h2>Limitações e precisão dos números</h2><ul id="notes"></ul></section>
+<footer class="muted">API local: <code>/api/summary</code>, <code>/api/history</code> • Atualiza a tela a cada 60s; coleta AWS é um processo separado. Não exponha este painel publicamente.</footer>
+<script>
+const el=id=>document.getElementById(id);
+const escapeHtml=s=>String(s??"—").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const usd=n=>typeof n==="number"?"US$ "+n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}):"Indisponível";
+const cell=x=>"<td>"+escapeHtml(x)+"</td>";
+function plot(daily) {
+ let days={};for(const p of daily){if(!days[p.day])days[p.day]={day:p.day,account:0,project_tagged:0};days[p.day][p.scope]+=p.usd}
+ let rows=Object.values(days).sort((a,b)=>a.day.localeCompare(b.day)).slice(-30);
+ let maximum=Math.max(1,...rows.map(r=>Math.max(r.account,r.project_tagged)));
+ let chart=el("chart"),left=45,bottom=205,chartHeight=175,step=830/Math.max(1,rows.length),width=Math.max(3,Math.min(12,step*.4));
+ let svg="";
+ for(let j=0;j<5;j++){let y=bottom-chartHeight*j/4;svg+='<line x1="35" x2="890" y1="'+y+'" y2="'+y+'" stroke="#35435b"/>'}
+ rows.forEach((r,i)=>{
+   let x=left+i*step,a=r.account/maximum*chartHeight,p=r.project_tagged/maximum*chartHeight;
+   svg+='<rect x="'+x+'" y="'+(bottom-a)+'" width="'+width+'" height="'+a+'" fill="#38bdf8"><title>'+escapeHtml(r.day)+" Conta "+usd(r.account)+'</title></rect>';
+   svg+='<rect x="'+(x+width+1)+'" y="'+(bottom-p)+'" width="'+width+'" height="'+p+'" fill="#6ee7b7"><title>'+escapeHtml(r.day)+" NOVA "+usd(r.project_tagged)+'</title></rect>';
+   if(i%Math.max(1,Math.floor(rows.length/6))===0)svg+='<text x="'+x+'" y="235" fill="#afc5d8" font-size="11">'+escapeHtml(r.day.slice(5))+"</text>";
+ });
+ chart.innerHTML=svg||'<text x="40" y="90" fill="#ffcc88">Sem dados faturados no histórico local</text>';
+}
+async function load(){
+ try{
+ const [a,b]=await Promise.all([fetch("/api/summary",{cache:"no-store"}),fetch("/api/history",{cache:"no-store"})]);
+ if(!a.ok||!b.ok)throw Error("API indisponível");
+ const s=await a.json(),h=await b.json(),o=s.latest_sample||{},r=o.resources||{};
+ el("cards").innerHTML=[
+ ["Conta AWS (últimos 90 dias)",usd(s.account_billed_usd)],
+ ["NOVA por tags (90 dias)",usd(s.project_tagged_billed_usd)],
+ ["Média / dia completo",usd(s.completed_day_average_usd)],
+ ["Projeção mensal estimada",usd(s.month_forecast_usd)]
+ ].map(p=>'<div class="card"><small>'+escapeHtml(p[0])+'</small><div class="metric">'+escapeHtml(p[1])+'</div></div>').join("");
+ el("services").innerHTML=Object.entries(s.by_service_usd||{}).slice(0,18).map(([k,v])=>"<tr>"+cell(k)+cell(usd(v))+"</tr>").join("")||"<tr><td colspan=2>Sem custos atribuídos por tags; verifique ativação no Billing.</td></tr>";
+ el("ecs").innerHTML=Object.entries(r.services||{}).map(([k,v])=>"<tr>"+
+ [k,v.running+"/"+v.desired,v.provisioned_vcpu,v.provisioned_gib,v.cpu_avg_1h_percent==null?"Sem dados":v.cpu_avg_1h_percent+"%",v.memory_avg_1h_percent==null?"Sem dados":v.memory_avg_1h_percent+"%"].map(cell).join("")+"</tr>").join("")||"<tr><td colspan=6>Sem snapshot operacional</td></tr>";
+ el("infra").innerHTML='<p><b>RDS:</b> '+escapeHtml((r.rds||[]).map(x=>x.name+" / "+x.state+" / "+x.class+" / "+x.storage_gib+"GiB").join("; ")||"indisponível")+"</p>"+
+ '<p><b>NAT Gateways:</b> '+escapeHtml((r.nat||[]).filter(x=>x.state==="available").length)+"/"+escapeHtml((r.nat||[]).length)+" disponíveis</p>"+
+ '<p><b>ALB:</b> '+escapeHtml(r.alb?.state)+"</p>"+
+ '<p><b>Logs:</b> '+escapeHtml((r.logs||[]).length)+" grupos consultados • contagens ERROR (15 min): "+escapeHtml(JSON.stringify(o.recent_log_errors||{}))+"</p>"+
+ '<p><b>Última coleta:</b> '+escapeHtml(o.timestamp_utc)+" • <b>Cost Explorer:</b> "+escapeHtml(s.billing_refreshed_at)+"</p>"+
+ (o.errors?.length?'<p class="warning">'+escapeHtml(o.errors.join("; "))+"</p>":"");
+ el("notes").innerHTML=(s.disclaimer||[]).map(x=>"<li>"+escapeHtml(x)+"</li>").join("");
+ plot(h.daily_costs||[]);el("stamp").textContent="Tela: "+new Date().toLocaleTimeString("pt-BR");
+ }catch(error){el("stamp").textContent="Falha: "+error.message}
+}
+load();setInterval(load,60000);
+</script></body></html>
