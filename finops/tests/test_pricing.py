@@ -13,7 +13,7 @@ def sku(rate,usage="USE1-Fargate-vCPU-Hours:perCPU",unit="Hrs",sku_id="sku1"):
     return {"product":{"sku":sku_id,"attributes":{"regionCode":"us-east-1","usagetype":usage}},
             "terms":{"OnDemand":{"term":{"priceDimensions":{"d":{
              "pricePerUnit":{"USD":str(rate)},"unit":unit,"beginRange":"0",
-             "endRange":"Inf","description":"On demand"}}}}}}}
+             "endRange":"Inf","description":"On demand"}}}}}}
 
 class PricingTests(unittest.TestCase):
     def test_exact_rate(self):
