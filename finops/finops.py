@@ -12,6 +12,7 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
+import pricing
 
 REGION = "us-east-1"
 ACCOUNT = "996560371158"
@@ -61,6 +62,8 @@ def storage(path):
     CREATE TABLE IF NOT EXISTS samples(at TEXT PRIMARY KEY, payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """)
+    db.execute("""CREATE TABLE IF NOT EXISTS pricing_snapshots(
+         at TEXT PRIMARY KEY, payload TEXT NOT NULL)""")
     return db
 
 def meta(db,key):
@@ -217,6 +220,22 @@ def collect(db,days=30,logs=False,force=False):
         db.execute("INSERT INTO samples VALUES(?,?)",(stamp,json.dumps(sample)))
     return sample
 
+def price_update(db, calculator_id=None, force=False):
+    """Reads AWS official rates; stores snapshot. No estimate creation."""
+    guard()
+    last=db.execute("SELECT at,payload FROM pricing_snapshots ORDER BY at DESC LIMIT 1").fetchone()
+    if last and not force:
+        when=dt.datetime.fromisoformat(last[0].replace("Z","+00:00"))
+        if (now()-when).total_seconds()<86400:
+            return json.loads(last[1])
+    inventory=observed()
+    result=pricing.assemble(aws,inventory,calculator_id)
+    stamp=iso(now())
+    with db:
+        db.execute("INSERT INTO pricing_snapshots(at,payload) VALUES(?,?)",
+                   (stamp,json.dumps(result)))
+    return result
+
 def costs(db,days):
     begin=(now().date()+dt.timedelta(days=1)-dt.timedelta(days=days)).isoformat()
     rows=db.execute("SELECT day,scope,service,usd,estimated FROM cost WHERE day>=? ORDER BY day,scope,service",(begin,)).fetchall()
@@ -240,6 +259,8 @@ def report(db,days=30):
     forecast=round(mtd+avg*remaining,2) if avg is not None else None
     byservice={}
     for x in project: byservice[x["service"]]=byservice.get(x["service"],0)+x["usd"]
+    newest_price=db.execute("SELECT payload FROM pricing_snapshots ORDER BY at DESC LIMIT 1").fetchone()
+    price_data=json.loads(newest_price[0]) if newest_price else None
     budget_env=os.environ.get("NOVA_FINOPS_MONTHLY_BUDGET_USD")
     budget=float(budget_env) if budget_env else None
     return {
@@ -252,6 +273,7 @@ def report(db,days=30):
       "forecast_formula":"project-tagged MTD + avg completed day * days remaining; illustrative",
       "budget_usd":budget,"forecast_exceeds_budget":budget is not None and forecast is not None and forecast>budget,
       "by_service_usd":dict(sorted(byservice.items(),key=lambda p:-p[1])),
+      "official_pricing":price_data,
       "latest_sample":json.loads(latest[0]) if latest else None,
       "disclaimer":[
         "Cost Explorer data has ingestion delay and may be estimated; it is not a realtime invoice.",
@@ -299,6 +321,9 @@ def main():
     s=sub.add_parser("serve");s.add_argument("--port",type=int,default=8766)
     r=sub.add_parser("report");r.add_argument("--days",type=int,default=30)
     e=sub.add_parser("export");e.add_argument("--days",type=int,default=90);e.add_argument("--file",required=True)
+    price=sub.add_parser("pricing",help="Fetch official AWS public SKU rates; optional existing Calculator estimate")
+    price.add_argument("--calculator-id",default=os.environ.get("NOVA_FINOPS_CALCULATOR_ID"))
+    price.add_argument("--force",action="store_true")
     args=p.parse_args()
     if hasattr(args,"days") and not 1<=args.days<=90:p.error("days must be 1..90")
     if args.action=="watch" and args.interval<300:p.error("interval must be >=300s")
@@ -323,6 +348,8 @@ def main():
                     print(json.dumps({"at":sample["timestamp_utc"],"errors":sample["errors"],"billing":sample["billing_status"]}),flush=True)
                 except RuntimeError as exc: print("WARNING:",exc,file=sys.stderr,flush=True)
                 time.sleep(args.interval)
+        elif args.action=="pricing":
+            print(json.dumps(price_update(db,args.calculator_id,args.force),indent=2,ensure_ascii=False))
         elif args.action=="export":
             out=Path(args.file).expanduser()
             if out.exists():raise RuntimeError("Refusing to overwrite existing export")
