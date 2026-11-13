@@ -314,7 +314,7 @@ jobs:
         with:
           languages: python
       - name: Analyze
-        uses: github/codeql-action/analyze@439137e1b50c27ba9e2f9befc93e43091b449c34
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066
         with:
           category: /language:python
   workflows:
