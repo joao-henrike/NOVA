@@ -1,0 +1,961 @@
+{
+  "id": null,
+  "uid": "nova-19-availability-slo",
+  "title": "19 | SRE | Global Availability, SLA, SLO & SLI",
+  "tags": [
+    "nova",
+    "template",
+    "03-sre"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "alb",
+        "label": "alb",
+        "type": "textbox",
+        "query": "REPLACE_WITH_app/name/id",
+        "current": {
+          "text": "REPLACE_WITH_app/name/id",
+          "value": "REPLACE_WITH_app/name/id"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "region",
+        "label": "region",
+        "type": "textbox",
+        "query": "us-east-1",
+        "current": {
+          "text": "us-east-1",
+          "value": "us-east-1"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "description": "NOVA dashboard template. Real query panels plus explicitly pending collector contracts and full requirements.",
+  "panels": [
+    {
+      "title": "Estado da integração",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "**Template NOVA — 19**\n\nCloudWatch e Zabbix existentes: consultas reais quando há dimensões e dados. Painéis **PENDENTE** exigem criação e alimentação de itens conforme `collector-contract.json`; não representam dados coletados. Ausência de dados não equivale a zero. O catálogo ao final preserva o escopo completo."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 5
+      }
+    },
+    {
+      "title": "RequestCount",
+      "description": "CloudWatch AWS/ApplicationELB / RequestCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "RequestCount",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "HTTPCode_ELB_5XX_Count",
+      "description": "CloudWatch AWS/ApplicationELB / HTTPCode_ELB_5XX_Count; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_ELB_5XX_Count",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "HTTPCode_Target_5XX_Count",
+      "description": "CloudWatch AWS/ApplicationELB / HTTPCode_Target_5XX_Count; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_Target_5XX_Count",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "ALB latency — Average",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "ALB latency — p50",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "p50",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "ALB latency — p95",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "p95",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 7,
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "ALB latency — p99",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "p99",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Zabbix internal HTTP failures",
+      "type": "timeseries",
+      "description": "Item criado pelo monitoring/bootstrap.py",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Monitoring"
+          },
+          "host": {
+            "filter": "NOVA-Monitoring"
+          },
+          "item": {
+            "filter": "Failed step of scenario NOVA internal health"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 9,
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Grafana internal response time",
+      "type": "timeseries",
+      "description": "Item criado pelo monitoring/bootstrap.py",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Monitoring"
+          },
+          "host": {
+            "filter": "NOVA-Monitoring"
+          },
+          "item": {
+            "filter": "Response time for step Grafana API of scenario NOVA internal health"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 10,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | availability pct",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D19 / NOVA 19 availability_pct. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D19"
+          },
+          "item": {
+            "filter": "NOVA 19 availability_pct"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 11,
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | downtime seconds",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D19 / NOVA 19 downtime_seconds. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D19"
+          },
+          "item": {
+            "filter": "NOVA 19 downtime_seconds"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | error budget remaining pct",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D19 / NOVA 19 error_budget_remaining_pct. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D19"
+          },
+          "item": {
+            "filter": "NOVA 19 error_budget_remaining_pct"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 13,
+      "gridPos": {
+        "x": 12,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | burn rate",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D19 / NOVA 19 burn_rate. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D19"
+          },
+          "item": {
+            "filter": "NOVA 19 burn_rate"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | mttr seconds",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D19 / NOVA 19 mttr_seconds. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D19"
+          },
+          "item": {
+            "filter": "NOVA 19 mttr_seconds"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 15,
+      "gridPos": {
+        "x": 12,
+        "y": 53,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | mttd seconds",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D19 / NOVA 19 mttd_seconds. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D19"
+          },
+          "item": {
+            "filter": "NOVA 19 mttd_seconds"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 16,
+      "gridPos": {
+        "x": 0,
+        "y": 61,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Escopo integral — catálogo de requisitos",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "Os requisitos abaixo são o escopo de monitoramento, não uma declaração de implementação. Alguns são compostos e precisam de painéis adicionais e/ou dimensões, coletores e logs específicos."
+      },
+      "id": 17,
+      "gridPos": {
+        "x": 0,
+        "y": 69,
+        "w": 24,
+        "h": 4
+      }
+    },
+    {
+      "title": "Requisitos 1–5",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **1.** Disponibilidade por serviço, endpoint, AZ (quando mensurável) e período.\n- **2.** Uptime, downtime e histórico de interrupções.\n- **3.** SLI de disponibilidade, latência e sucesso de requisições.\n- **4.** SLO configurado versus resultado observado.\n- **5.** SLA aplicável, se formalmente definido."
+      },
+      "id": 18,
+      "gridPos": {
+        "x": 0,
+        "y": 73,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 6–10",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **6.** Error budget total, consumido e restante.\n- **7.** Burn rate do error budget em janelas curtas e longas.\n- **8.** Quantidade, frequência, duração e severidade de incidentes.\n- **9.** MTTD (tempo médio de detecção).\n- **10.** MTTA (tempo médio de reconhecimento)."
+      },
+      "id": 19,
+      "gridPos": {
+        "x": 0,
+        "y": 82,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 11–15",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **11.** MTTR (tempo médio de recuperação).\n- **12.** MTBF (tempo médio entre falhas, quando mensurável).\n- **13.** Disponibilidade percebida por sondas externas e internas.\n- **14.** Latência p95/p99, taxa de erros e impacto durante incidentes.\n- **15.** Disponibilidade por janelas de 24h, 7, 30 e 90 dias."
+      },
+      "id": 20,
+      "gridPos": {
+        "x": 0,
+        "y": 91,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 16–17",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **16.** Períodos de manutenção/shutdown planejados, identificados separadamente.\n- **17.** Lacunas de coleta e proporção de sondas executadas versus esperadas."
+      },
+      "id": 21,
+      "gridPos": {
+        "x": 0,
+        "y": 100,
+        "w": 24,
+        "h": 9
+      }
+    }
+  ]
+}

@@ -1,0 +1,3428 @@
+{
+  "id": null,
+  "uid": "nova-01-global-overview",
+  "title": "01 | NOVA | Global Overview",
+  "tags": [
+    "nova",
+    "template",
+    "01-infrastructure"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "alb",
+        "label": "alb",
+        "type": "textbox",
+        "query": "REPLACE_WITH_app/name/id",
+        "current": {
+          "text": "REPLACE_WITH_app/name/id",
+          "value": "REPLACE_WITH_app/name/id"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "appdb",
+        "label": "appdb",
+        "type": "textbox",
+        "query": "cloudstart-dev-db",
+        "current": {
+          "text": "cloudstart-dev-db",
+          "value": "cloudstart-dev-db"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "cluster",
+        "label": "cluster",
+        "type": "textbox",
+        "query": "cloudstart-dev-cluster",
+        "current": {
+          "text": "cloudstart-dev-cluster",
+          "value": "cloudstart-dev-cluster"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "mondb",
+        "label": "mondb",
+        "type": "textbox",
+        "query": "cloudstart-dev-monitoring-db",
+        "current": {
+          "text": "cloudstart-dev-monitoring-db",
+          "value": "cloudstart-dev-monitoring-db"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "project",
+        "label": "project",
+        "type": "textbox",
+        "query": "cloudstart-dev",
+        "current": {
+          "text": "cloudstart-dev",
+          "value": "cloudstart-dev"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "region",
+        "label": "region",
+        "type": "textbox",
+        "query": "us-east-1",
+        "current": {
+          "text": "us-east-1",
+          "value": "us-east-1"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "tg_backend",
+        "label": "tg_backend",
+        "type": "textbox",
+        "query": "REPLACE_WITH_targetgroup/name/id",
+        "current": {
+          "text": "REPLACE_WITH_targetgroup/name/id",
+          "value": "REPLACE_WITH_targetgroup/name/id"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "tg_frontend",
+        "label": "tg_frontend",
+        "type": "textbox",
+        "query": "REPLACE_WITH_targetgroup/name/id",
+        "current": {
+          "text": "REPLACE_WITH_targetgroup/name/id",
+          "value": "REPLACE_WITH_targetgroup/name/id"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "tg_grafana",
+        "label": "tg_grafana",
+        "type": "textbox",
+        "query": "REPLACE_WITH_targetgroup/name/id",
+        "current": {
+          "text": "REPLACE_WITH_targetgroup/name/id",
+          "value": "REPLACE_WITH_targetgroup/name/id"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "description": "NOVA dashboard template. Real query panels plus explicitly pending collector contracts and full requirements.",
+  "panels": [
+    {
+      "title": "Estado da integração",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "**Template NOVA — 01**\n\nCloudWatch e Zabbix existentes: consultas reais quando há dimensões e dados. Painéis **PENDENTE** exigem criação e alimentação de itens conforme `collector-contract.json`; não representam dados coletados. Ausência de dados não equivale a zero. O catálogo ao final preserva o escopo completo."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 5
+      }
+    },
+    {
+      "title": "frontend — CPU",
+      "description": "CloudWatch AWS/ECS / CPUUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — Memory",
+      "description": "CloudWatch AWS/ECS / MemoryUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "MemoryUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — CPU",
+      "description": "CloudWatch AWS/ECS / CPUUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — Memory",
+      "description": "CloudWatch AWS/ECS / MemoryUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "MemoryUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — CPU",
+      "description": "CloudWatch AWS/ECS / CPUUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — Memory",
+      "description": "CloudWatch AWS/ECS / MemoryUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "MemoryUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 7,
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — DesiredTaskCount",
+      "description": "CloudWatch ECS/ContainerInsights / DesiredTaskCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "DesiredTaskCount",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — RunningTaskCount",
+      "description": "CloudWatch ECS/ContainerInsights / RunningTaskCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "RunningTaskCount",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 9,
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — PendingTaskCount",
+      "description": "CloudWatch ECS/ContainerInsights / PendingTaskCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "PendingTaskCount",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 10,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — DesiredTaskCount",
+      "description": "CloudWatch ECS/ContainerInsights / DesiredTaskCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "DesiredTaskCount",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 11,
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — RunningTaskCount",
+      "description": "CloudWatch ECS/ContainerInsights / RunningTaskCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "RunningTaskCount",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — PendingTaskCount",
+      "description": "CloudWatch ECS/ContainerInsights / PendingTaskCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "PendingTaskCount",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 13,
+      "gridPos": {
+        "x": 12,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — DesiredTaskCount",
+      "description": "CloudWatch ECS/ContainerInsights / DesiredTaskCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "DesiredTaskCount",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — RunningTaskCount",
+      "description": "CloudWatch ECS/ContainerInsights / RunningTaskCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "RunningTaskCount",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 15,
+      "gridPos": {
+        "x": 12,
+        "y": 53,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — PendingTaskCount",
+      "description": "CloudWatch ECS/ContainerInsights / PendingTaskCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "PendingTaskCount",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 16,
+      "gridPos": {
+        "x": 0,
+        "y": 61,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "RequestCount",
+      "description": "CloudWatch AWS/ApplicationELB / RequestCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "RequestCount",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 17,
+      "gridPos": {
+        "x": 12,
+        "y": 61,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "HTTPCode_ELB_5XX_Count",
+      "description": "CloudWatch AWS/ApplicationELB / HTTPCode_ELB_5XX_Count; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_ELB_5XX_Count",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 18,
+      "gridPos": {
+        "x": 0,
+        "y": 69,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "HTTPCode_Target_5XX_Count",
+      "description": "CloudWatch AWS/ApplicationELB / HTTPCode_Target_5XX_Count; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_Target_5XX_Count",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 19,
+      "gridPos": {
+        "x": 12,
+        "y": 69,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "ALB latency — Average",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 20,
+      "gridPos": {
+        "x": 0,
+        "y": 77,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "ALB latency — p50",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "p50",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 21,
+      "gridPos": {
+        "x": 12,
+        "y": 77,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "ALB latency — p95",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "p95",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 22,
+      "gridPos": {
+        "x": 0,
+        "y": 85,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "ALB latency — p99",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb"
+          },
+          "region": "$region",
+          "statistic": "p99",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 23,
+      "gridPos": {
+        "x": 12,
+        "y": 85,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — HealthyHostCount",
+      "description": "CloudWatch AWS/ApplicationELB / HealthyHostCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HealthyHostCount",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_frontend"
+          },
+          "region": "$region",
+          "statistic": "Minimum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 24,
+      "gridPos": {
+        "x": 0,
+        "y": 93,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — UnHealthyHostCount",
+      "description": "CloudWatch AWS/ApplicationELB / UnHealthyHostCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "UnHealthyHostCount",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_frontend"
+          },
+          "region": "$region",
+          "statistic": "Maximum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 25,
+      "gridPos": {
+        "x": 12,
+        "y": 93,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — RequestCountPerTarget",
+      "description": "CloudWatch AWS/ApplicationELB / RequestCountPerTarget; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "RequestCountPerTarget",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_frontend"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 26,
+      "gridPos": {
+        "x": 0,
+        "y": 101,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — TargetResponseTime",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_frontend"
+          },
+          "region": "$region",
+          "statistic": "p95",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 27,
+      "gridPos": {
+        "x": 12,
+        "y": 101,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — HTTPCode_Target_5XX_Count",
+      "description": "CloudWatch AWS/ApplicationELB / HTTPCode_Target_5XX_Count; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_Target_5XX_Count",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_frontend"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 28,
+      "gridPos": {
+        "x": 0,
+        "y": 109,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — HealthyHostCount",
+      "description": "CloudWatch AWS/ApplicationELB / HealthyHostCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HealthyHostCount",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_backend"
+          },
+          "region": "$region",
+          "statistic": "Minimum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 29,
+      "gridPos": {
+        "x": 12,
+        "y": 109,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — UnHealthyHostCount",
+      "description": "CloudWatch AWS/ApplicationELB / UnHealthyHostCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "UnHealthyHostCount",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_backend"
+          },
+          "region": "$region",
+          "statistic": "Maximum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 30,
+      "gridPos": {
+        "x": 0,
+        "y": 117,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — RequestCountPerTarget",
+      "description": "CloudWatch AWS/ApplicationELB / RequestCountPerTarget; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "RequestCountPerTarget",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_backend"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 31,
+      "gridPos": {
+        "x": 12,
+        "y": 117,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — TargetResponseTime",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_backend"
+          },
+          "region": "$region",
+          "statistic": "p95",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 32,
+      "gridPos": {
+        "x": 0,
+        "y": 125,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — HTTPCode_Target_5XX_Count",
+      "description": "CloudWatch AWS/ApplicationELB / HTTPCode_Target_5XX_Count; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_Target_5XX_Count",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_backend"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 33,
+      "gridPos": {
+        "x": 12,
+        "y": 125,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "grafana — HealthyHostCount",
+      "description": "CloudWatch AWS/ApplicationELB / HealthyHostCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HealthyHostCount",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_grafana"
+          },
+          "region": "$region",
+          "statistic": "Minimum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 34,
+      "gridPos": {
+        "x": 0,
+        "y": 133,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "grafana — UnHealthyHostCount",
+      "description": "CloudWatch AWS/ApplicationELB / UnHealthyHostCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "UnHealthyHostCount",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_grafana"
+          },
+          "region": "$region",
+          "statistic": "Maximum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 35,
+      "gridPos": {
+        "x": 12,
+        "y": 133,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "grafana — RequestCountPerTarget",
+      "description": "CloudWatch AWS/ApplicationELB / RequestCountPerTarget; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "RequestCountPerTarget",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_grafana"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 36,
+      "gridPos": {
+        "x": 0,
+        "y": 141,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "grafana — TargetResponseTime",
+      "description": "CloudWatch AWS/ApplicationELB / TargetResponseTime; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_grafana"
+          },
+          "region": "$region",
+          "statistic": "p95",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 37,
+      "gridPos": {
+        "x": 12,
+        "y": 141,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "grafana — HTTPCode_Target_5XX_Count",
+      "description": "CloudWatch AWS/ApplicationELB / HTTPCode_Target_5XX_Count; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_Target_5XX_Count",
+          "dimensions": {
+            "LoadBalancer": "$alb",
+            "TargetGroup": "$tg_grafana"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 38,
+      "gridPos": {
+        "x": 0,
+        "y": 149,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "app — CPUUtilization",
+      "description": "CloudWatch AWS/RDS / CPUUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/RDS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "DBInstanceIdentifier": "$appdb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 39,
+      "gridPos": {
+        "x": 12,
+        "y": 149,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "app — CPUCreditBalance",
+      "description": "CloudWatch AWS/RDS / CPUCreditBalance; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/RDS",
+          "metricName": "CPUCreditBalance",
+          "dimensions": {
+            "DBInstanceIdentifier": "$appdb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 40,
+      "gridPos": {
+        "x": 0,
+        "y": 157,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "app — FreeableMemory",
+      "description": "CloudWatch AWS/RDS / FreeableMemory; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/RDS",
+          "metricName": "FreeableMemory",
+          "dimensions": {
+            "DBInstanceIdentifier": "$appdb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 41,
+      "gridPos": {
+        "x": 12,
+        "y": 157,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "app — DatabaseConnections",
+      "description": "CloudWatch AWS/RDS / DatabaseConnections; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/RDS",
+          "metricName": "DatabaseConnections",
+          "dimensions": {
+            "DBInstanceIdentifier": "$appdb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 42,
+      "gridPos": {
+        "x": 0,
+        "y": 165,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "app — FreeStorageSpace",
+      "description": "CloudWatch AWS/RDS / FreeStorageSpace; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/RDS",
+          "metricName": "FreeStorageSpace",
+          "dimensions": {
+            "DBInstanceIdentifier": "$appdb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 43,
+      "gridPos": {
+        "x": 12,
+        "y": 165,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — CPUUtilization",
+      "description": "CloudWatch AWS/RDS / CPUUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/RDS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "DBInstanceIdentifier": "$mondb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 44,
+      "gridPos": {
+        "x": 0,
+        "y": 173,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — CPUCreditBalance",
+      "description": "CloudWatch AWS/RDS / CPUCreditBalance; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/RDS",
+          "metricName": "CPUCreditBalance",
+          "dimensions": {
+            "DBInstanceIdentifier": "$mondb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 45,
+      "gridPos": {
+        "x": 12,
+        "y": 173,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — FreeableMemory",
+      "description": "CloudWatch AWS/RDS / FreeableMemory; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/RDS",
+          "metricName": "FreeableMemory",
+          "dimensions": {
+            "DBInstanceIdentifier": "$mondb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 46,
+      "gridPos": {
+        "x": 0,
+        "y": 181,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — DatabaseConnections",
+      "description": "CloudWatch AWS/RDS / DatabaseConnections; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/RDS",
+          "metricName": "DatabaseConnections",
+          "dimensions": {
+            "DBInstanceIdentifier": "$mondb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 47,
+      "gridPos": {
+        "x": 12,
+        "y": 181,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — FreeStorageSpace",
+      "description": "CloudWatch AWS/RDS / FreeStorageSpace; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/RDS",
+          "metricName": "FreeStorageSpace",
+          "dimensions": {
+            "DBInstanceIdentifier": "$mondb"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 48,
+      "gridPos": {
+        "x": 0,
+        "y": 189,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Zabbix internal HTTP failures",
+      "type": "timeseries",
+      "description": "Item criado pelo monitoring/bootstrap.py",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Monitoring"
+          },
+          "host": {
+            "filter": "NOVA-Monitoring"
+          },
+          "item": {
+            "filter": "Failed step of scenario NOVA internal health"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 49,
+      "gridPos": {
+        "x": 12,
+        "y": 189,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Grafana internal response time",
+      "type": "timeseries",
+      "description": "Item criado pelo monitoring/bootstrap.py",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sem dados"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Monitoring"
+          },
+          "host": {
+            "filter": "NOVA-Monitoring"
+          },
+          "item": {
+            "filter": "Response time for step Grafana API of scenario NOVA internal health"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 50,
+      "gridPos": {
+        "x": 0,
+        "y": 197,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | global uptime pct",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D01 / NOVA 01 global_uptime_pct. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D01"
+          },
+          "item": {
+            "filter": "NOVA 01 global_uptime_pct"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 51,
+      "gridPos": {
+        "x": 12,
+        "y": 197,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | active incidents",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D01 / NOVA 01 active_incidents. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D01"
+          },
+          "item": {
+            "filter": "NOVA 01 active_incidents"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 52,
+      "gridPos": {
+        "x": 0,
+        "y": 205,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | cost month usd",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D01 / NOVA 01 cost_month_usd. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D01"
+          },
+          "item": {
+            "filter": "NOVA 01 cost_month_usd"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 53,
+      "gridPos": {
+        "x": 12,
+        "y": 205,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | last collection age",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D01 / NOVA 01 last_collection_age. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D01"
+          },
+          "item": {
+            "filter": "NOVA 01 last_collection_age"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 54,
+      "gridPos": {
+        "x": 0,
+        "y": 213,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Escopo integral — catálogo de requisitos",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "Os requisitos abaixo são o escopo de monitoramento, não uma declaração de implementação. Alguns são compostos e precisam de painéis adicionais e/ou dimensões, coletores e logs específicos."
+      },
+      "id": 55,
+      "gridPos": {
+        "x": 0,
+        "y": 221,
+        "w": 24,
+        "h": 4
+      }
+    },
+    {
+      "title": "Requisitos 1–5",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **1.** Disponibilidade global da aplicação (uptime e downtime).\n- **2.** Estado operacional do ambiente: ativo, em deploy, em manutenção, em shutdown ou degradado.\n- **3.** Status de todos os serviços: frontend, backend e monitoring.\n- **4.** Status do ALB e dos três target groups.\n- **5.** Tasks ECS desejadas, em execução, pendentes e não saudáveis."
+      },
+      "id": 56,
+      "gridPos": {
+        "x": 0,
+        "y": 225,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 6–10",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **6.** Status dos dois bancos RDS.\n- **7.** Status dos NAT Gateways por AZ.\n- **8.** Quantidade de recursos ativos, indisponíveis e degradados.\n- **9.** Requisições por segundo, minuto, hora e dia.\n- **10.** Taxa de sucesso e de erros HTTP 4xx e 5xx."
+      },
+      "id": 57,
+      "gridPos": {
+        "x": 0,
+        "y": 234,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 11–15",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **11.** Latência global: média, p50, p95 e p99.\n- **12.** CPU e memória por serviço ECS e banco RDS.\n- **13.** Tráfego de entrada e saída.\n- **14.** Incidentes ativos por severidade, duração e componente.\n- **15.** SLI, SLO, error budget e disponibilidade histórica."
+      },
+      "id": 58,
+      "gridPos": {
+        "x": 0,
+        "y": 243,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 16–20",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **16.** Último deploy, versão implantada e resultado.\n- **17.** Último backup de cada banco e resultado.\n- **18.** Custo diário, mensal acumulado e projeção mensal.\n- **19.** Consumo do orçamento e anomalias financeiras.\n- **20.** Saúde do Zabbix, Grafana e datasources."
+      },
+      "id": 59,
+      "gridPos": {
+        "x": 0,
+        "y": 252,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 21–21",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **21.** Horário da última coleta e métricas sem dados."
+      },
+      "id": 60,
+      "gridPos": {
+        "x": 0,
+        "y": 261,
+        "w": 24,
+        "h": 9
+      }
+    }
+  ]
+}

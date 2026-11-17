@@ -1,0 +1,359 @@
+{
+  "id": null,
+  "uid": "nova-21-backup-restore",
+  "title": "21 | SRE | Backup & Restore",
+  "tags": [
+    "nova",
+    "template",
+    "03-sre"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "description": "NOVA dashboard template. Real query panels plus explicitly pending collector contracts and full requirements.",
+  "panels": [
+    {
+      "title": "Estado da integração",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "**Template NOVA — 21**\n\nCloudWatch e Zabbix existentes: consultas reais quando há dimensões e dados. Painéis **PENDENTE** exigem criação e alimentação de itens conforme `collector-contract.json`; não representam dados coletados. Ausência de dados não equivale a zero. O catálogo ao final preserva o escopo completo."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 5
+      }
+    },
+    {
+      "title": "PENDENTE | app backup age seconds",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D21 / NOVA 21 app_backup_age_seconds. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D21"
+          },
+          "item": {
+            "filter": "NOVA 21 app_backup_age_seconds"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | monitoring backup age seconds",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D21 / NOVA 21 monitoring_backup_age_seconds. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D21"
+          },
+          "item": {
+            "filter": "NOVA 21 monitoring_backup_age_seconds"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | snapshot count",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D21 / NOVA 21 snapshot_count. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D21"
+          },
+          "item": {
+            "filter": "NOVA 21 snapshot_count"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | last restore age seconds",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D21 / NOVA 21 last_restore_age_seconds. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D21"
+          },
+          "item": {
+            "filter": "NOVA 21 last_restore_age_seconds"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | restore duration seconds",
+      "description": "Coletor ainda necessário. synthetic probes / resilience reports / backup APIs. Item numérico Zabbix: NOVA-D21 / NOVA 21 restore_duration_seconds. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D21"
+          },
+          "item": {
+            "filter": "NOVA 21 restore_duration_seconds"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Escopo integral — catálogo de requisitos",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "Os requisitos abaixo são o escopo de monitoramento, não uma declaração de implementação. Alguns são compostos e precisam de painéis adicionais e/ou dimensões, coletores e logs específicos."
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 4
+      }
+    },
+    {
+      "title": "Requisitos 1–5",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **1.** Estado de backups automatizados dos dois RDS.\n- **2.** Último backup/ponto restaurável disponível e idade da evidência.\n- **3.** Janela de backup, retenção configurada e mudanças.\n- **4.** Snapshots manuais e automatizados: quantidade, idade, estado, tamanho e custo.\n- **5.** Falhas, duração e conclusão dos backups, conforme eventos disponíveis."
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 6–10",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **6.** Disponibilidade e cobertura de point-in-time recovery.\n- **7.** Último teste de restore, resultado e tempo de restauração.\n- **8.** RTO e RPO efetivamente aferidos em testes.\n- **9.** Integridade e validação dos dados restaurados.\n- **10.** Terraform State no S3: disponibilidade, versionamento e última versão."
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 11–15",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **11.** Backup/exportação das configurações, dashboards e datasources Grafana.\n- **12.** Backup/exportação de templates, hosts, triggers e configurações Zabbix.\n- **13.** Backup, integridade e persistência do SQLite FinOps.\n- **14.** Snapshots preservados após teardown e gastos associados.\n- **15.** Indicadores de criptografia e retenção dos backups."
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 24,
+        "h": 9
+      }
+    }
+  ]
+}

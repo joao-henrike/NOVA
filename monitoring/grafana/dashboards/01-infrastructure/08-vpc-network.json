@@ -1,0 +1,899 @@
+{
+  "id": null,
+  "uid": "nova-08-vpc-network",
+  "title": "08 | AWS | VPC & Network Overview",
+  "tags": [
+    "nova",
+    "template",
+    "01-infrastructure"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "nat_a",
+        "label": "nat_a",
+        "type": "textbox",
+        "query": "REPLACE_WITH_nat_id",
+        "current": {
+          "text": "REPLACE_WITH_nat_id",
+          "value": "REPLACE_WITH_nat_id"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "nat_b",
+        "label": "nat_b",
+        "type": "textbox",
+        "query": "REPLACE_WITH_nat_id",
+        "current": {
+          "text": "REPLACE_WITH_nat_id",
+          "value": "REPLACE_WITH_nat_id"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "region",
+        "label": "region",
+        "type": "textbox",
+        "query": "us-east-1",
+        "current": {
+          "text": "us-east-1",
+          "value": "us-east-1"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "description": "NOVA dashboard template. Real query panels plus explicitly pending collector contracts and full requirements.",
+  "panels": [
+    {
+      "title": "Estado da integração",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "**Template NOVA — 08**\n\nCloudWatch e Zabbix existentes: consultas reais quando há dimensões e dados. Painéis **PENDENTE** exigem criação e alimentação de itens conforme `collector-contract.json`; não representam dados coletados. Ausência de dados não equivale a zero. O catálogo ao final preserva o escopo completo."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 5
+      }
+    },
+    {
+      "title": "NAT A — ErrorPortAllocation",
+      "description": "CloudWatch AWS/NATGateway / ErrorPortAllocation; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/NATGateway",
+          "metricName": "ErrorPortAllocation",
+          "dimensions": {
+            "NatGatewayId": "$nat_a"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "NAT A — PacketsDropCount",
+      "description": "CloudWatch AWS/NATGateway / PacketsDropCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/NATGateway",
+          "metricName": "PacketsDropCount",
+          "dimensions": {
+            "NatGatewayId": "$nat_a"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "NAT A — BytesInFromSource",
+      "description": "CloudWatch AWS/NATGateway / BytesInFromSource; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/NATGateway",
+          "metricName": "BytesInFromSource",
+          "dimensions": {
+            "NatGatewayId": "$nat_a"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "NAT A — BytesInFromDestination",
+      "description": "CloudWatch AWS/NATGateway / BytesInFromDestination; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/NATGateway",
+          "metricName": "BytesInFromDestination",
+          "dimensions": {
+            "NatGatewayId": "$nat_a"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "NAT B — ErrorPortAllocation",
+      "description": "CloudWatch AWS/NATGateway / ErrorPortAllocation; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/NATGateway",
+          "metricName": "ErrorPortAllocation",
+          "dimensions": {
+            "NatGatewayId": "$nat_b"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "NAT B — PacketsDropCount",
+      "description": "CloudWatch AWS/NATGateway / PacketsDropCount; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/NATGateway",
+          "metricName": "PacketsDropCount",
+          "dimensions": {
+            "NatGatewayId": "$nat_b"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 7,
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "NAT B — BytesInFromSource",
+      "description": "CloudWatch AWS/NATGateway / BytesInFromSource; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/NATGateway",
+          "metricName": "BytesInFromSource",
+          "dimensions": {
+            "NatGatewayId": "$nat_b"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "NAT B — BytesInFromDestination",
+      "description": "CloudWatch AWS/NATGateway / BytesInFromDestination; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/NATGateway",
+          "metricName": "BytesInFromDestination",
+          "dimensions": {
+            "NatGatewayId": "$nat_b"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 9,
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | subnet free ips",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D08 / NOVA 08 subnet_free_ips. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D08"
+          },
+          "item": {
+            "filter": "NOVA 08 subnet_free_ips"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 10,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | subnet ip utilization pct",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D08 / NOVA 08 subnet_ip_utilization_pct. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D08"
+          },
+          "item": {
+            "filter": "NOVA 08 subnet_ip_utilization_pct"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 11,
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | blackhole routes",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D08 / NOVA 08 blackhole_routes. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D08"
+          },
+          "item": {
+            "filter": "NOVA 08 blackhole_routes"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | dns latency seconds",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D08 / NOVA 08 dns_latency_seconds. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D08"
+          },
+          "item": {
+            "filter": "NOVA 08 dns_latency_seconds"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 13,
+      "gridPos": {
+        "x": 12,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | rejected flows",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D08 / NOVA 08 rejected_flows. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D08"
+          },
+          "item": {
+            "filter": "NOVA 08 rejected_flows"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Escopo integral — catálogo de requisitos",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "Os requisitos abaixo são o escopo de monitoramento, não uma declaração de implementação. Alguns são compostos e precisam de painéis adicionais e/ou dimensões, coletores e logs específicos."
+      },
+      "id": 15,
+      "gridPos": {
+        "x": 0,
+        "y": 61,
+        "w": 24,
+        "h": 4
+      }
+    },
+    {
+      "title": "Requisitos 1–5",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **1.** Estado e inventário da VPC, CIDR e associações.\n- **2.** Inventário das seis subnets públicas, privadas de aplicação e privadas de banco.\n- **3.** IPs disponíveis, ocupados e percentual de utilização por subnet.\n- **4.** Distribuição de serviços, ENIs e recursos por AZ/subnet.\n- **5.** Estado, associações e rotas das route tables."
+      },
+      "id": 16,
+      "gridPos": {
+        "x": 0,
+        "y": 65,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 6–10",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **6.** Rotas ausentes, inválidas, blackhole e divergências do baseline.\n- **7.** Estado e associação do Internet Gateway.\n- **8.** Estado e associação dos NAT Gateways.\n- **9.** Elastic IPs alocados, associados e ociosos.\n- **10.** Inventário, estado e quantidade de ENIs."
+      },
+      "id": 17,
+      "gridPos": {
+        "x": 0,
+        "y": 74,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 11–15",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **11.** Security Groups: quantidade, regras, alterações e conformidade.\n- **12.** Network ACLs: associações, regras e alterações.\n- **13.** VPC Flow Logs: bytes, pacotes, fluxos aceitos/rejeitados e tendências (quando habilitados).\n- **14.** Conectividade entre ALB, ECS e RDS por sondas autorizadas.\n- **15.** Conectividade de saída para dependências externas por sondas."
+      },
+      "id": 18,
+      "gridPos": {
+        "x": 0,
+        "y": 83,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 16–20",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **16.** DNS: sucesso de resolução, latência, timeouts e falhas.\n- **17.** Tráfego entre AZs e saída para internet, conforme as fontes disponíveis.\n- **18.** Quotas de VPC, subnets, ENIs, EIPs e NAT Gateways.\n- **19.** Eventos AWS Health relacionados à região e às AZs.\n- **20.** Conformidade do isolamento das subnets de banco e ausência de IP público nas tasks."
+      },
+      "id": 19,
+      "gridPos": {
+        "x": 0,
+        "y": 92,
+        "w": 24,
+        "h": 9
+      }
+    }
+  ]
+}

@@ -1,0 +1,313 @@
+{
+  "version": 1,
+  "dashboards": [
+    {
+      "uid": "nova-01-global-overview",
+      "path": "dashboards/01-infrastructure/01-global-overview.json",
+      "category": "01-infrastructure",
+      "requirements": 21,
+      "panels": 60,
+      "cloudwatch": 47,
+      "zabbixExisting": 2,
+      "zabbixPending": 4
+    },
+    {
+      "uid": "nova-02-ecs-cluster",
+      "path": "dashboards/01-infrastructure/02-ecs-cluster.json",
+      "category": "01-infrastructure",
+      "requirements": 16,
+      "panels": 43,
+      "cloudwatch": 33,
+      "zabbixExisting": 0,
+      "zabbixPending": 4
+    },
+    {
+      "uid": "nova-03-ecs-services",
+      "path": "dashboards/01-infrastructure/03-ecs-services.json",
+      "category": "01-infrastructure",
+      "requirements": 16,
+      "panels": 43,
+      "cloudwatch": 33,
+      "zabbixExisting": 0,
+      "zabbixPending": 4
+    },
+    {
+      "uid": "nova-04-fargate-containers",
+      "path": "dashboards/01-infrastructure/04-fargate-containers.json",
+      "category": "01-infrastructure",
+      "requirements": 14,
+      "panels": 44,
+      "cloudwatch": 34,
+      "zabbixExisting": 0,
+      "zabbixPending": 5
+    },
+    {
+      "uid": "nova-05-auto-scaling",
+      "path": "dashboards/01-infrastructure/05-auto-scaling.json",
+      "category": "01-infrastructure",
+      "requirements": 15,
+      "panels": 19,
+      "cloudwatch": 10,
+      "zabbixExisting": 0,
+      "zabbixPending": 4
+    },
+    {
+      "uid": "nova-06-alb",
+      "path": "dashboards/01-infrastructure/06-alb.json",
+      "category": "01-infrastructure",
+      "requirements": 20,
+      "panels": 43,
+      "cloudwatch": 34,
+      "zabbixExisting": 0,
+      "zabbixPending": 3
+    },
+    {
+      "uid": "nova-07-target-groups",
+      "path": "dashboards/01-infrastructure/07-target-groups.json",
+      "category": "01-infrastructure",
+      "requirements": 15,
+      "panels": 23,
+      "cloudwatch": 15,
+      "zabbixExisting": 0,
+      "zabbixPending": 3
+    },
+    {
+      "uid": "nova-08-vpc-network",
+      "path": "dashboards/01-infrastructure/08-vpc-network.json",
+      "category": "01-infrastructure",
+      "requirements": 20,
+      "panels": 19,
+      "cloudwatch": 8,
+      "zabbixExisting": 0,
+      "zabbixPending": 5
+    },
+    {
+      "uid": "nova-09-nat-gateways",
+      "path": "dashboards/01-infrastructure/09-nat-gateways.json",
+      "category": "01-infrastructure",
+      "requirements": 17,
+      "panels": 41,
+      "cloudwatch": 32,
+      "zabbixExisting": 0,
+      "zabbixPending": 3
+    },
+    {
+      "uid": "nova-10-frontend-nginx",
+      "path": "dashboards/02-applications/10-frontend-nginx.json",
+      "category": "02-applications",
+      "requirements": 16,
+      "panels": 22,
+      "cloudwatch": 9,
+      "zabbixExisting": 0,
+      "zabbixPending": 7
+    },
+    {
+      "uid": "nova-11-backend-fastapi",
+      "path": "dashboards/02-applications/11-backend-fastapi.json",
+      "category": "02-applications",
+      "requirements": 15,
+      "panels": 21,
+      "cloudwatch": 9,
+      "zabbixExisting": 0,
+      "zabbixPending": 7
+    },
+    {
+      "uid": "nova-12-api-endpoints",
+      "path": "dashboards/02-applications/12-api-endpoints.json",
+      "category": "02-applications",
+      "requirements": 26,
+      "panels": 12,
+      "cloudwatch": 0,
+      "zabbixExisting": 0,
+      "zabbixPending": 4
+    },
+    {
+      "uid": "nova-13-rds-application",
+      "path": "dashboards/02-applications/13-rds-application.json",
+      "category": "02-applications",
+      "requirements": 17,
+      "panels": 28,
+      "cloudwatch": 19,
+      "zabbixExisting": 0,
+      "zabbixPending": 3
+    },
+    {
+      "uid": "nova-14-rds-monitoring",
+      "path": "dashboards/02-applications/14-rds-monitoring.json",
+      "category": "02-applications",
+      "requirements": 19,
+      "panels": 28,
+      "cloudwatch": 19,
+      "zabbixExisting": 0,
+      "zabbixPending": 3
+    },
+    {
+      "uid": "nova-15-postgresql",
+      "path": "dashboards/02-applications/15-postgresql.json",
+      "category": "02-applications",
+      "requirements": 19,
+      "panels": 24,
+      "cloudwatch": 10,
+      "zabbixExisting": 0,
+      "zabbixPending": 8
+    },
+    {
+      "uid": "nova-16-business-intelligence",
+      "path": "dashboards/02-applications/16-business-intelligence.json",
+      "category": "02-applications",
+      "requirements": 13,
+      "panels": 12,
+      "cloudwatch": 0,
+      "zabbixExisting": 0,
+      "zabbixPending": 7
+    },
+    {
+      "uid": "nova-17-zabbix",
+      "path": "dashboards/03-sre/17-zabbix.json",
+      "category": "03-sre",
+      "requirements": 20,
+      "panels": 23,
+      "cloudwatch": 9,
+      "zabbixExisting": 2,
+      "zabbixPending": 6
+    },
+    {
+      "uid": "nova-18-grafana",
+      "path": "dashboards/03-sre/18-grafana.json",
+      "category": "03-sre",
+      "requirements": 17,
+      "panels": 16,
+      "cloudwatch": 4,
+      "zabbixExisting": 2,
+      "zabbixPending": 4
+    },
+    {
+      "uid": "nova-19-availability-slo",
+      "path": "dashboards/03-sre/19-availability-slo.json",
+      "category": "03-sre",
+      "requirements": 17,
+      "panels": 21,
+      "cloudwatch": 7,
+      "zabbixExisting": 2,
+      "zabbixPending": 6
+    },
+    {
+      "uid": "nova-20-disaster-recovery",
+      "path": "dashboards/03-sre/20-disaster-recovery.json",
+      "category": "03-sre",
+      "requirements": 15,
+      "panels": 34,
+      "cloudwatch": 24,
+      "zabbixExisting": 0,
+      "zabbixPending": 5
+    },
+    {
+      "uid": "nova-21-backup-restore",
+      "path": "dashboards/03-sre/21-backup-restore.json",
+      "category": "03-sre",
+      "requirements": 15,
+      "panels": 10,
+      "cloudwatch": 0,
+      "zabbixExisting": 0,
+      "zabbixPending": 5
+    },
+    {
+      "uid": "nova-22-soc",
+      "path": "dashboards/04-security/22-soc.json",
+      "category": "04-security",
+      "requirements": 17,
+      "panels": 10,
+      "cloudwatch": 0,
+      "zabbixExisting": 0,
+      "zabbixPending": 4
+    },
+    {
+      "uid": "nova-23-authentication",
+      "path": "dashboards/04-security/23-authentication.json",
+      "category": "04-security",
+      "requirements": 15,
+      "panels": 12,
+      "cloudwatch": 0,
+      "zabbixExisting": 0,
+      "zabbixPending": 7
+    },
+    {
+      "uid": "nova-24-vulnerability-compliance",
+      "path": "dashboards/04-security/24-vulnerability-compliance.json",
+      "category": "04-security",
+      "requirements": 18,
+      "panels": 11,
+      "cloudwatch": 0,
+      "zabbixExisting": 0,
+      "zabbixPending": 5
+    },
+    {
+      "uid": "nova-25-github-actions",
+      "path": "dashboards/05-devops/25-github-actions.json",
+      "category": "05-devops",
+      "requirements": 18,
+      "panels": 12,
+      "cloudwatch": 0,
+      "zabbixExisting": 0,
+      "zabbixPending": 6
+    },
+    {
+      "uid": "nova-26-ecr",
+      "path": "dashboards/05-devops/26-ecr.json",
+      "category": "05-devops",
+      "requirements": 12,
+      "panels": 10,
+      "cloudwatch": 0,
+      "zabbixExisting": 0,
+      "zabbixPending": 5
+    },
+    {
+      "uid": "nova-27-terraform-governance",
+      "path": "dashboards/05-devops/27-terraform-governance.json",
+      "category": "05-devops",
+      "requirements": 18,
+      "panels": 16,
+      "cloudwatch": 4,
+      "zabbixExisting": 0,
+      "zabbixPending": 6
+    },
+    {
+      "uid": "nova-28-finops-global",
+      "path": "dashboards/06-finops/28-finops-global.json",
+      "category": "06-finops",
+      "requirements": 13,
+      "panels": 10,
+      "cloudwatch": 0,
+      "zabbixExisting": 0,
+      "zabbixPending": 5
+    },
+    {
+      "uid": "nova-29-finops-resources",
+      "path": "dashboards/06-finops/29-finops-resources.json",
+      "category": "06-finops",
+      "requirements": 14,
+      "panels": 76,
+      "cloudwatch": 64,
+      "zabbixExisting": 0,
+      "zabbixPending": 7
+    },
+    {
+      "uid": "nova-30-finops-optimization",
+      "path": "dashboards/06-finops/30-finops-optimization.json",
+      "category": "06-finops",
+      "requirements": 18,
+      "panels": 46,
+      "cloudwatch": 34,
+      "zabbixExisting": 0,
+      "zabbixPending": 6
+    }
+  ],
+  "totals": {
+    "dashboards": 30,
+    "requirements": 506,
+    "panels": 789,
+    "cloudwatch": 458,
+    "zabbixExisting": 8,
+    "zabbixPending": 151
+  }
+}

@@ -1,0 +1,2554 @@
+{
+  "id": null,
+  "uid": "nova-04-fargate-containers",
+  "title": "04 | AWS | Fargate Containers",
+  "tags": [
+    "nova",
+    "template",
+    "01-infrastructure"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "cluster",
+        "label": "cluster",
+        "type": "textbox",
+        "query": "cloudstart-dev-cluster",
+        "current": {
+          "text": "cloudstart-dev-cluster",
+          "value": "cloudstart-dev-cluster"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "logs_backend",
+        "label": "logs_backend",
+        "type": "textbox",
+        "query": "/ecs/cloudstart-dev/backend",
+        "current": {
+          "text": "/ecs/cloudstart-dev/backend",
+          "value": "/ecs/cloudstart-dev/backend"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "logs_db_bootstrap",
+        "label": "logs_db_bootstrap",
+        "type": "textbox",
+        "query": "/ecs/cloudstart-dev/db-bootstrap",
+        "current": {
+          "text": "/ecs/cloudstart-dev/db-bootstrap",
+          "value": "/ecs/cloudstart-dev/db-bootstrap"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "logs_db_migration",
+        "label": "logs_db_migration",
+        "type": "textbox",
+        "query": "/ecs/cloudstart-dev/db-migration",
+        "current": {
+          "text": "/ecs/cloudstart-dev/db-migration",
+          "value": "/ecs/cloudstart-dev/db-migration"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "logs_frontend",
+        "label": "logs_frontend",
+        "type": "textbox",
+        "query": "/ecs/cloudstart-dev/frontend",
+        "current": {
+          "text": "/ecs/cloudstart-dev/frontend",
+          "value": "/ecs/cloudstart-dev/frontend"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "logs_monitoring",
+        "label": "logs_monitoring",
+        "type": "textbox",
+        "query": "/ecs/cloudstart-dev/monitoring",
+        "current": {
+          "text": "/ecs/cloudstart-dev/monitoring",
+          "value": "/ecs/cloudstart-dev/monitoring"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "project",
+        "label": "project",
+        "type": "textbox",
+        "query": "cloudstart-dev",
+        "current": {
+          "text": "cloudstart-dev",
+          "value": "cloudstart-dev"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "region",
+        "label": "region",
+        "type": "textbox",
+        "query": "us-east-1",
+        "current": {
+          "text": "us-east-1",
+          "value": "us-east-1"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "description": "NOVA dashboard template. Real query panels plus explicitly pending collector contracts and full requirements.",
+  "panels": [
+    {
+      "title": "Estado da integração",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "**Template NOVA — 04**\n\nCloudWatch e Zabbix existentes: consultas reais quando há dimensões e dados. Painéis **PENDENTE** exigem criação e alimentação de itens conforme `collector-contract.json`; não representam dados coletados. Ausência de dados não equivale a zero. O catálogo ao final preserva o escopo completo."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 5
+      }
+    },
+    {
+      "title": "frontend — CPU",
+      "description": "CloudWatch AWS/ECS / CPUUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — Memory",
+      "description": "CloudWatch AWS/ECS / MemoryUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "MemoryUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — CPU",
+      "description": "CloudWatch AWS/ECS / CPUUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — Memory",
+      "description": "CloudWatch AWS/ECS / MemoryUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "MemoryUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — CPU",
+      "description": "CloudWatch AWS/ECS / CPUUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — Memory",
+      "description": "CloudWatch AWS/ECS / MemoryUtilization; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/ECS",
+          "metricName": "MemoryUtilization",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 7,
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — CpuUtilized (service)",
+      "description": "CloudWatch ECS/ContainerInsights / CpuUtilized; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "CpuUtilized",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — CpuReserved (service)",
+      "description": "CloudWatch ECS/ContainerInsights / CpuReserved; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "CpuReserved",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 9,
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — MemoryUtilized (service)",
+      "description": "CloudWatch ECS/ContainerInsights / MemoryUtilized; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "MemoryUtilized",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 10,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — MemoryReserved (service)",
+      "description": "CloudWatch ECS/ContainerInsights / MemoryReserved; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "MemoryReserved",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 11,
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — NetworkRxBytes (service)",
+      "description": "CloudWatch ECS/ContainerInsights / NetworkRxBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "NetworkRxBytes",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — NetworkTxBytes (service)",
+      "description": "CloudWatch ECS/ContainerInsights / NetworkTxBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "NetworkTxBytes",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-frontend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 13,
+      "gridPos": {
+        "x": 12,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — CpuUtilized (service)",
+      "description": "CloudWatch ECS/ContainerInsights / CpuUtilized; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "CpuUtilized",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — CpuReserved (service)",
+      "description": "CloudWatch ECS/ContainerInsights / CpuReserved; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "CpuReserved",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 15,
+      "gridPos": {
+        "x": 12,
+        "y": 53,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — MemoryUtilized (service)",
+      "description": "CloudWatch ECS/ContainerInsights / MemoryUtilized; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "MemoryUtilized",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 16,
+      "gridPos": {
+        "x": 0,
+        "y": 61,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — MemoryReserved (service)",
+      "description": "CloudWatch ECS/ContainerInsights / MemoryReserved; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "MemoryReserved",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 17,
+      "gridPos": {
+        "x": 12,
+        "y": 61,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — NetworkRxBytes (service)",
+      "description": "CloudWatch ECS/ContainerInsights / NetworkRxBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "NetworkRxBytes",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 18,
+      "gridPos": {
+        "x": 0,
+        "y": 69,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — NetworkTxBytes (service)",
+      "description": "CloudWatch ECS/ContainerInsights / NetworkTxBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "NetworkTxBytes",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-backend"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 19,
+      "gridPos": {
+        "x": 12,
+        "y": 69,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — CpuUtilized (service)",
+      "description": "CloudWatch ECS/ContainerInsights / CpuUtilized; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "CpuUtilized",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 20,
+      "gridPos": {
+        "x": 0,
+        "y": 77,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — CpuReserved (service)",
+      "description": "CloudWatch ECS/ContainerInsights / CpuReserved; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "CpuReserved",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 21,
+      "gridPos": {
+        "x": 12,
+        "y": 77,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — MemoryUtilized (service)",
+      "description": "CloudWatch ECS/ContainerInsights / MemoryUtilized; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "MemoryUtilized",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 22,
+      "gridPos": {
+        "x": 0,
+        "y": 85,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — MemoryReserved (service)",
+      "description": "CloudWatch ECS/ContainerInsights / MemoryReserved; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "MemoryReserved",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 23,
+      "gridPos": {
+        "x": 12,
+        "y": 85,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — NetworkRxBytes (service)",
+      "description": "CloudWatch ECS/ContainerInsights / NetworkRxBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "NetworkRxBytes",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 24,
+      "gridPos": {
+        "x": 0,
+        "y": 93,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — NetworkTxBytes (service)",
+      "description": "CloudWatch ECS/ContainerInsights / NetworkTxBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "ECS/ContainerInsights",
+          "metricName": "NetworkTxBytes",
+          "dimensions": {
+            "ClusterName": "$cluster",
+            "ServiceName": "${project}-monitoring"
+          },
+          "region": "$region",
+          "statistic": "Average",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 25,
+      "gridPos": {
+        "x": 12,
+        "y": 93,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — IncomingBytes",
+      "description": "CloudWatch AWS/Logs / IncomingBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/Logs",
+          "metricName": "IncomingBytes",
+          "dimensions": {
+            "LogGroupName": "$logs_frontend"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 26,
+      "gridPos": {
+        "x": 0,
+        "y": 101,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "frontend — IncomingLogEvents",
+      "description": "CloudWatch AWS/Logs / IncomingLogEvents; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/Logs",
+          "metricName": "IncomingLogEvents",
+          "dimensions": {
+            "LogGroupName": "$logs_frontend"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 27,
+      "gridPos": {
+        "x": 12,
+        "y": 101,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — IncomingBytes",
+      "description": "CloudWatch AWS/Logs / IncomingBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/Logs",
+          "metricName": "IncomingBytes",
+          "dimensions": {
+            "LogGroupName": "$logs_backend"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 28,
+      "gridPos": {
+        "x": 0,
+        "y": 109,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "backend — IncomingLogEvents",
+      "description": "CloudWatch AWS/Logs / IncomingLogEvents; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/Logs",
+          "metricName": "IncomingLogEvents",
+          "dimensions": {
+            "LogGroupName": "$logs_backend"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 29,
+      "gridPos": {
+        "x": 12,
+        "y": 109,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "db-bootstrap — IncomingBytes",
+      "description": "CloudWatch AWS/Logs / IncomingBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/Logs",
+          "metricName": "IncomingBytes",
+          "dimensions": {
+            "LogGroupName": "$logs_db_bootstrap"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 30,
+      "gridPos": {
+        "x": 0,
+        "y": 117,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "db-bootstrap — IncomingLogEvents",
+      "description": "CloudWatch AWS/Logs / IncomingLogEvents; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/Logs",
+          "metricName": "IncomingLogEvents",
+          "dimensions": {
+            "LogGroupName": "$logs_db_bootstrap"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 31,
+      "gridPos": {
+        "x": 12,
+        "y": 117,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "db-migration — IncomingBytes",
+      "description": "CloudWatch AWS/Logs / IncomingBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/Logs",
+          "metricName": "IncomingBytes",
+          "dimensions": {
+            "LogGroupName": "$logs_db_migration"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 32,
+      "gridPos": {
+        "x": 0,
+        "y": 125,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "db-migration — IncomingLogEvents",
+      "description": "CloudWatch AWS/Logs / IncomingLogEvents; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/Logs",
+          "metricName": "IncomingLogEvents",
+          "dimensions": {
+            "LogGroupName": "$logs_db_migration"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 33,
+      "gridPos": {
+        "x": 12,
+        "y": 125,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — IncomingBytes",
+      "description": "CloudWatch AWS/Logs / IncomingBytes; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/Logs",
+          "metricName": "IncomingBytes",
+          "dimensions": {
+            "LogGroupName": "$logs_monitoring"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 34,
+      "gridPos": {
+        "x": 0,
+        "y": 133,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "monitoring — IncomingLogEvents",
+      "description": "CloudWatch AWS/Logs / IncomingLogEvents; dimensão e disponibilidade dependem do deploy real.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "nova-cloudwatch"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sem dados",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "nova-cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "m1",
+          "namespace": "AWS/Logs",
+          "metricName": "IncomingLogEvents",
+          "dimensions": {
+            "LogGroupName": "$logs_monitoring"
+          },
+          "region": "$region",
+          "statistic": "Sum",
+          "period": "300",
+          "matchExact": true
+        }
+      ],
+      "id": 35,
+      "gridPos": {
+        "x": 12,
+        "y": 133,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | container memory utilization pct",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D04 / NOVA 04 container_memory_utilization_pct. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D04"
+          },
+          "item": {
+            "filter": "NOVA 04 container_memory_utilization_pct"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 36,
+      "gridPos": {
+        "x": 0,
+        "y": 141,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | container cpu utilization pct",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D04 / NOVA 04 container_cpu_utilization_pct. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D04"
+          },
+          "item": {
+            "filter": "NOVA 04 container_cpu_utilization_pct"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 37,
+      "gridPos": {
+        "x": 12,
+        "y": 141,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | oom count",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D04 / NOVA 04 oom_count. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D04"
+          },
+          "item": {
+            "filter": "NOVA 04 oom_count"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 38,
+      "gridPos": {
+        "x": 0,
+        "y": 149,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | exit code",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D04 / NOVA 04 exit_code. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D04"
+          },
+          "item": {
+            "filter": "NOVA 04 exit_code"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 39,
+      "gridPos": {
+        "x": 12,
+        "y": 149,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | container start seconds",
+      "description": "Coletor ainda necessário. AWS Describe APIs / synthetic probes. Item numérico Zabbix: NOVA-D04 / NOVA 04 container_start_seconds. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D04"
+          },
+          "item": {
+            "filter": "NOVA 04 container_start_seconds"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 40,
+      "gridPos": {
+        "x": 0,
+        "y": 157,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Escopo integral — catálogo de requisitos",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "Os requisitos abaixo são o escopo de monitoramento, não uma declaração de implementação. Alguns são compostos e precisam de painéis adicionais e/ou dimensões, coletores e logs específicos."
+      },
+      "id": 41,
+      "gridPos": {
+        "x": 0,
+        "y": 165,
+        "w": 24,
+        "h": 4
+      }
+    },
+    {
+      "title": "Requisitos 1–5",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **1.** Identificação do container, task, serviço, AZ e versão.\n- **2.** Status, health status, uptime e duração da execução.\n- **3.** CPU utilizada e limite de CPU.\n- **4.** Memória utilizada, limite e percentual de utilização.\n- **5.** Picos e tendências de CPU e memória."
+      },
+      "id": 42,
+      "gridPos": {
+        "x": 0,
+        "y": 169,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 6–10",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **6.** OOM, encerramentos, substituições de tasks e reinicializações, quando suportadas.\n- **7.** Exit codes e motivos de encerramento.\n- **8.** Tempo de inicialização e falhas de pull da imagem.\n- **9.** Network RX/TX, quando disponível por container/task.\n- **10.** Armazenamento efêmero e operações de I/O, quando disponíveis."
+      },
+      "id": 43,
+      "gridPos": {
+        "x": 0,
+        "y": 178,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 11–14",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **11.** Imagem, tag, digest e revisão da task definition.\n- **12.** Volume de logs, erros, warnings e exceções.\n- **13.** Última execução e resultado dos containers de bootstrap e migração.\n- **14.** Disponibilidade e atualidade da telemetria por container."
+      },
+      "id": 44,
+      "gridPos": {
+        "x": 0,
+        "y": 187,
+        "w": 24,
+        "h": 9
+      }
+    }
+  ]
+}

@@ -1,0 +1,353 @@
+{
+  "id": null,
+  "uid": "nova-12-api-endpoints",
+  "title": "12 | API | Endpoint Monitoring",
+  "tags": [
+    "nova",
+    "template",
+    "02-applications"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "description": "NOVA dashboard template. Real query panels plus explicitly pending collector contracts and full requirements.",
+  "panels": [
+    {
+      "title": "Estado da integração",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "**Template NOVA — 12**\n\nCloudWatch e Zabbix existentes: consultas reais quando há dimensões e dados. Painéis **PENDENTE** exigem criação e alimentação de itens conforme `collector-contract.json`; não representam dados coletados. Ausência de dados não equivale a zero. O catálogo ao final preserva o escopo completo."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 5
+      }
+    },
+    {
+      "title": "PENDENTE | endpoint status",
+      "description": "Coletor ainda necessário. application instrumentation / HTTP probes. Item numérico Zabbix: NOVA-D12 / NOVA 12 endpoint_status. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D12"
+          },
+          "item": {
+            "filter": "NOVA 12 endpoint_status"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | endpoint p95 seconds",
+      "description": "Coletor ainda necessário. application instrumentation / HTTP probes. Item numérico Zabbix: NOVA-D12 / NOVA 12 endpoint_p95_seconds. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D12"
+          },
+          "item": {
+            "filter": "NOVA 12 endpoint_p95_seconds"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | endpoint success pct",
+      "description": "Coletor ainda necessário. application instrumentation / HTTP probes. Item numérico Zabbix: NOVA-D12 / NOVA 12 endpoint_success_pct. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D12"
+          },
+          "item": {
+            "filter": "NOVA 12 endpoint_success_pct"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "PENDENTE | endpoint timeouts",
+      "description": "Coletor ainda necessário. application instrumentation / HTTP probes. Item numérico Zabbix: NOVA-D12 / NOVA 12 endpoint_timeouts. Não preencher com valores simulados.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "nova-zabbix"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Coleta pendente",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "mode": 0,
+          "group": {
+            "filter": "NOVA Extended"
+          },
+          "host": {
+            "filter": "NOVA-D12"
+          },
+          "item": {
+            "filter": "NOVA 12 endpoint_timeouts"
+          },
+          "functions": [],
+          "options": {
+            "showDisabledItems": false
+          }
+        }
+      ],
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Escopo integral — catálogo de requisitos",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "Os requisitos abaixo são o escopo de monitoramento, não uma declaração de implementação. Alguns são compostos e precisam de painéis adicionais e/ou dimensões, coletores e logs específicos."
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 4
+      }
+    },
+    {
+      "title": "Requisitos 1–5",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **1.** `GET /` — raiz do backend; verificar diretamente no backend, pois a rota pública padrão do ALB aponta para o frontend.\n- **2.** `GET /health` — health do backend; verificar diretamente no backend pelo mesmo motivo.\n- **3.** `GET /api/health`.\n- **4.** `GET /api/health/db`.\n- **5.** `GET /api/info`."
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 6–10",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **6.** `GET /api/auth/google/login`.\n- **7.** `GET /api/auth/google/callback`.\n- **8.** `GET /api/auth/apple/login`.\n- **9.** `POST /api/auth/apple/callback`.\n- **10.** `POST /api/auth/refresh`."
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 11–15",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **11.** `POST /api/auth/logout`.\n- **12.** `GET /api/auth/me`.\n- **13.** `GET /api/items`.\n- **14.** `POST /api/items`.\n- **15.** `GET /api/items/{item_id}`."
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 16–20",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **16.** `PATCH /api/items/{item_id}`.\n- **17.** `DELETE /api/items/{item_id}`.\n- **18.** Disponibilidade, resultado do teste sintético, status HTTP observado versus esperado e conteúdo esperado.\n- **19.** Requisições por período, método e template de rota (não por ID individual).\n- **20.** Latência média, p50, p95, p99 e máxima."
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 21–25",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **21.** Taxas de sucesso, falha, 4xx, 5xx e timeout.\n- **22.** Tamanho de requisição/resposta, quando instrumentado.\n- **23.** Dependências, erros de validação e falhas de autenticação/autorização.\n- **24.** Horário da última execução bem-sucedida e duração da indisponibilidade.\n- **25.** Sucesso de operações CRUD completas com dados de teste descartáveis e isolados."
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 0,
+        "y": 61,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "title": "Requisitos 26–26",
+      "type": "text",
+      "options": {
+        "mode": "markdown",
+        "content": "- **26.** Sucesso de fluxos autenticados somente com identidade de teste autorizada; status esperados de redirecionamentos e callbacks OAuth, quando configurados."
+      },
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 70,
+        "w": 24,
+        "h": 9
+      }
+    }
+  ]
+}
