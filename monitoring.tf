@@ -202,9 +202,23 @@ resource "aws_iam_role_policy" "ecs_monitoring_metrics" {
         # These metric operations do not expose resource-level IAM ARNs.
         "cloudwatch:GetMetricData",
         "cloudwatch:GetMetricStatistics",
-        "cloudwatch:ListMetrics"
+        "cloudwatch:ListMetrics",
+        "rds:DescribeDBInstances",
+        "rds:DescribeDBSnapshots",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeNatGateways",
+        "elasticloadbalancing:DescribeTargetHealth"
       ]
       Resource = "*"
+      Condition = {
+        StringEquals = { "aws:RequestedRegion" = var.aws_region }
+      }
+      }, {
+      Sid      = "ReadProjectECRImageInventory"
+      Effect   = "Allow"
+      Action   = ["ecr:DescribeImages"]
+      Resource = [aws_ecr_repository.frontend.arn, aws_ecr_repository.backend.arn]
     }]
   })
 }
@@ -429,7 +443,7 @@ resource "aws_ecs_task_definition" "monitoring" {
 
       entryPoint = ["/bin/sh", "-ec"]
       command = [
-        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/nova-bootstrap.py && python /tmp/nova-bootstrap.py && touch /tmp/nova-monitoring-ready && while :; do sleep 300; done"
+        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/bootstrap.py && python /tmp/bootstrap.py && touch /tmp/nova-monitoring-ready && printf '%s' \"$NOVA_COLLECTOR_SCRIPT_B64\" | base64 -d | gzip -dc > /tmp/nova_collector.py && exec python -u /tmp/nova_collector.py"
       ]
 
       logConfiguration = {
@@ -443,6 +457,10 @@ resource "aws_ecs_task_definition" "monitoring" {
 
       environment = [
         { name = "MONITOR_BOOTSTRAP_SCRIPT_B64", value = filebase64("${path.module}/monitoring/bootstrap.py") },
+        { name = "NOVA_COLLECTOR_SCRIPT_B64", value = base64gzip(file("${path.module}/monitoring/collector.py")) },
+        { name = "NOVA_ZABBIX_CATALOG_B64", value = base64gzip(jsonencode(local.nova_zabbix_catalog)) },
+        { name = "NOVA_RESOURCE_VARS", value = jsonencode(local.nova_zabbix_resource_vars) },
+        { name = "NOVA_COLLECTION_SECONDS", value = "900" },
         { name = "GRAFANA_URL", value = "http://127.0.0.1:${var.grafana_container_port}/grafana" },
         { name = "ZABBIX_URL", value = "http://127.0.0.1:8080/api_jsonrpc.php" },
         { name = "ZABBIX_WEB_CHECK_URL", value = "http://127.0.0.1:8080/" },
@@ -520,6 +538,7 @@ resource "aws_ecs_service" "monitoring" {
 
   depends_on = [
     aws_iam_role_policy.ecs_monitoring_execution,
+    aws_iam_role_policy.ecs_monitoring_metrics,
   ]
 
   tags = merge(local.global_tags, {

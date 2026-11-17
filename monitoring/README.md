@@ -108,3 +108,22 @@ A CI também verifica Terraform fmt/validate, segurança e os testes existentes.
 **Fora do escopo atual:** TLS público por padrão, alta disponibilidade Zabbix, canais SMTP/Slack de alertas, auditoria de produção, monitoramento externo ponta a ponta de frontend/API e confirmação de deploy real na AWS.
 
 Fontes de API: Zabbix 7.4 https://www.zabbix.com/documentation/7.4/en/manual/api ; Grafana Zabbix https://grafana.com/docs/plugins/alexanderzobnin-zabbix-app/latest/configure/ ; Grafana HTTP API https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/ ; CloudWatch https://grafana.com/docs/grafana/latest/datasources/aws-cloudwatch/configure/ .
+
+
+## Continuous Zabbix collection (AWS)
+
+The existing monitoring-bootstrap container now runs `collector.py` after its original bootstrap. No new container, internet ingress, static AWS keys or database privileged credentials. Terraform builds a compressed query catalog from the 30 Grafana templates and injects actual AWS dimension identifiers. The collector deduplicates identical CloudWatch queries, collects closed five-minute samples every 15 minutes, and sends timestamped numeric values to Zabbix trappers using the loopback sender protocol. It creates the **NOVA Extended** host group, `NOVA-AWS`, `NOVA-Dxx`, `NOVA-Collector`, and a separate **NOVA | Zabbix Live** Grafana folder with 30 managed dashboards (`zbx-nova-...`). Original dashboard JSONs and the original `nova-monitoring` dashboard stay intact.
+
+Supported current sources: all 458 native CloudWatch panel definitions (deduplicated; metric availability depends on AWS configuration/traffic), existing internal Zabbix web checks, selected RDS inventory and automated snapshot ages, VPC subnet capacity/routes, NAT availability and aligned packet-drop ratio, ELB target health inventory, ECR image inventory, Zabbix problem/unsupported-item counts, optional HTTPS frontend probe. The exact custom keys with real producers are `IMPLEMENTED` in collector.py. All remaining contracts are provisioned but deliberately receive no data; their panels are labeled PENDENTE. No revenue, payment, billing, tracing, PostgreSQL SQL internals, full security events, CI or resilience report numbers are fabricated. HTTPS probes run only when an ACM certificate and domain are configured; they originate from the monitoring task, not an independent external probe.
+
+The AWS role adds read-only Describe permissions and ECR image inventory for the two project repositories; no secret-read permissions or resource mutations. The original authentication model is unchanged. The collector keeps bounded seven-day history and 90-day trends, retries failures, tracks successful sender acknowledgments, and exposes heartbeat/source errors; it does not send notifications externally. New live dashboards are regenerated at boot, so edit copies rather than managed versions. CloudWatch API calls and RDS history can cost money. The 900-second interval is a deliberate default; overlapping data windows are deduplicated, but CloudWatch still charges for queried metrics where applicable. A third AZ NAT is inventoried; template panels currently describe the first two NATs.
+
+### Acceptance (real AWS required)
+
+1. Run `python3 -m unittest discover -s monitoring/tests -v`, `python3 monitoring/grafana/validate.py`, `terraform fmt -check` and `terraform validate` in a configured checkout.
+2. Follow the protected deployment runbook. Review IAM, task-definition revision and service update in the actual plan; do not bypass existing guards. No deployment was executed by this change.
+3. Confirm log entry `NOVA Zabbix collector ready`, then `NOVA collection: series=.../..., samples=..., errors=...`. A zero or absent series is not proof of operation.
+4. In Zabbix Latest data verify NOVA-AWS and NOVA-Collector: fresh values/timestamps; check supported contracts and investigate missing metrics. Confirm Grafana folder NOVA | Zabbix Live has the 30 dashboards and data from `nova-zabbix`. Compare samples to CloudWatch for the same period and dimensions.
+5. Monitoring remains a single task; independently monitor its health and establish alert delivery before relying on it operationally. Local Compose continues the original bootstrap only; AWS-specific collector requires ECS credentials.
+
+Limitations: runtime Zabbix/Grafana API and AWS integration are not yet homologated. Collection of all 506 composite requirements needs instrumentation and additional data sources; existing contract definitions alone do not provide them.

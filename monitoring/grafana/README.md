@@ -47,3 +47,7 @@ Run `python3 monitoring/grafana/validate.py` from the repository root. Structura
 - [nova-28-finops-global](dashboards/06-finops/28-finops-global.json)
 - [nova-29-finops-resources](dashboards/06-finops/29-finops-resources.json)
 - [nova-30-finops-optimization](dashboards/06-finops/30-finops-optimization.json)
+
+## AWS live Zabbix copy
+
+The original JSON templates remain importable. AWS now provisions separate Zabbix-backed copies in **NOVA | Zabbix Live** using `monitoring/collector.py`. See [continuous collection](../README.md#continuous-zabbix-collection-aws) for actual supported producers, permissions, cost and acceptance. The original contract remains the desired catalog; only keys in `IMPLEMENTED` have producers.
