@@ -168,7 +168,7 @@ class AWS:
 
     def post(self, service, body, content_type, target=None):
         credentials = self.credentials()
-        host = service + "." + self.region + ".amazonaws.com"
+        host = ("api.ecr" if service == "ecr" else service) + "." + self.region + ".amazonaws.com"
         now = utc()
         date, timestamp = now.strftime("%Y%m%d"), now.strftime("%Y%m%dT%H%M%SZ")
         headers = {"content-type": content_type, "host": host, "x-amz-date": timestamp,

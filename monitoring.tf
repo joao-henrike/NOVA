@@ -195,31 +195,33 @@ resource "aws_iam_role_policy" "ecs_monitoring_metrics" {
   role = aws_iam_role.ecs_monitoring_task.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid    = "ReadCloudWatchMetrics"
-      Effect = "Allow"
-      Action = [
-        # These metric operations do not expose resource-level IAM ARNs.
-        "cloudwatch:GetMetricData",
-        "cloudwatch:GetMetricStatistics",
-        "cloudwatch:ListMetrics",
-        "rds:DescribeDBInstances",
-        "rds:DescribeDBSnapshots",
-        "ec2:DescribeSubnets",
-        "ec2:DescribeRouteTables",
-        "ec2:DescribeNatGateways",
-        "elasticloadbalancing:DescribeTargetHealth"
-      ]
-      Resource = "*"
-      Condition = {
-        StringEquals = { "aws:RequestedRegion" = var.aws_region }
+    Statement = [
+      {
+        Sid    = "ReadCloudWatchMetricsAndInventory"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:GetMetricData",
+          "cloudwatch:GetMetricStatistics",
+          "cloudwatch:ListMetrics",
+          "rds:DescribeDBInstances",
+          "rds:DescribeDBSnapshots",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeRouteTables",
+          "ec2:DescribeNatGateways",
+          "elasticloadbalancing:DescribeTargetHealth"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = { "aws:RequestedRegion" = var.aws_region }
+        }
+      },
+      {
+        Sid      = "ReadProjectECRImageInventory"
+        Effect   = "Allow"
+        Action   = ["ecr:DescribeImages"]
+        Resource = [aws_ecr_repository.frontend.arn, aws_ecr_repository.backend.arn]
       }
-      }, {
-      Sid      = "ReadProjectECRImageInventory"
-      Effect   = "Allow"
-      Action   = ["ecr:DescribeImages"]
-      Resource = [aws_ecr_repository.frontend.arn, aws_ecr_repository.backend.arn]
-    }]
+    ]
   })
 }
 
