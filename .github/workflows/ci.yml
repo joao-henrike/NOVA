@@ -181,6 +181,7 @@ jobs:
         run: |
           python3 -m compileall -q monitoring
           python3 -m unittest discover -s monitoring/tests -v
+          python3 monitoring/grafana/validate.py
 
   terraform:
     name: Terraform Static Validation

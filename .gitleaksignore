@@ -1,0 +1,44 @@
+# Reviewed false positives: Zabbix item identifiers introduced in 144b7c7.
+# Each entry identifies a specific historical commit, file, rule and line.
+# Do not ignore the rule or file globally; new findings must be reviewed.
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:33
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:165
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:209
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:220
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:231
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:330
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:363
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:440
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:451
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:495
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:506
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:594
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:627
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:660
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:726
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:737
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:858
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:880
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:935
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:968
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:979
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:990
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1012
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1023
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1034
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1199
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1232
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1419
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1474
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1485
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1496
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1518
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1529
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1540
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1551
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1562
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1573
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1584
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1595
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1617
+144b7c7e648dd3805d61fe49a8193a9f8292b8b4:monitoring/grafana/collector-contract.json:generic-api-key:1661
