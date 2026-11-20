@@ -351,7 +351,7 @@ jobs:
             "$RUNNER_TEMP/baseline.tfplan"
 
       - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
+        uses: aws-actions/amazon-ecr-login@7290e214a610b32bc0eef81748948b6d466a8783
         with:
           mask-password: true
 
