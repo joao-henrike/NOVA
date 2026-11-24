@@ -247,6 +247,18 @@ resource "aws_iam_role_policy" "ecs_monitoring_metrics" {
         Effect   = "Allow"
         Action   = ["s3:GetObject"]
         Resource = ["${aws_s3_bucket.monitoring_assets.arn}/${aws_s3_object.monitoring_dashboards.key}"]
+      },
+      {
+        Sid      = "DecryptMonitoringDashboardBundle"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = [aws_kms_key.monitoring_assets.arn]
+        Condition = {
+          StringEquals = {
+            "kms:ViaService"                   = "s3.${var.aws_region}.amazonaws.com"
+            "kms:EncryptionContext:aws:s3:arn" = "${aws_s3_bucket.monitoring_assets.arn}/${aws_s3_object.monitoring_dashboards.key}"
+          }
+        }
       }
     ]
   })
@@ -299,11 +311,19 @@ resource "aws_s3_bucket_public_access_block" "monitoring_assets" {
   restrict_public_buckets = true
 }
 
+resource "aws_kms_key" "monitoring_assets" {
+  description             = "Encrypt Git-managed NOVA dashboard catalog"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  tags                    = merge(local.global_tags, { Component = "monitoring" })
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "monitoring_assets" {
   bucket = aws_s3_bucket.monitoring_assets.id
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.monitoring_assets.arn
     }
   }
 }
