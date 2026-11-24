@@ -48,7 +48,7 @@ actual = {
 }
 if len(paths) != 30 or len(expected) != 30 or actual != expected:
     raise SystemExit("Missing, duplicate, or unexpected monitoring dashboard asset")
-assets = [Path("monitoring/bootstrap.py"), Path("monitoring/collector.py"), *paths]
+assets = [Path("monitoring/bootstrap.py"), Path("monitoring/collector.py"), Path("monitoring/grafana/manifest.json"), *paths]
 for relative in assets:
     source = root / relative
     if relative.is_absolute() or ".." in relative.parts or not source.is_file():
