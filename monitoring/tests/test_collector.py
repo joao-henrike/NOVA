@@ -37,6 +37,21 @@ class CollectorTests(unittest.TestCase):
         self.assertIsNone(collector.resolve("$nat_a", {}))
         self.assertEqual(collector.resolve("${project}-frontend", {"project": "demo"}), "demo-frontend")
 
+    def test_restore_cursors_preserves_newer_acknowledged_values(self):
+        class FakeZabbix:
+            def call(self, method, params):
+                if method == "host.get":
+                    return [{"hostid": "1"}]
+                if method == "item.get":
+                    return [{"itemid": "11", "key_": "old", "lastclock": "100"},
+                            {"itemid": "12", "key_": "new", "lastclock": "150"},
+                            {"itemid": "13", "key_": "unmanaged", "lastclock": "999"}]
+                raise AssertionError(method)
+        items = {("host", "old"): ("Old", ""), ("host", "new"): ("New", "")}
+        last = {("host", "new"): 200}
+        collector.restore_cursors(FakeZabbix(), items, last)
+        self.assertEqual(last, {("host", "old"): 100, ("host", "new"): 200})
+
     def test_metric_identity_stable(self):
         a = {"namespace": "AWS/ECS", "metricName": "CPUUtilization", "dimensions": {"a": "b", "c": "d"},
              "statistic": "Average", "period": "300"}
