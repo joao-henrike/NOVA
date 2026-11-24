@@ -70,4 +70,4 @@ monitoring_db_engine_version          = "16"
 monitoring_db_instance_class          = "db.t4g.micro"
 monitoring_db_allocated_storage       = 20
 monitoring_db_max_allocated_storage   = 100
-monitoring_db_backup_retention_period = 7
+monitoring_db_backup_retention_period = 1
