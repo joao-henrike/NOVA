@@ -137,7 +137,7 @@ resource "terraform_data" "grafana_storage_keys" {
 }
 
 resource "aws_secretsmanager_secret_version" "grafana_admin" {
-  secret_id     = aws_secretsmanager_secret.grafana_admin.id
+  secret_id = aws_secretsmanager_secret.grafana_admin.id
   secret_string = jsonencode({
     password          = var.grafana_admin_password
     database_password = terraform_data.grafana_storage_keys.output.database_password
@@ -262,6 +262,33 @@ locals {
 
 resource "aws_s3_bucket" "monitoring_assets" {
   bucket_prefix = "${substr(local.name, 0, 22)}-mon-"
+  # This bucket contains only reproducible Git-managed dashboard JSON.
+  force_destroy = true
+  tags          = merge(local.global_tags, { Component = "monitoring" })
+}
+
+resource "aws_s3_bucket_versioning" "monitoring_assets" {
+  bucket = aws_s3_bucket.monitoring_assets.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "monitoring_assets" {
+  bucket     = aws_s3_bucket.monitoring_assets.id
+  depends_on = [aws_s3_bucket_versioning.monitoring_assets]
+
+  rule {
+    id     = "expire-obsolete-dashboard-versions"
+    status = "Enabled"
+    filter {}
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "monitoring_assets" {
@@ -287,7 +314,7 @@ resource "aws_s3_object" "monitoring_dashboards" {
   content      = local.nova_original_dashboards_json
   content_type = "application/json"
   source_hash  = sha256(local.nova_original_dashboards_json)
-  depends_on   = [aws_s3_bucket_public_access_block.monitoring_assets, aws_s3_bucket_server_side_encryption_configuration.monitoring_assets]
+  depends_on   = [aws_s3_bucket_public_access_block.monitoring_assets, aws_s3_bucket_server_side_encryption_configuration.monitoring_assets, aws_s3_bucket_versioning.monitoring_assets]
 }
 
 resource "aws_ecs_task_definition" "monitoring" {
@@ -568,7 +595,7 @@ resource "aws_ecs_task_definition" "monitoring" {
 
       entryPoint = ["/bin/sh", "-ec"]
       command = [
-        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/bootstrap.py && (until python /tmp/bootstrap.py; do sleep 30; done) && touch /tmp/nova-monitoring-ready && printf '%s' \"$NOVA_COLLECTOR_SCRIPT_B64\" | base64 -d | gzip -dc > /tmp/nova_collector.py && exec python -u /tmp/nova_collector.py"
+        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/bootstrap.py && (until python /tmp/bootstrap.py; do sleep 30; done) && rm -f /tmp/nova-monitoring-ready && printf '%s' \"$NOVA_COLLECTOR_SCRIPT_B64\" | base64 -d | gzip -dc > /tmp/nova_collector.py && exec python -u /tmp/nova_collector.py"
       ]
 
       logConfiguration = {
@@ -614,7 +641,7 @@ resource "aws_ecs_task_definition" "monitoring" {
         interval    = 30
         timeout     = 5
         retries     = 3
-        startPeriod = 300
+        startPeriod = 600
       }
     }
   ])
