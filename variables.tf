@@ -539,11 +539,11 @@ variable "monitoring_task_cpu" {
 variable "monitoring_task_memory" {
   description = "Fargate memory in MiB for Zabbix, Grafana, and the bootstrap container."
   type        = number
-  default     = 3072
+  default     = 4096
 
   validation {
-    condition     = var.monitoring_task_memory >= 3072 && var.monitoring_task_memory <= 8192 && var.monitoring_task_memory % 1024 == 0
-    error_message = "monitoring_task_memory must be 3072, 4096, 5120, 6144, 7168 or 8192 MiB with the bootstrap sidecar."
+    condition     = var.monitoring_task_memory >= 4096 && var.monitoring_task_memory <= 8192 && var.monitoring_task_memory % 1024 == 0
+    error_message = "monitoring_task_memory must be 4096, 5120, 6144, 7168 or 8192 MiB with the bootstrap sidecar."
   }
 }
 
