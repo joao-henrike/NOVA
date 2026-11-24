@@ -241,9 +241,53 @@ resource "aws_iam_role_policy" "ecs_monitoring_metrics" {
         Effect   = "Allow"
         Action   = ["ecr:DescribeImages"]
         Resource = [aws_ecr_repository.frontend.arn, aws_ecr_repository.backend.arn]
+      },
+      {
+        Sid      = "ReadMonitoringDashboardBundle"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["${aws_s3_bucket.monitoring_assets.arn}/${aws_s3_object.monitoring_dashboards.key}"]
       }
     ]
   })
+}
+
+# Keep the full dashboard catalog outside the ECS task-definition size limit.
+locals {
+  nova_original_dashboards_json = jsonencode([
+    for dashboard in jsondecode(file("${path.module}/monitoring/grafana/manifest.json")).dashboards :
+    jsondecode(file("${path.module}/monitoring/grafana/${dashboard.path}"))
+  ])
+}
+
+resource "aws_s3_bucket" "monitoring_assets" {
+  bucket_prefix = "${substr(local.name, 0, 22)}-mon-"
+}
+
+resource "aws_s3_bucket_public_access_block" "monitoring_assets" {
+  bucket                  = aws_s3_bucket.monitoring_assets.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "monitoring_assets" {
+  bucket = aws_s3_bucket.monitoring_assets.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_object" "monitoring_dashboards" {
+  bucket       = aws_s3_bucket.monitoring_assets.id
+  key          = "dashboards.json"
+  content      = local.nova_original_dashboards_json
+  content_type = "application/json"
+  source_hash  = sha256(local.nova_original_dashboards_json)
+  depends_on   = [aws_s3_bucket_public_access_block.monitoring_assets, aws_s3_bucket_server_side_encryption_configuration.monitoring_assets]
 }
 
 resource "aws_ecs_task_definition" "monitoring" {
@@ -403,6 +447,7 @@ resource "aws_ecs_task_definition" "monitoring" {
         \getenv grafana_password GRAFANA_DB_PASSWORD
         SELECT 'CREATE ROLE nova_grafana LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nova_grafana') \gexec
         SELECT format('ALTER ROLE nova_grafana PASSWORD %L', :'grafana_password') \gexec
+        GRANT nova_grafana TO CURRENT_USER WITH SET TRUE;
         SELECT 'CREATE DATABASE nova_grafana OWNER nova_grafana' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nova_grafana') \gexec
         REVOKE CONNECT ON DATABASE nova_grafana FROM PUBLIC;
         SQL
@@ -523,7 +568,7 @@ resource "aws_ecs_task_definition" "monitoring" {
 
       entryPoint = ["/bin/sh", "-ec"]
       command = [
-        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/bootstrap.py && until python /tmp/bootstrap.py; do sleep 30; done; touch /tmp/nova-monitoring-ready && printf '%s' \"$NOVA_COLLECTOR_SCRIPT_B64\" | base64 -d | gzip -dc > /tmp/nova_collector.py && exec python -u /tmp/nova_collector.py"
+        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/bootstrap.py && (until python /tmp/bootstrap.py; do sleep 30; done) && touch /tmp/nova-monitoring-ready && printf '%s' \"$NOVA_COLLECTOR_SCRIPT_B64\" | base64 -d | gzip -dc > /tmp/nova_collector.py && exec python -u /tmp/nova_collector.py"
       ]
 
       logConfiguration = {
@@ -540,6 +585,8 @@ resource "aws_ecs_task_definition" "monitoring" {
         { name = "NOVA_COLLECTOR_SCRIPT_B64", value = base64gzip(file("${path.module}/monitoring/collector.py")) },
         { name = "NOVA_ZABBIX_CATALOG_B64", value = base64gzip(jsonencode(local.nova_zabbix_catalog)) },
         { name = "NOVA_RESOURCE_VARS", value = jsonencode(local.nova_zabbix_resource_vars) },
+        { name = "NOVA_DASHBOARD_BUCKET", value = aws_s3_bucket.monitoring_assets.id },
+        { name = "NOVA_DASHBOARD_SHA256", value = aws_s3_object.monitoring_dashboards.source_hash },
         { name = "NOVA_COLLECTION_SECONDS", value = "900" },
         { name = "GRAFANA_URL", value = "http://127.0.0.1:${var.grafana_container_port}/grafana" },
         { name = "ZABBIX_URL", value = "http://127.0.0.1:8080/api_jsonrpc.php" },
@@ -585,6 +632,7 @@ resource "aws_ecs_service" "monitoring" {
   desired_count   = var.monitoring_desired_count
   launch_type     = "FARGATE"
 
+  # Zabbix is a singleton; do not run two collectors/servers during deployment.
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
   health_check_grace_period_seconds  = 600
