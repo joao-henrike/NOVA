@@ -199,15 +199,38 @@ registry="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.$
 aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$registry" >/dev/null
 
-log "Building frontend image: $IMAGE_TAG"
-docker build --pull -t "$frontend_repo:$IMAGE_TAG" apps/frontend
+# A previous deploy may have pushed either image before CloudShell stopped.
+# Reuse immutable commit-tagged images; never delete or overwrite remote tags.
+publish_image() {
+  local repository="$1" context="$2" result digest
+  local repository_name="${repository#*/}"
+  if result="$(aws ecr describe-images --region "$AWS_REGION" \
+    --registry-id "$actual_account" --repository-name "$repository_name" \
+    --image-ids "imageTag=$IMAGE_TAG" --query 'imageDetails[0].imageDigest' \
+    --output text 2>&1)"; then
+    digest="$result"
+    [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] ||
+      fatal "Could not verify existing ECR image $repository:$IMAGE_TAG."
+    # A user-defined tag is not necessarily tied to this checkout.
+    if [[ "$IMAGE_TAG" != "$(git rev-parse --short=12 HEAD)" &&
+          "$IMAGE_TAG" != "$(git rev-parse HEAD)" ]]; then
+      fatal "Existing custom immutable tag $IMAGE_TAG is not verifiably tied to this commit. Use the default commit tag or a new custom tag."
+    fi
+    log "Reusing existing immutable image: $repository:$IMAGE_TAG ($digest)"
+    return 0
+  fi
+  if [[ "$result" != *"(ImageNotFoundException)"* ]]; then
+    printf '%s\n' "$result" >&2
+    fatal "ECR lookup failed; refusing to assume the image is missing."
+  fi
+  log "Building missing image: $repository:$IMAGE_TAG"
+  docker build --pull -t "$repository:$IMAGE_TAG" "$context"
+  log "Publishing missing immutable image: $repository:$IMAGE_TAG"
+  docker push "$repository:$IMAGE_TAG"
+}
 
-log "Building backend image: $IMAGE_TAG"
-docker build --pull -t "$backend_repo:$IMAGE_TAG" apps/backend
-
-log "Pushing immutable application images"
-docker push "$frontend_repo:$IMAGE_TAG"
-docker push "$backend_repo:$IMAGE_TAG"
+publish_image "$frontend_repo" apps/frontend
+publish_image "$backend_repo" apps/backend
 
 log "Planning application task revisions with service activation deferred until after migrations"
 terraform plan \
