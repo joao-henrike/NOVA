@@ -275,6 +275,20 @@ class Grafana:
     def call(self, path, method="GET", data=None):
         return http_json(self.url + path, method, data, self.auth)
 
+    def ensure_dashboard(self, dashboard, folder_uid=None):
+        """Create missing dashboards only; preserve operator edits and folders."""
+        path = "/api/dashboards/uid/" + dashboard["uid"]
+        if self.call(path) is not None:
+            return False
+        payload = {"dashboard": dashboard, "overwrite": False, "message": "NOVA provisioning"}
+        if folder_uid:
+            payload["folderUid"] = folder_uid
+        result = self.call("/api/dashboards/db", "POST", payload)
+        if result is None:
+            raise MonitoringError("Grafana dashboard create returned no result")
+        retry("Grafana dashboard readback", lambda: self.call(path), attempts=12, delay=2)
+        return True
+
     def configure(self, zabbix_url, zabbix_password, region, enable_cloudwatch, dashboards_data):
         plugin = "/api/plugins/alexanderzobnin-zabbix-app/settings"
         # The plugin is installed from GF_PLUGINS_PREINSTALL, but app plugins
@@ -303,8 +317,7 @@ class Grafana:
             else:
                 self.call("/api/datasources/uid/" + source["uid"], "PUT", source)
         for dashboard in dashboards_data:
-            self.call("/api/dashboards/db", "POST",
-                      {"dashboard": dashboard, "overwrite": True, "message": "NOVA bootstrap"})
+            self.ensure_dashboard(dashboard)
         print(f"Grafana: {len(sources)} data source(s) and {len(dashboards_data)} dashboard(s) configured")
 
 
