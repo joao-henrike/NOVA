@@ -120,9 +120,29 @@ resource "aws_secretsmanager_secret" "grafana_admin" {
   })
 }
 
+# Keep DB and encryption credentials stable across administrator password changes.
+resource "terraform_data" "grafana_storage_keys" {
+  input = {
+    database_password = sha256("NOVA-GRAFANA-DB:${var.grafana_admin_password == null ? "" : var.grafana_admin_password}")
+    encryption_key    = sha256("NOVA-GRAFANA-KEY:${var.grafana_admin_password == null ? "" : var.grafana_admin_password}")
+  }
+
+  lifecycle {
+    ignore_changes = [input]
+    precondition {
+      condition     = var.grafana_admin_password != null
+      error_message = "Set a stable Grafana administrator password before creating monitoring storage."
+    }
+  }
+}
+
 resource "aws_secretsmanager_secret_version" "grafana_admin" {
   secret_id     = aws_secretsmanager_secret.grafana_admin.id
-  secret_string = jsonencode({ password = var.grafana_admin_password })
+  secret_string = jsonencode({
+    password          = var.grafana_admin_password
+    database_password = terraform_data.grafana_storage_keys.output.database_password
+    encryption_key    = terraform_data.grafana_storage_keys.output.encryption_key
+  })
 }
 
 resource "aws_lb_target_group" "grafana" {
@@ -205,6 +225,7 @@ resource "aws_iam_role_policy" "ecs_monitoring_metrics" {
           "cloudwatch:ListMetrics",
           "rds:DescribeDBInstances",
           "rds:DescribeDBSnapshots",
+          "ec2:DescribeRegions",
           "ec2:DescribeSubnets",
           "ec2:DescribeRouteTables",
           "ec2:DescribeNatGateways",
@@ -365,11 +386,55 @@ resource "aws_ecs_task_definition" "monitoring" {
       }
     },
     {
+      name      = "grafana-db-init"
+      image     = "postgres:16-alpine"
+      essential = false
+      cpu       = 0
+      memory    = 128
+
+      entryPoint = ["/bin/sh", "-ec"]
+      command = [<<-SCRIPT
+        export PGSSLMODE=require
+        for i in $(seq 1 60); do
+          if psql -X -Atqc 'SELECT 1' >/dev/null 2>&1; then break; fi
+          sleep 5
+        done
+        psql -X -v ON_ERROR_STOP=1 <<'SQL'
+        \getenv grafana_password GRAFANA_DB_PASSWORD
+        SELECT 'CREATE ROLE nova_grafana LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nova_grafana') \gexec
+        SELECT format('ALTER ROLE nova_grafana PASSWORD %L', :'grafana_password') \gexec
+        SELECT 'CREATE DATABASE nova_grafana OWNER nova_grafana' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nova_grafana') \gexec
+        REVOKE CONNECT ON DATABASE nova_grafana FROM PUBLIC;
+        SQL
+        echo "NOVA Grafana PostgreSQL initialized"
+      SCRIPT
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.monitoring.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "grafana-db-init"
+        }
+      }
+      environment = [
+        { name = "PGHOST", value = aws_db_instance.monitoring.address },
+        { name = "PGPORT", value = tostring(aws_db_instance.monitoring.port) },
+        { name = "PGDATABASE", value = var.monitoring_db_name },
+        { name = "PGUSER", value = var.monitoring_db_username }
+      ]
+      secrets = [
+        { name = "PGPASSWORD", valueFrom = "${aws_db_instance.monitoring.master_user_secret[0].secret_arn}:password::" },
+        { name = "GRAFANA_DB_PASSWORD", valueFrom = "${aws_secretsmanager_secret.grafana_admin.arn}:database_password::" }
+      ]
+    },
+    {
       name      = "grafana"
       image     = var.grafana_image
       essential = true
       cpu       = 256
-      memory    = 512
+      memory    = 1024
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -390,6 +455,13 @@ resource "aws_ecs_task_definition" "monitoring" {
       ]
 
       environment = [
+        { name = "GF_DATABASE_TYPE", value = "postgres" },
+        { name = "GF_DATABASE_HOST", value = "${aws_db_instance.monitoring.address}:5432" },
+        { name = "GF_DATABASE_NAME", value = "nova_grafana" },
+        { name = "GF_DATABASE_USER", value = "nova_grafana" },
+        { name = "GF_DATABASE_SSL_MODE", value = "require" },
+        { name = "GF_DATABASE_MAX_OPEN_CONN", value = "15" },
+        { name = "GF_DATABASE_MAX_IDLE_CONN", value = "5" },
         {
           name  = "GF_SERVER_ROOT_URL"
           value = "%(protocol)s://%(domain)s/grafana/"
@@ -412,13 +484,15 @@ resource "aws_ecs_task_definition" "monitoring" {
         {
           name      = "GF_SECURITY_ADMIN_PASSWORD"
           valueFrom = "${aws_secretsmanager_secret.grafana_admin.arn}:password::"
-        }
+        },
+        { name = "GF_DATABASE_PASSWORD", valueFrom = "${aws_secretsmanager_secret.grafana_admin.arn}:database_password::" },
+        { name = "GF_SECURITY_SECRET_KEY", valueFrom = "${aws_secretsmanager_secret.grafana_admin.arn}:encryption_key::" }
       ]
 
       dependsOn = [
         {
-          containerName = "zabbix-web"
-          condition     = "HEALTHY"
+          containerName = "grafana-db-init"
+          condition     = "SUCCESS"
         }
       ]
 
@@ -435,17 +509,21 @@ resource "aws_ecs_task_definition" "monitoring" {
     },
     {
       # One idempotent sidecar handles both Zabbix configuration and Grafana
-      # dashboards. It stays essential and only becomes healthy after setup.
-      # No custom image, extra permanent AWS service, or additional secret.
+      # dashboards. A failed collector must not stop the Grafana interface.
       name      = "monitoring-bootstrap"
       image     = "python:3.12-alpine"
-      essential = true
+      essential = false
       cpu       = 0
-      memory    = 256
+      memory    = 512
+
+      restartPolicy = {
+        enabled              = true
+        restartAttemptPeriod = 60
+      }
 
       entryPoint = ["/bin/sh", "-ec"]
       command = [
-        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/bootstrap.py && python /tmp/bootstrap.py && touch /tmp/nova-monitoring-ready && printf '%s' \"$NOVA_COLLECTOR_SCRIPT_B64\" | base64 -d | gzip -dc > /tmp/nova_collector.py && exec python -u /tmp/nova_collector.py"
+        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/bootstrap.py && until python /tmp/bootstrap.py; do sleep 30; done; touch /tmp/nova-monitoring-ready && printf '%s' \"$NOVA_COLLECTOR_SCRIPT_B64\" | base64 -d | gzip -dc > /tmp/nova_collector.py && exec python -u /tmp/nova_collector.py"
       ]
 
       logConfiguration = {
@@ -507,9 +585,9 @@ resource "aws_ecs_service" "monitoring" {
   desired_count   = var.monitoring_desired_count
   launch_type     = "FARGATE"
 
-  deployment_minimum_healthy_percent = 100
-  deployment_maximum_percent         = 200
-  health_check_grace_period_seconds  = 300
+  deployment_minimum_healthy_percent = 0
+  deployment_maximum_percent         = 100
+  health_check_grace_period_seconds  = 600
 
   deployment_circuit_breaker {
     enable   = true
@@ -541,6 +619,7 @@ resource "aws_ecs_service" "monitoring" {
   depends_on = [
     aws_iam_role_policy.ecs_monitoring_execution,
     aws_iam_role_policy.ecs_monitoring_metrics,
+    aws_secretsmanager_secret_version.grafana_admin,
   ]
 
   tags = merge(local.global_tags, {
