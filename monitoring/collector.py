@@ -286,6 +286,27 @@ def ensure_items(z, items):
     return group_id
 
 
+def restore_cursors(z, items, last):
+    """Recover committed history from Zabbix's persistent DB via its API.
+
+    Never reset an in-process watermark. All NOVA collector items use history=0
+    (numeric float). Reconcile only items which belong to this collector.
+    """
+    for host in sorted({h for h, _ in items}):
+        found = z.call("host.get", {"filter": {"host": [host]}, "output": ["hostid"]})
+        if len(found) != 1:
+            raise RuntimeError("NOVA cursor host missing or ambiguous")
+        existing = z.call("item.get", {
+            "hostids": [found[0]["hostid"]],
+            "output": ["itemid", "key_", "lastclock"],
+        })
+        for item in existing:
+            pair = (host, item["key_"])
+            if pair in items:
+                clock = int(item.get("lastclock") or 0)
+                last[pair] = max(last.get(pair, 0), clock)
+
+
 def ensure_triggers(z, interval):
     host = CONTROL
     checks = [
@@ -329,8 +350,7 @@ def ensure_dashboards(grafana, docs):
     if folder is None:
         grafana.call("/api/folders", "POST", {"uid": "nova-zabbix-live", "title": "NOVA | Zabbix Live"})
     for doc in docs:
-        grafana.call("/api/dashboards/db", "POST", {"dashboard": live_dashboard(doc, IMPLEMENTED),
-                      "folderUid": "nova-zabbix-live", "overwrite": True, "message": "NOVA collector provisioning"})
+        grafana.ensure_dashboard(live_dashboard(doc, IMPLEMENTED), "nova-zabbix-live")
 
 
 def recv_exact(sock, n):
@@ -563,6 +583,7 @@ def run():
                 ensure_dashboards(grafana, docs)
                 # Zabbix server configuration cache may lag newly created trappers.
                 time.sleep(70)
+                restore_cursors(z, items, last)
                 provisioned = True
                 print("NOVA Zabbix collector ready: %d unique CloudWatch queries; %d dashboards; %d planned contract producers" %
                       (len(specs), len(docs), len(IMPLEMENTED)), flush=True)
@@ -601,8 +622,14 @@ def run():
             if last_success is not None:
                 put(samples, "nova.d01.last_collection_age", clock-last_success, clock)
             # Only send defined, numeric, newer samples. No fake zeros and no repeat of old CW timestamps.
-            samples = [s for s in samples if s and (s["host"], s["key"]) in items
-                       and s["clock"] > last.get((s["host"], s["key"]), 0)]
+            # Deduplicate within a cycle as multiple producers may overlap.
+            unique = {}
+            for sample in samples:
+                if sample and (sample["host"], sample["key"]) in items:
+                    pair = (sample["host"], sample["key"])
+                    if sample["clock"] > last.get(pair, 0):
+                        unique[(*pair, sample["clock"])] = sample
+            samples = sorted(unique.values(), key=lambda s: (s["host"], s["key"], s["clock"]))
             expected = sum(all(s["dimensions"].values()) for s in specs.values())
             for key, v in (("heartbeat", 1), ("cycle.ok", int(errors == 0 and bool(values))),
                            ("cloudwatch.series.available", len(values)),
@@ -621,6 +648,9 @@ def run():
         except Exception as exc:
             # Keep the original monitoring task available; retry without exposing credentials.
             print("NOVA collector retry: "+type(exc).__name__, flush=True)
+            # Sender may have accepted part of a batch. Reconcile from Zabbix
+            # on the next cycle rather than blindly re-sending it.
+            provisioned = False
         time.sleep(max(5, interval-(time.monotonic()-start)))
 
 
