@@ -57,7 +57,7 @@ rds_deletion_protection = false
 
 monitoring_desired_count              = 1
 monitoring_task_cpu                   = 1024
-monitoring_task_memory                = 3072
+monitoring_task_memory                = 4096
 zabbix_server_image                   = "zabbix/zabbix-server-pgsql:alpine-7.4.15"
 zabbix_web_image                      = "zabbix/zabbix-web-nginx-pgsql:alpine-7.4.15"
 grafana_image                         = "grafana/grafana:13.2.3"
@@ -70,4 +70,4 @@ monitoring_db_engine_version          = "16"
 monitoring_db_instance_class          = "db.t4g.micro"
 monitoring_db_allocated_storage       = 20
 monitoring_db_max_allocated_storage   = 100
-monitoring_db_backup_retention_period = 1
+monitoring_db_backup_retention_period = 7

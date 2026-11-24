@@ -120,9 +120,29 @@ resource "aws_secretsmanager_secret" "grafana_admin" {
   })
 }
 
+# Keep DB and encryption credentials stable across administrator password changes.
+resource "terraform_data" "grafana_storage_keys" {
+  input = {
+    database_password = sha256("NOVA-GRAFANA-DB:${var.grafana_admin_password == null ? "" : var.grafana_admin_password}")
+    encryption_key    = sha256("NOVA-GRAFANA-KEY:${var.grafana_admin_password == null ? "" : var.grafana_admin_password}")
+  }
+
+  lifecycle {
+    ignore_changes = [input]
+    precondition {
+      condition     = var.grafana_admin_password != null
+      error_message = "Set a stable Grafana administrator password before creating monitoring storage."
+    }
+  }
+}
+
 resource "aws_secretsmanager_secret_version" "grafana_admin" {
-  secret_id     = aws_secretsmanager_secret.grafana_admin.id
-  secret_string = jsonencode({ password = var.grafana_admin_password })
+  secret_id = aws_secretsmanager_secret.grafana_admin.id
+  secret_string = jsonencode({
+    password          = var.grafana_admin_password
+    database_password = terraform_data.grafana_storage_keys.output.database_password
+    encryption_key    = terraform_data.grafana_storage_keys.output.encryption_key
+  })
 }
 
 resource "aws_lb_target_group" "grafana" {
@@ -205,6 +225,7 @@ resource "aws_iam_role_policy" "ecs_monitoring_metrics" {
           "cloudwatch:ListMetrics",
           "rds:DescribeDBInstances",
           "rds:DescribeDBSnapshots",
+          "ec2:DescribeRegions",
           "ec2:DescribeSubnets",
           "ec2:DescribeRouteTables",
           "ec2:DescribeNatGateways",
@@ -220,9 +241,113 @@ resource "aws_iam_role_policy" "ecs_monitoring_metrics" {
         Effect   = "Allow"
         Action   = ["ecr:DescribeImages"]
         Resource = [aws_ecr_repository.frontend.arn, aws_ecr_repository.backend.arn]
+      },
+      {
+        Sid      = "ReadMonitoringDashboardBundle"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["${aws_s3_bucket.monitoring_assets.arn}/${aws_s3_object.monitoring_dashboards.key}"]
+      },
+      {
+        Sid      = "DecryptMonitoringDashboardBundle"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = [aws_kms_key.monitoring_assets.arn]
+        Condition = {
+          StringEquals = {
+            "kms:ViaService"                   = "s3.${var.aws_region}.amazonaws.com"
+            "kms:EncryptionContext:aws:s3:arn" = "${aws_s3_bucket.monitoring_assets.arn}/${aws_s3_object.monitoring_dashboards.key}"
+          }
+        }
       }
     ]
   })
+}
+
+# Keep the full dashboard catalog outside the ECS task-definition size limit.
+locals {
+  nova_original_dashboards_json = jsonencode([
+    for dashboard in jsondecode(file("${path.module}/monitoring/grafana/manifest.json")).dashboards :
+    jsondecode(file("${path.module}/monitoring/grafana/${dashboard.path}"))
+  ])
+}
+
+resource "aws_s3_bucket" "monitoring_assets" {
+  bucket_prefix = "${substr(local.name, 0, 22)}-mon-"
+  # This bucket contains only reproducible Git-managed dashboard JSON.
+  force_destroy = true
+  tags          = merge(local.global_tags, { Component = "monitoring" })
+}
+
+resource "aws_s3_bucket_versioning" "monitoring_assets" {
+  bucket = aws_s3_bucket.monitoring_assets.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "monitoring_assets" {
+  bucket     = aws_s3_bucket.monitoring_assets.id
+  depends_on = [aws_s3_bucket_versioning.monitoring_assets]
+
+  rule {
+    id     = "expire-obsolete-dashboard-versions"
+    status = "Enabled"
+    filter {}
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "monitoring_assets" {
+  bucket                  = aws_s3_bucket.monitoring_assets.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_kms_key" "monitoring_assets" {
+  description             = "Encrypt Git-managed NOVA dashboard catalog"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+
+  # Enable account IAM delegation; the collector's identity policy grants only
+  # Decrypt via S3 for the exact dashboard object, not unrestricted key access.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "EnableAccountIAM"
+      Effect    = "Allow"
+      Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+      Action    = "kms:*"
+      Resource  = "*"
+    }]
+  })
+  tags = merge(local.global_tags, { Component = "monitoring" })
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "monitoring_assets" {
+  bucket = aws_s3_bucket.monitoring_assets.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.monitoring_assets.arn
+    }
+  }
+}
+
+resource "aws_s3_object" "monitoring_dashboards" {
+  bucket       = aws_s3_bucket.monitoring_assets.id
+  key          = "dashboards.json"
+  content      = local.nova_original_dashboards_json
+  content_type = "application/json"
+  source_hash  = sha256(local.nova_original_dashboards_json)
+  depends_on   = [aws_s3_bucket_public_access_block.monitoring_assets, aws_s3_bucket_server_side_encryption_configuration.monitoring_assets, aws_s3_bucket_versioning.monitoring_assets]
 }
 
 resource "aws_ecs_task_definition" "monitoring" {
@@ -365,11 +490,56 @@ resource "aws_ecs_task_definition" "monitoring" {
       }
     },
     {
+      name      = "grafana-db-init"
+      image     = "postgres:16-alpine"
+      essential = false
+      cpu       = 0
+      memory    = 128
+
+      entryPoint = ["/bin/sh", "-ec"]
+      command = [<<-SCRIPT
+        export PGSSLMODE=require
+        for i in $(seq 1 60); do
+          if psql -X -Atqc 'SELECT 1' >/dev/null 2>&1; then break; fi
+          sleep 5
+        done
+        psql -X -v ON_ERROR_STOP=1 <<'SQL'
+        \getenv grafana_password GRAFANA_DB_PASSWORD
+        SELECT 'CREATE ROLE nova_grafana LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nova_grafana') \gexec
+        SELECT format('ALTER ROLE nova_grafana PASSWORD %L', :'grafana_password') \gexec
+        GRANT nova_grafana TO CURRENT_USER WITH SET TRUE;
+        SELECT 'CREATE DATABASE nova_grafana OWNER nova_grafana' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nova_grafana') \gexec
+        REVOKE CONNECT ON DATABASE nova_grafana FROM PUBLIC;
+        SQL
+        echo "NOVA Grafana PostgreSQL initialized"
+      SCRIPT
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.monitoring.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "grafana-db-init"
+        }
+      }
+      environment = [
+        { name = "PGHOST", value = aws_db_instance.monitoring.address },
+        { name = "PGPORT", value = tostring(aws_db_instance.monitoring.port) },
+        { name = "PGDATABASE", value = var.monitoring_db_name },
+        { name = "PGUSER", value = var.monitoring_db_username }
+      ]
+      secrets = [
+        { name = "PGPASSWORD", valueFrom = "${aws_db_instance.monitoring.master_user_secret[0].secret_arn}:password::" },
+        { name = "GRAFANA_DB_PASSWORD", valueFrom = "${aws_secretsmanager_secret.grafana_admin.arn}:database_password::" }
+      ]
+    },
+    {
       name      = "grafana"
       image     = var.grafana_image
       essential = true
       cpu       = 256
-      memory    = 512
+      memory    = 1024
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -390,6 +560,13 @@ resource "aws_ecs_task_definition" "monitoring" {
       ]
 
       environment = [
+        { name = "GF_DATABASE_TYPE", value = "postgres" },
+        { name = "GF_DATABASE_HOST", value = "${aws_db_instance.monitoring.address}:5432" },
+        { name = "GF_DATABASE_NAME", value = "nova_grafana" },
+        { name = "GF_DATABASE_USER", value = "nova_grafana" },
+        { name = "GF_DATABASE_SSL_MODE", value = "require" },
+        { name = "GF_DATABASE_MAX_OPEN_CONN", value = "15" },
+        { name = "GF_DATABASE_MAX_IDLE_CONN", value = "5" },
         {
           name  = "GF_SERVER_ROOT_URL"
           value = "%(protocol)s://%(domain)s/grafana/"
@@ -412,13 +589,15 @@ resource "aws_ecs_task_definition" "monitoring" {
         {
           name      = "GF_SECURITY_ADMIN_PASSWORD"
           valueFrom = "${aws_secretsmanager_secret.grafana_admin.arn}:password::"
-        }
+        },
+        { name = "GF_DATABASE_PASSWORD", valueFrom = "${aws_secretsmanager_secret.grafana_admin.arn}:database_password::" },
+        { name = "GF_SECURITY_SECRET_KEY", valueFrom = "${aws_secretsmanager_secret.grafana_admin.arn}:encryption_key::" }
       ]
 
       dependsOn = [
         {
-          containerName = "zabbix-web"
-          condition     = "HEALTHY"
+          containerName = "grafana-db-init"
+          condition     = "SUCCESS"
         }
       ]
 
@@ -435,17 +614,21 @@ resource "aws_ecs_task_definition" "monitoring" {
     },
     {
       # One idempotent sidecar handles both Zabbix configuration and Grafana
-      # dashboards. It stays essential and only becomes healthy after setup.
-      # No custom image, extra permanent AWS service, or additional secret.
+      # dashboards. A failed collector must not stop the Grafana interface.
       name      = "monitoring-bootstrap"
       image     = "python:3.12-alpine"
-      essential = true
+      essential = false
       cpu       = 0
-      memory    = 256
+      memory    = 512
+
+      restartPolicy = {
+        enabled              = true
+        restartAttemptPeriod = 60
+      }
 
       entryPoint = ["/bin/sh", "-ec"]
       command = [
-        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/bootstrap.py && python /tmp/bootstrap.py && touch /tmp/nova-monitoring-ready && printf '%s' \"$NOVA_COLLECTOR_SCRIPT_B64\" | base64 -d | gzip -dc > /tmp/nova_collector.py && exec python -u /tmp/nova_collector.py"
+        "printf '%s' \"$MONITOR_BOOTSTRAP_SCRIPT_B64\" | base64 -d > /tmp/bootstrap.py && (until python /tmp/bootstrap.py; do sleep 30; done) && rm -f /tmp/nova-monitoring-ready && printf '%s' \"$NOVA_COLLECTOR_SCRIPT_B64\" | base64 -d | gzip -dc > /tmp/nova_collector.py && exec python -u /tmp/nova_collector.py"
       ]
 
       logConfiguration = {
@@ -462,6 +645,8 @@ resource "aws_ecs_task_definition" "monitoring" {
         { name = "NOVA_COLLECTOR_SCRIPT_B64", value = base64gzip(file("${path.module}/monitoring/collector.py")) },
         { name = "NOVA_ZABBIX_CATALOG_B64", value = base64gzip(jsonencode(local.nova_zabbix_catalog)) },
         { name = "NOVA_RESOURCE_VARS", value = jsonencode(local.nova_zabbix_resource_vars) },
+        { name = "NOVA_DASHBOARD_BUCKET", value = aws_s3_bucket.monitoring_assets.id },
+        { name = "NOVA_DASHBOARD_SHA256", value = aws_s3_object.monitoring_dashboards.source_hash },
         { name = "NOVA_COLLECTION_SECONDS", value = "900" },
         { name = "GRAFANA_URL", value = "http://127.0.0.1:${var.grafana_container_port}/grafana" },
         { name = "ZABBIX_URL", value = "http://127.0.0.1:8080/api_jsonrpc.php" },
@@ -485,11 +670,11 @@ resource "aws_ecs_task_definition" "monitoring" {
       ]
 
       healthCheck = {
-        command     = ["CMD-SHELL", "test -f /tmp/nova-monitoring-ready"]
+        command     = ["CMD-SHELL", "test -f /tmp/nova-monitoring-ready && test $(( $(date +%s) - $(cat /tmp/nova-monitoring-ready) )) -lt 1800"]
         interval    = 30
         timeout     = 5
         retries     = 3
-        startPeriod = 300
+        startPeriod = 600
       }
     }
   ])
@@ -507,9 +692,10 @@ resource "aws_ecs_service" "monitoring" {
   desired_count   = var.monitoring_desired_count
   launch_type     = "FARGATE"
 
-  deployment_minimum_healthy_percent = 100
-  deployment_maximum_percent         = 200
-  health_check_grace_period_seconds  = 300
+  # Zabbix is a singleton; do not run two collectors/servers during deployment.
+  deployment_minimum_healthy_percent = 0
+  deployment_maximum_percent         = 100
+  health_check_grace_period_seconds  = 600
 
   deployment_circuit_breaker {
     enable   = true
@@ -541,6 +727,7 @@ resource "aws_ecs_service" "monitoring" {
   depends_on = [
     aws_iam_role_policy.ecs_monitoring_execution,
     aws_iam_role_policy.ecs_monitoring_metrics,
+    aws_secretsmanager_secret_version.grafana_admin,
   ]
 
   tags = merge(local.global_tags, {

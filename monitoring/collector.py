@@ -190,6 +190,38 @@ class AWS:
         with urlopen(Request("https://" + host + "/", data=body, headers=headers, method="POST"), timeout=25) as response:
             return response.read()
 
+    def dashboard_bundle(self, bucket, expected_hash):
+        """Read only the private Terraform-managed object using ECS task credentials."""
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", bucket):
+            raise ValueError("Invalid dashboard bucket")
+        credentials = self.credentials()
+        host = bucket + ".s3." + self.region + ".amazonaws.com"
+        path = "/dashboards.json"
+        now = utc()
+        date, timestamp = now.strftime("%Y%m%d"), now.strftime("%Y%m%dT%H%M%SZ")
+        digest = lambda data: hashlib.sha256(data).hexdigest()
+        headers = {"host": host, "x-amz-date": timestamp,
+                   "x-amz-content-sha256": digest(b""), "x-amz-security-token": credentials["Token"]}
+        signed = ";".join(sorted(headers))
+        canonical = "".join(k + ":" + headers[k] + "\n" for k in sorted(headers))
+        request = "\n".join(("GET", path, "", canonical, signed, digest(b"")))
+        scope = "/".join((date, self.region, "s3", "aws4_request"))
+        to_sign = "\n".join(("AWS4-HMAC-SHA256", timestamp, scope, digest(request.encode())))
+        key = ("AWS4" + credentials["SecretAccessKey"]).encode()
+        for part in (date, self.region, "s3", "aws4_request"):
+            key = hmac.new(key, part.encode(), hashlib.sha256).digest()
+        signature = hmac.new(key, to_sign.encode(), hashlib.sha256).hexdigest()
+        headers["Authorization"] = ("AWS4-HMAC-SHA256 Credential=" + credentials["AccessKeyId"]
+                                    + "/" + scope + ", SignedHeaders=" + signed + ", Signature=" + signature)
+        with urlopen(Request("https://" + host + path, headers=headers, method="GET"), timeout=30) as response:
+            raw = response.read(10_000_001)
+        if len(raw) > 10_000_000 or digest(raw) != expected_hash:
+            raise RuntimeError("Dashboard bundle integrity check failed")
+        docs = json.loads(raw)
+        if len(docs) != 30 or len({d["uid"] for d in docs}) != 30:
+            raise RuntimeError("Dashboard bundle must contain 30 unique dashboards")
+        return docs
+
     def query(self, service, action, version, params):
         body = urlencode({"Action": action, "Version": version, **params}).encode()
         root = ET.fromstring(self.post(service, body, "application/x-www-form-urlencoded; charset=utf-8"))
@@ -286,6 +318,27 @@ def ensure_items(z, items):
     return group_id
 
 
+def restore_cursors(z, items, last):
+    """Recover committed history from Zabbix's persistent DB via its API.
+
+    Never reset an in-process watermark. All NOVA collector items use history=0
+    (numeric float). Reconcile only items which belong to this collector.
+    """
+    for host in sorted({h for h, _ in items}):
+        found = z.call("host.get", {"filter": {"host": [host]}, "output": ["hostid"]})
+        if len(found) != 1:
+            raise RuntimeError("NOVA cursor host missing or ambiguous")
+        existing = z.call("item.get", {
+            "hostids": [found[0]["hostid"]],
+            "output": ["itemid", "key_", "lastclock"],
+        })
+        for item in existing:
+            pair = (host, item["key_"])
+            if pair in items:
+                clock = int(item.get("lastclock") or 0)
+                last[pair] = max(last.get(pair, 0), clock)
+
+
 def ensure_triggers(z, interval):
     host = CONTROL
     checks = [
@@ -324,13 +377,21 @@ def live_dashboard(doc, implemented):
             "templating": {"list": []}, "panels": out}
 
 
+def ensure_original_dashboards(grafana, docs):
+    folder = "nova-cloudwatch-originals"
+    if grafana.call("/api/folders/" + folder) is None:
+        grafana.call("/api/folders", "POST", {"uid": folder, "title": "NOVA | Original Dashboards"})
+    for dashboard in docs:
+        grafana.ensure_dashboard(dashboard, folder)
+    print("NOVA original dashboards verified: %d" % len(docs), flush=True)
+
+
 def ensure_dashboards(grafana, docs):
     folder = grafana.call("/api/folders/nova-zabbix-live")
     if folder is None:
         grafana.call("/api/folders", "POST", {"uid": "nova-zabbix-live", "title": "NOVA | Zabbix Live"})
     for doc in docs:
-        grafana.call("/api/dashboards/db", "POST", {"dashboard": live_dashboard(doc, IMPLEMENTED),
-                      "folderUid": "nova-zabbix-live", "overwrite": True, "message": "NOVA collector provisioning"})
+        grafana.ensure_dashboard(live_dashboard(doc, IMPLEMENTED), "nova-zabbix-live")
 
 
 def recv_exact(sock, n):
@@ -561,8 +622,12 @@ def run():
                 groupid = ensure_items(z, items)
                 ensure_triggers(z, interval)
                 ensure_dashboards(grafana, docs)
+                if os.getenv("NOVA_DASHBOARD_BUCKET"):
+                    original = aws.dashboard_bundle(os.environ["NOVA_DASHBOARD_BUCKET"], os.environ["NOVA_DASHBOARD_SHA256"])
+                    ensure_original_dashboards(grafana, original)
                 # Zabbix server configuration cache may lag newly created trappers.
                 time.sleep(70)
+                restore_cursors(z, items, last)
                 provisioned = True
                 print("NOVA Zabbix collector ready: %d unique CloudWatch queries; %d dashboards; %d planned contract producers" %
                       (len(specs), len(docs), len(IMPLEMENTED)), flush=True)
@@ -601,8 +666,14 @@ def run():
             if last_success is not None:
                 put(samples, "nova.d01.last_collection_age", clock-last_success, clock)
             # Only send defined, numeric, newer samples. No fake zeros and no repeat of old CW timestamps.
-            samples = [s for s in samples if s and (s["host"], s["key"]) in items
-                       and s["clock"] > last.get((s["host"], s["key"]), 0)]
+            # Deduplicate within a cycle as multiple producers may overlap.
+            unique = {}
+            for sample in samples:
+                if sample and (sample["host"], sample["key"]) in items:
+                    pair = (sample["host"], sample["key"])
+                    if sample["clock"] > last.get(pair, 0):
+                        unique[(*pair, sample["clock"])] = sample
+            samples = sorted(unique.values(), key=lambda s: (s["host"], s["key"], s["clock"]))
             expected = sum(all(s["dimensions"].values()) for s in specs.values())
             for key, v in (("heartbeat", 1), ("cycle.ok", int(errors == 0 and bool(values))),
                            ("cloudwatch.series.available", len(values)),
@@ -616,11 +687,27 @@ def run():
                     last[(s["host"], s["key"])] = max(last.get((s["host"], s["key"]), 0), s["clock"])
             if errors == 0 and values:
                 last_success = clock
+                with open("/tmp/nova-monitoring-ready", "w", encoding="utf-8") as ready:
+                    ready.write(str(clock) + "\n")
             print("NOVA collection: series=%d/%d, samples=%d, errors=%d" %
                   (len(values), expected, len(samples), errors), flush=True)
+            if errors == 0 and values:
+                print("NOVA monitoring verification passed", flush=True)
+            else:
+                try:
+                    os.unlink("/tmp/nova-monitoring-ready")
+                except FileNotFoundError:
+                    pass
         except Exception as exc:
             # Keep the original monitoring task available; retry without exposing credentials.
             print("NOVA collector retry: "+type(exc).__name__, flush=True)
+            # Sender may have accepted part of a batch. Reconcile from Zabbix
+            # on the next cycle rather than blindly re-sending it.
+            provisioned = False
+            try:
+                os.unlink("/tmp/nova-monitoring-ready")
+            except FileNotFoundError:
+                pass
         time.sleep(max(5, interval-(time.monotonic()-start)))
 
 

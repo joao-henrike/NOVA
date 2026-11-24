@@ -74,18 +74,26 @@ python3 "$ROOT_DIR/scripts/check-cloud-state-ownership.py"
 
 mkdir -p "$SECRET_DIR"
 chmod 700 "$SECRET_DIR"
+umask 077
 
 if [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
   printf '%s' "$GRAFANA_ADMIN_PASSWORD" > "$SECRET_FILE"
 elif [ -s "$SECRET_FILE" ]; then
   GRAFANA_ADMIN_PASSWORD="$(cat "$SECRET_FILE")"
 else
-  log "Generating local Grafana administrator password"
-  GRAFANA_ADMIN_PASSWORD="$(python3 - <<'PY'
+  # Do not silently rotate a live Grafana/Zabbix password on a new checkout.
+  existing_secret="$(aws secretsmanager list-secrets --region "$AWS_REGION" --filters Key=name,Values=cloudstart-dev/monitoring/grafana-admin --query 'SecretList[?Name==`cloudstart-dev/monitoring/grafana-admin`].ARN | [0]' --output text)"
+  if [ "$existing_secret" != "None" ] && [ -n "$existing_secret" ]; then
+    GRAFANA_ADMIN_PASSWORD="$(aws secretsmanager get-secret-value --region "$AWS_REGION" --secret-id "$existing_secret" --query SecretString --output text | jq -er '.password | select(type=="string" and length>=12)')"
+    log "Reusing existing Grafana administrator credential"
+  else
+    log "Generating local Grafana administrator password"
+    GRAFANA_ADMIN_PASSWORD="$(python3 - <<'PY'
 import secrets
 print(secrets.token_urlsafe(32))
 PY
 )"
+  fi
   printf '%s' "$GRAFANA_ADMIN_PASSWORD" > "$SECRET_FILE"
 fi
 
@@ -311,7 +319,11 @@ curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/api/heal
 status="$(curl --silent --output /tmp/nova-items.json --write-out '%{http_code}' "$base_url/api/items")"
 [ "$status" = "401" ] || fatal "Expected /api/items to return 401, got $status."
 
-curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/grafana/api/health" >/dev/null
+curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/grafana/api/health" |
+  jq -e '.database == "ok"' >/dev/null
+
+log "Verifying monitoring revision, persistent database init and first collection"
+bash "$ROOT_DIR/scripts/verify-monitoring-deploy.sh"
 
 log "Deployment completed successfully"
 printf '\nEnvironment : %s/%s\n' "cloudstart" "dev"
