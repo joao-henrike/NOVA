@@ -687,14 +687,27 @@ def run():
                     last[(s["host"], s["key"])] = max(last.get((s["host"], s["key"]), 0), s["clock"])
             if errors == 0 and values:
                 last_success = clock
+                with open("/tmp/nova-monitoring-ready", "w", encoding="utf-8") as ready:
+                    ready.write(str(clock) + "\\n")
             print("NOVA collection: series=%d/%d, samples=%d, errors=%d" %
                   (len(values), expected, len(samples), errors), flush=True)
+            if errors == 0 and values:
+                print("NOVA monitoring verification passed", flush=True)
+            else:
+                try:
+                    os.unlink("/tmp/nova-monitoring-ready")
+                except FileNotFoundError:
+                    pass
         except Exception as exc:
             # Keep the original monitoring task available; retry without exposing credentials.
             print("NOVA collector retry: "+type(exc).__name__, flush=True)
             # Sender may have accepted part of a batch. Reconcile from Zabbix
             # on the next cycle rather than blindly re-sending it.
             provisioned = False
+            try:
+                os.unlink("/tmp/nova-monitoring-ready")
+            except FileNotFoundError:
+                pass
         time.sleep(max(5, interval-(time.monotonic()-start)))
 
 
