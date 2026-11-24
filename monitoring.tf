@@ -315,7 +315,20 @@ resource "aws_kms_key" "monitoring_assets" {
   description             = "Encrypt Git-managed NOVA dashboard catalog"
   enable_key_rotation     = true
   deletion_window_in_days = 30
-  tags                    = merge(local.global_tags, { Component = "monitoring" })
+
+  # Enable account IAM delegation; the collector's identity policy grants only
+  # Decrypt via S3 for the exact dashboard object, not unrestricted key access.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "EnableAccountIAM"
+      Effect    = "Allow"
+      Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+      Action    = "kms:*"
+      Resource  = "*"
+    }]
+  })
+  tags = merge(local.global_tags, { Component = "monitoring" })
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "monitoring_assets" {
