@@ -173,6 +173,11 @@ output "monitoring_ecs_service_name" {
   value       = aws_ecs_service.monitoring.name
 }
 
+output "monitoring_task_definition_arn" {
+  description = "Expected immutable ECS revision for the monitoring service."
+  value       = aws_ecs_task_definition.monitoring.arn
+}
+
 output "monitoring_rds_endpoint" {
   description = "Private RDS endpoint used by the Zabbix monitoring database."
   value       = aws_db_instance.monitoring.endpoint
