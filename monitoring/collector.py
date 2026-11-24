@@ -190,6 +190,38 @@ class AWS:
         with urlopen(Request("https://" + host + "/", data=body, headers=headers, method="POST"), timeout=25) as response:
             return response.read()
 
+    def dashboard_bundle(self, bucket, expected_hash):
+        """Read only the private Terraform-managed object using ECS task credentials."""
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", bucket):
+            raise ValueError("Invalid dashboard bucket")
+        credentials = self.credentials()
+        host = bucket + ".s3." + self.region + ".amazonaws.com"
+        path = "/dashboards.json"
+        now = utc()
+        date, timestamp = now.strftime("%Y%m%d"), now.strftime("%Y%m%dT%H%M%SZ")
+        digest = lambda data: hashlib.sha256(data).hexdigest()
+        headers = {"host": host, "x-amz-date": timestamp,
+                   "x-amz-content-sha256": digest(b""), "x-amz-security-token": credentials["Token"]}
+        signed = ";".join(sorted(headers))
+        canonical = "".join(k + ":" + headers[k] + "\n" for k in sorted(headers))
+        request = "\n".join(("GET", path, "", canonical, signed, digest(b"")))
+        scope = "/".join((date, self.region, "s3", "aws4_request"))
+        to_sign = "\n".join(("AWS4-HMAC-SHA256", timestamp, scope, digest(request.encode())))
+        key = ("AWS4" + credentials["SecretAccessKey"]).encode()
+        for part in (date, self.region, "s3", "aws4_request"):
+            key = hmac.new(key, part.encode(), hashlib.sha256).digest()
+        signature = hmac.new(key, to_sign.encode(), hashlib.sha256).hexdigest()
+        headers["Authorization"] = ("AWS4-HMAC-SHA256 Credential=" + credentials["AccessKeyId"]
+                                    + "/" + scope + ", SignedHeaders=" + signed + ", Signature=" + signature)
+        with urlopen(Request("https://" + host + path, headers=headers, method="GET"), timeout=30) as response:
+            raw = response.read(10_000_001)
+        if len(raw) > 10_000_000 or digest(raw) != expected_hash:
+            raise RuntimeError("Dashboard bundle integrity check failed")
+        docs = json.loads(raw)
+        if len(docs) != 30 or len({d["uid"] for d in docs}) != 30:
+            raise RuntimeError("Dashboard bundle must contain 30 unique dashboards")
+        return docs
+
     def query(self, service, action, version, params):
         body = urlencode({"Action": action, "Version": version, **params}).encode()
         root = ET.fromstring(self.post(service, body, "application/x-www-form-urlencoded; charset=utf-8"))
@@ -343,6 +375,15 @@ def live_dashboard(doc, implemented):
             "tags": ["nova", "zabbix-live", "managed"], "editable": True,
             "time": {"from": "now-6h", "to": "now"}, "refresh": "5m", "timezone": "browser",
             "templating": {"list": []}, "panels": out}
+
+
+def ensure_original_dashboards(grafana, docs):
+    folder = "nova-cloudwatch-originals"
+    if grafana.call("/api/folders/" + folder) is None:
+        grafana.call("/api/folders", "POST", {"uid": folder, "title": "NOVA | Original Dashboards"})
+    for dashboard in docs:
+        grafana.ensure_dashboard(dashboard, folder)
+    print("NOVA original dashboards verified: %d" % len(docs), flush=True)
 
 
 def ensure_dashboards(grafana, docs):
@@ -581,6 +622,9 @@ def run():
                 groupid = ensure_items(z, items)
                 ensure_triggers(z, interval)
                 ensure_dashboards(grafana, docs)
+                if os.getenv("NOVA_DASHBOARD_BUCKET"):
+                    original = aws.dashboard_bundle(os.environ["NOVA_DASHBOARD_BUCKET"], os.environ["NOVA_DASHBOARD_SHA256"])
+                    ensure_original_dashboards(grafana, original)
                 # Zabbix server configuration cache may lag newly created trappers.
                 time.sleep(70)
                 restore_cursors(z, items, last)
