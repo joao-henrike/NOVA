@@ -637,7 +637,7 @@ resource "aws_ecs_task_definition" "monitoring" {
       ]
 
       healthCheck = {
-        command     = ["CMD-SHELL", "test -f /tmp/nova-monitoring-ready"]
+        command     = ["CMD-SHELL", "test -f /tmp/nova-monitoring-ready && test $(( $(date +%s) - $(cat /tmp/nova-monitoring-ready) )) -lt 1800"]
         interval    = 30
         timeout     = 5
         retries     = 3
