@@ -688,7 +688,7 @@ def run():
             if errors == 0 and values:
                 last_success = clock
                 with open("/tmp/nova-monitoring-ready", "w", encoding="utf-8") as ready:
-                    ready.write(str(clock) + "\\n")
+                    ready.write(str(clock) + "\n")
             print("NOVA collection: series=%d/%d, samples=%d, errors=%d" %
                   (len(values), expected, len(samples), errors), flush=True)
             if errors == 0 and values:
