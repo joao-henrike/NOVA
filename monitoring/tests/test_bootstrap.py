@@ -208,12 +208,18 @@ class MonitoringTests(unittest.TestCase):
         grafana = bootstrap.Grafana("http://grafana:3000", "admin-password")
         actions = []
         state = set()
+        dashboards = set()
         def fake_call(path, method="GET", data=None):
             actions.append((path, method, data))
             if path.startswith("/api/datasources/uid/") and method == "GET":
                 return {"uid": path.split("/")[-1]} if path.split("/")[-1] in state else None
             if path == "/api/datasources" and method == "POST":
                 state.add(data["uid"])
+            if path.startswith("/api/dashboards/uid/"):
+                return {"dashboard": {"uid": path.split("/")[-1]}} if path.split("/")[-1] in dashboards else None
+            if path == "/api/dashboards/db" and method == "POST":
+                self.assertFalse(data["overwrite"])
+                dashboards.add(data["dashboard"]["uid"])
             return {"status": "ok"}
         grafana.call = fake_call
         dash = bootstrap.dashboards("cluster", "app", "monitor", "us-east-1", True)
@@ -222,7 +228,7 @@ class MonitoringTests(unittest.TestCase):
         self.assertEqual(state, {"nova-zabbix", "nova-cloudwatch"})
         self.assertEqual(len([a for a in actions if a[0] == "/api/datasources" and a[1] == "POST"]), 2)
         self.assertEqual(len([a for a in actions if a[1] == "PUT"]), 2)
-        self.assertEqual(len([a for a in actions if a[0] == "/api/dashboards/db"]), 2)
+        self.assertEqual(len([a for a in actions if a[0] == "/api/dashboards/db"]), 1)
 
     def test_missing_grafana_password_rejected(self):
         with self.assertRaises(bootstrap.MonitoringError):
