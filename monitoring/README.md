@@ -1,3 +1,5 @@
+> **AWS persistence update:** see [Recovery and clean deployment](RECOVERY_AND_CLEAN_DEPLOY.md) for the new PostgreSQL Grafana storage, non-destructive provisioning, and current limitations. Older AWS descriptions below reflect the original architecture.
+
 # NOVA Monitoring — Zabbix, Grafana e CloudWatch
 
 **Branch desta implementação:** main. **Escopo:** apenas monitoramento e integrações necessárias.
