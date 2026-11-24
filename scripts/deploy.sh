@@ -74,6 +74,7 @@ python3 "$ROOT_DIR/scripts/check-cloud-state-ownership.py"
 
 mkdir -p "$SECRET_DIR"
 chmod 700 "$SECRET_DIR"
+umask 077
 
 if [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
   printf '%s' "$GRAFANA_ADMIN_PASSWORD" > "$SECRET_FILE"
@@ -318,7 +319,11 @@ curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/api/heal
 status="$(curl --silent --output /tmp/nova-items.json --write-out '%{http_code}' "$base_url/api/items")"
 [ "$status" = "401" ] || fatal "Expected /api/items to return 401, got $status."
 
-curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/grafana/api/health" >/dev/null
+curl --fail --silent --show-error --retry 20 --retry-delay 5 "$base_url/grafana/api/health" |
+  jq -e '.database == "ok"' >/dev/null
+
+log "Verifying monitoring revision, persistent database init and first collection"
+bash "$ROOT_DIR/scripts/verify-monitoring-deploy.sh"
 
 log "Deployment completed successfully"
 printf '\nEnvironment : %s/%s\n' "cloudstart" "dev"
