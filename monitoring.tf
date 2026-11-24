@@ -693,6 +693,8 @@ resource "aws_ecs_service" "monitoring" {
   launch_type     = "FARGATE"
 
   # Zabbix is a singleton; do not run two collectors/servers during deployment.
+  # ECS AZ rebalancing requires maximumPercent > 100, incompatible with this policy.
+  availability_zone_rebalancing      = "DISABLED"
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
   health_check_grace_period_seconds  = 600
