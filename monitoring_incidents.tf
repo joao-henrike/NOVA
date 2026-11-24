@@ -36,9 +36,43 @@ resource "aws_cloudwatch_metric_alarm" "monitoring_alb_503" {
   }
 }
 
+resource "aws_kms_key" "monitoring_task_events" {
+  description             = "Encrypt NOVA monitoring incident records"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnableAccountIAM"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid       = "AllowCloudWatchLogs"
+        Effect    = "Allow"
+        Principal = { Service = "logs.${var.aws_region}.amazonaws.com" }
+        Action    = ["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:DescribeKey"]
+        Resource  = "*"
+        Condition = {
+          ArnEquals = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/events/${local.name}/monitoring-task-stops"
+          }
+        }
+      }
+    ]
+  })
+  tags = merge(local.global_tags, { Component = "monitoring" })
+}
+
 resource "aws_cloudwatch_log_group" "monitoring_task_events" {
   name              = "/aws/events/${local.name}/monitoring-task-stops"
-  retention_in_days = 14
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.monitoring_task_events.arn
+  tags              = merge(local.global_tags, { Component = "monitoring" })
 }
 
 resource "aws_cloudwatch_event_rule" "monitoring_task_stopped" {
