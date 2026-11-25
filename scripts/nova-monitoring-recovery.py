@@ -185,14 +185,16 @@ def main():
     env(containers['grafana-db-init'],'PGSSLMODE','require')
     env(containers['grafana'],'AWS_REGION',REGION)
     env(containers['grafana'],'AWS_DEFAULT_REGION',REGION)
-    env(boot,'NOVA_CLOUDWATCH_PREFLIGHT_B64',base64.b64encode(PREFLIGHT.encode()).decode())
+    env(boot,'NOVA_CLOUDWATCH_PREFLIGHT_B64',base64.b64encode(gzip.compress(PREFLIGHT.encode(), mtime=0)).decode())
     cmd = boot.get('command',[])
     if boot.get('entryPoint') != ['/bin/sh','-ec'] or len(cmd) != 1 or 'MONITOR_BOOTSTRAP_SCRIPT_B64' not in cmd[0]:
         raise RuntimeError('Unexpected bootstrap entrypoint; no changes registered')
     marker = 'NOVA_CLOUDWATCH_PREFLIGHT_B64'
     if marker not in cmd[0]:
-        prefix = "printf '%s' \"$NOVA_CLOUDWATCH_PREFLIGHT_B64\" | base64 -d > /tmp/nova-cloudwatch-preflight.py; if ! python -u /tmp/nova-cloudwatch-preflight.py; then echo NOVA_CLOUDWATCH_PREFLIGHT_WARNING; fi; "
+        prefix = "printf '%s' \"$NOVA_CLOUDWATCH_PREFLIGHT_B64\" | base64 -d | gzip -dc > /tmp/nova-cloudwatch-preflight.py; if ! python -u /tmp/nova-cloudwatch-preflight.py; then echo NOVA_CLOUDWATCH_PREFLIGHT_WARNING; fi; "
         cmd[0] = prefix + cmd[0]
+    else:
+        cmd[0] = cmd[0].replace('base64 -d > /tmp/nova-cloudwatch-preflight.py', 'base64 -d | gzip -dc > /tmp/nova-cloudwatch-preflight.py')
     # Preserve dependency ordering unless retry behavior is verified in live command.
     if 'until python /tmp/bootstrap.py' in cmd[0]:
         boot['dependsOn'] = [d for d in boot.get('dependsOn',[]) if d['containerName'] != 'zabbix-web']
@@ -204,7 +206,11 @@ def main():
         model['tags'] = tags
     with tempfile.TemporaryDirectory(prefix='nova-mon-recovery-') as work:
         p = Path(work)/'task.json'
-        p.write_text(json.dumps(model))
+        payload = json.dumps(model, separators=(',', ':')).encode('utf-8')
+        print('Task definition JSON bytes:', len(payload), flush=True)
+        if len(payload) > 65536:
+            raise RuntimeError('Task definition exceeds 64 KiB locally; nothing registered')
+        p.write_bytes(payload)
         p.chmod(0o600)
         new = aws('ecs','register-task-definition','--cli-input-json','file://'+str(p))['taskDefinition']['taskDefinitionArn']
     print('Previous definition:',old)
